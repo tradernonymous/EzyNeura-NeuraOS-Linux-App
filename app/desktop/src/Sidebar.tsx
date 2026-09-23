@@ -62,6 +62,7 @@ export const SUB_VIEWS: Array<{ id: ViewId; label: string; parent: NavId }> = [
   { id: 'local', label: 'Local', parent: 'code' },
   { id: 'files', label: 'Files', parent: 'code' },
   { id: 'parallel', label: 'Parallel', parent: 'code' },
+  { id: 'acp', label: 'Agents (ACP)', parent: 'code' },
   { id: 'design', label: 'Design', parent: 'create' },
   { id: 'images', label: 'Images', parent: 'create' },
   { id: 'library', label: 'Library', parent: 'agents' },
@@ -147,7 +148,7 @@ export function navForKey(key: string): NavId | null {
 
 export type NavId = 'chat' | 'code' | 'create' | 'agents' | 'activity' | 'settings';
 /** A view: a destination's own tab, or one of the tabs inside one. */
-export type ViewId = 'chat' | 'code' | 'settings' | 'activity' | 'design' | 'library' | 'build' | 'local' | 'files' | 'images' | 'evals' | 'agents' | 'recipes' | 'parallel';
+export type ViewId = 'chat' | 'code' | 'settings' | 'activity' | 'design' | 'library' | 'build' | 'local' | 'files' | 'images' | 'evals' | 'agents' | 'recipes' | 'parallel' | 'acp';
 
 export interface PanelKeyMap {
   folder: boolean;

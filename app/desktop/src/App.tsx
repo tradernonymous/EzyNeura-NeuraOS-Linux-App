@@ -60,6 +60,7 @@ const DesignScreen = lazy(() => import('./screens/DesignScreen'));
 const ImagesScreen = lazy(() => import('./screens/ImagesScreen'));
 const BuildScreen = lazy(() => import('./screens/BuildScreen'));
 const ActivityScreen = lazy(() => import('./screens/ActivityScreen'));
+const AcpScreen = lazy(() => import('./screens/AcpScreen'));
 const LibraryScreen = lazy(() => import('./screens/LibraryScreen'));
 const FilesScreen = lazy(() => import('./screens/FilesScreen'));
 const EvalsScreen = lazy(() => import('./screens/EvalsScreen'));
@@ -711,6 +712,7 @@ export default function App() {
                   {view === 'agents' && <AgentsScreen />}
                   {view === 'recipes' && <RecipesScreen />}
                   {view === 'parallel' && <ParallelScreen localRoot={localRoot} />}
+                  {view === 'acp' && <AcpScreen localRoot={localRoot} />}
                   {view === 'settings' && (
                     <SettingsScreen
                       onConnectionChanged={checkAuth}

@@ -1170,3 +1170,51 @@ export async function notifyWithActions(id: string, title: string, body: string,
 export function onNotificationAction(handler: (id: string, action: string) => void): Promise<() => void> {
   return subscribe<{ id: string; action: string }>('notification-action', (p) => handler(p.id, p.action));
 }
+
+// ---- ACP agents (acp.rs, L6): Gemini CLI, Claude Code, Codex... over stdio ----
+export interface AcpStarted {
+  id: string;
+  pid: number;
+  sessionId: string;
+  agentInfo: { name?: string; version?: string } | null;
+  agentCapabilities: Record<string, unknown> | null;
+  authMethods: Array<{ id: string; name: string; description?: string }> | null;
+}
+
+/** One line from the agent: a JSON-RPC message, a stderr line, or its exit. */
+export interface AcpMessage {
+  agent: string;
+  message?: { jsonrpc: '2.0'; id?: number | string; method?: string; params?: any; result?: any; error?: any };
+  stderr?: string;
+  exited?: boolean;
+}
+
+export async function acpStart(id: string, command: string, args: string[], cwd: string): Promise<AcpStarted> {
+  return call<AcpStarted>('acp_start', { id, command, args, cwd });
+}
+
+/** Blocks until the turn ends; updates arrive on onAcpMessage meanwhile. */
+export async function acpPrompt(id: string, sessionId: string, text: string): Promise<{ stopReason?: string }> {
+  return call('acp_prompt', { id, sessionId, text });
+}
+
+export async function acpCancel(id: string, sessionId: string): Promise<void> {
+  await call('acp_cancel', { id, sessionId });
+}
+
+/** Answer a request the agent made (permission, fs read, fs write). */
+export async function acpRespond(id: string, requestId: number | string, result?: unknown, error?: string): Promise<void> {
+  await call('acp_respond', { id, requestId, result: result ?? null, error: error ?? null });
+}
+
+export async function acpStop(id: string): Promise<{ stopped: boolean }> {
+  return call('acp_stop', { id });
+}
+
+export async function acpList(): Promise<string[]> {
+  return call<string[]>('acp_list');
+}
+
+export function onAcpMessage(handler: (m: AcpMessage) => void): Promise<() => void> {
+  return subscribe<AcpMessage>('acp-message', handler);
+}

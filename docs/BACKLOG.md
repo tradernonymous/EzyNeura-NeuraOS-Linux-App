@@ -14,7 +14,7 @@ not merely once its code is green in CI.
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
-| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | Not started |
+| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; NeuraOS as an MCP server and the Activity-board compare not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Tooling for the apt repo (`packaging/apt/`, proven with a throwaway key); publishing needs the maintainer's GPG key and a Pages host; AppImage updater feed and Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); Wayland portals, WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | Not started |
@@ -219,6 +219,35 @@ Still open for L4: whisper.cpp publishes no Linux binaries, so Voice
 Type on Mint needs a source build (`cmake -B build && cmake --build build`)
 until this app ships or packages one; a real Vulkan run on Mint hardware;
 the Offline mode of L3.
+
+## L6: the ACP client
+
+`acp.rs` runs an Agent Client Protocol agent as a child over stdio (its own
+process group, killed on Quit beside the other servers): `initialize`,
+`session/new`, `session/prompt` (a long turn, cancellable), and every
+message the agent sends back -- `session/update` notifications and its own
+requests `session/request_permission`, `fs/read_text_file`,
+`fs/write_text_file` -- goes to the page as an `acp-message` event, which
+answers through `acp_respond`. `screens/AcpScreen.tsx` (Code → Agents
+(ACP)) renders the transcript (message chunks, folded thoughts, tool calls
+with status, plans), serves reads only from inside the open folder through
+the existing confined `local_read_file`, and turns every write and every
+permission request into an approval card -- with Allow / Reject on the
+desktop notification too (L5). Presets: Gemini CLI (`gemini
+--experimental-acp`), Claude Code (`npx @agentclientprotocol/claude-agent-acp`),
+Codex (`npx @zed-industries/codex-acp`), or any command.
+
+Proven in this container against the real `claude-agent-acp`: the
+framing and `initialize` (the agent answered with `protocolVersion: 1`,
+its `agentInfo` and `authMethods`, the shapes the code parses), and
+`session/new` reached the agent, which refused only for this container's
+own reasons -- it runs as root, inside another Claude Code session, and is
+not logged in ("--dangerously-skip-permissions cannot be used with
+root/sudo privileges"; "Claude Code cannot be launched inside another
+Claude Code session"). The `_auth/status_update` notification it sent
+meanwhile is exactly what the event path carries. Not run here: a prompt
+turn, a permission card, a file write (needs a signed-in agent on a normal
+user account -- the user's Mint machine).
 
 ## L5: Linux-native features
 
