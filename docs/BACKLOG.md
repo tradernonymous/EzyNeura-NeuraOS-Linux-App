@@ -10,7 +10,7 @@ not merely once its code is green in CI.
 | :-- | :-- | :-- |
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
-| L2 | The APK's look on the desktop | Not started |
+| L2 | The APK's look on the desktop | In progress — Neural Violet is now the default accent (below); the five-space nav, the orb, and "calm until it thinks" motion are still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | Not started |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | Not started |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
@@ -76,6 +76,32 @@ for this container specifically (no session D-Bus daemon at all, so the
 tray icon warns about `dbus-launch`; no real GPU, so EGL/DRI3 warns) —
 neither applies to a normal Mint desktop session, where a session bus and
 a real GPU are always present.
+
+## L2: the APK's look, so far
+
+The `.exe`'s accent system is already a single-hue OKLCH design (one
+`--accent-h` variable derives every accent token at a fixed, WCAG-AA-safe
+lightness/chroma per theme, swept for every possible hue by
+`app/test/desktop-look.test.js`) with a user-facing hue picker in
+Settings → Appearance. That made the first, real step small and safe:
+
+- `DEFAULT_ACCENT_HUE` (`theme.ts`) and the CSS fallback (`index.css`)
+  moved from 152 (the old green) to 286 — the OKLCH hue of the Android
+  app's own Neural Violet accent (`#8B6CFF` dark / `#6D4DF2` light,
+  averaged; the exact hex isn't reproduced verbatim because this app
+  derives the accent from the theme's own contrast-safe formula, not a
+  named colour).
+- The old default is kept, renamed to a "Green" preset, so nothing is lost.
+- `app/test/desktop-look.test.js` ported from upstream and updated for the
+  new default and preset list — all 12 cases pass, including the full
+  0–360 AA contrast sweep. Wired into `.github/workflows/linux.yml`.
+
+Still open for L2: the five-space navigation (Chat/Code/Create/Agents/
+Activity) and the orb, "calm until it thinks" motion (glow/pulse only
+while an agent works), the APK's message anatomy and Worked·n-steps log,
+one Library, and the Compare toggle beside the composer. This is the
+`docs/MASTER_PLAN.md` phase itself sized M→L — real UI work across
+`App.tsx`, `Sidebar.tsx` and the chat screen, not a single-commit change.
 
 Not yet verified anywhere (needs real Mint hardware): the 10-step checklist
 in `docs/MASTER_PLAN.md` section 7 — installing the `.deb` with `apt`,

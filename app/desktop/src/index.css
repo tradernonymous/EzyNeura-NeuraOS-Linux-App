@@ -297,8 +297,12 @@
      <html> at boot); lightness and chroma are fixed per theme. OKLCH keeps
      lightness perceptual, so every hue clears AA the way the default does:
      L 0.80 / C 0.18 is >= 6.2:1 on --bg-0..--bg-3 and >= 9:1 under black text
-     at every hue (test/desktop-look.test.js). Hue 152 is the old #4ade80. */
-  --accent-h: 152;
+     at every hue (test/desktop-look.test.js). Hue 286 is Neural Violet, the
+     Android app's own accent (docs/MASTER_PLAN.md section 4); the old
+     default, hue 152 (#4ade80), is still offered as the "Green" preset. This
+     is the value theme.ts's boot script paints over before first render, so
+     it only shows if that script fails to run at all. */
+  --accent-h: 286;
   /* Deepened from L 0.80 to 0.73 once the ramp went darker: a richer, less
      fluorescent green, still >= 4.5:1 on --bg-0..--bg-2 at every hue
      (test/desktop-look.test.js sweeps it) and still far above that under the

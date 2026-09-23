@@ -43,8 +43,14 @@ export function toggleTheme(theme: Theme): Theme {
 // accent at WCAG AA whatever hue is picked (test/desktop-look.test.js sweeps it).
 
 export const ACCENT_HUE_KEY = 'freeai4u.accent_hue';
-/** Today's green: #4ade80 / #166534 are both oklch hue ~151.7. */
-export const DEFAULT_ACCENT_HUE = 152;
+// Neural Violet (docs/MASTER_PLAN.md section 4): the Android app's accent,
+// #8B6CFF dark / #6D4DF2 light, sits at OKLCH hue ~286-289 -- averaged here
+// to one hue, since this app derives L and C from the theme's own formula
+// rather than the APK's exact hex (that formula is what keeps every hue,
+// this one included, at WCAG AA; test/desktop-look.test.js sweeps it). The
+// old default, plain green (#4ade80 / #166534, hue ~152), is still offered
+// as its own preset in AppearanceCard.tsx.
+export const DEFAULT_ACCENT_HUE = 286;
 export const REDUCE_MOTION_KEY = 'freeai4u.reduce_motion';
 
 function clampHue(value: number): number {

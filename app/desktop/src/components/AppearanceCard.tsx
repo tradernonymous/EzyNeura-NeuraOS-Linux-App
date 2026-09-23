@@ -18,10 +18,10 @@ import {
 // unreadable.
 
 const PRESETS: Array<{ name: string; hue: number }> = [
-  { name: 'Green', hue: DEFAULT_ACCENT_HUE },
+  { name: 'Neural Violet', hue: DEFAULT_ACCENT_HUE },
+  { name: 'Green', hue: 152 },
   { name: 'Teal', hue: 190 },
   { name: 'Blue', hue: 250 },
-  { name: 'Violet', hue: 295 },
   { name: 'Rose', hue: 355 },
   { name: 'Amber', hue: 70 },
 ];
