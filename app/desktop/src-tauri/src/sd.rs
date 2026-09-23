@@ -183,6 +183,12 @@ fn find_binary(app: &tauri::AppHandle) -> Option<(PathBuf, &'static str)> {
             }
         }
     }
+    // Linux: `~/.local/bin` and a `~/stable-diffusion.cpp/build/bin` build
+    // are not on a GUI-launched process's PATH.
+    #[cfg(target_os = "linux")]
+    if let Some(found) = crate::linux::paths::find_in_extra_bin_dirs(binary_name()) {
+        return Some((found, "path"));
+    }
     None
 }
 

@@ -116,6 +116,13 @@ fn find_binary(app: &tauri::AppHandle) -> Option<(PathBuf, &'static str)> {
             }
         }
     }
+    // A GUI-launched process on Linux has a short PATH: `~/.local/bin` and
+    // an unzipped release in `~/llama.cpp/build/bin` are not on it. Run from
+    // where it is, like the Unsloth case below (the .so files sit beside it).
+    #[cfg(target_os = "linux")]
+    if let Some(found) = crate::linux::paths::find_in_extra_bin_dirs(binary_name()) {
+        return Some((found, "path"));
+    }
     // Unsloth Studio installs a llama.cpp build of its own. It is run from
     // where it is (it needs the DLLs beside it), never copied.
     unsloth_binaries().into_iter().find(|p| p.is_file()).map(|p| (p, "unsloth"))
@@ -189,6 +196,22 @@ pub fn local_server_use(app: tauri::AppHandle, path: String) -> Result<serde_jso
     let destination = dir.join(binary_name());
     std::fs::copy(&source, &destination)
         .map_err(|e| format!("Could not copy {}: {}", source.display(), e))?;
+    // A Linux release build is linked against the lib*.so files beside it
+    // (rpath $ORIGIN), so the binary alone would fail to load; take them
+    // along, and make sure the copy is runnable, since a zip unpacked by a
+    // file manager can drop the execute bit.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for lib in crate::linux::paths::sibling_shared_libs(&source) {
+            if let Some(name) = lib.file_name() {
+                std::fs::copy(&lib, dir.join(name))
+                    .map_err(|e| format!("Could not copy {}: {}", lib.display(), e))?;
+            }
+        }
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Could not make {} executable: {}", destination.display(), e))?;
+    }
     Ok(serde_json::json!({
         "path": destination.display().to_string(),
         "bytes": std::fs::metadata(&destination).map(|m| m.len()).unwrap_or(0),

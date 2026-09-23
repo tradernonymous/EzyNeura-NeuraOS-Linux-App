@@ -12,7 +12,7 @@ not merely once its code is green in CI.
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
 | L2 | The APK's look on the desktop | In progress — Neural Violet is now the default accent (below); the five-space nav, the orb, and "calm until it thinks" motion are still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); Offline mode (Ollama/llama-server direct, no engine) not started |
-| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | Not started |
+| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — a prebuilt llama.cpp release now actually starts on Linux, and every local server is found where Linux installs put it (below); a Mint hardware run of llama-server (Vulkan) and Ollama still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | Not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Not started |
@@ -174,6 +174,51 @@ at all, is the more ambitious version of this phase and is still open --
 this ships real value now without waiting for that. A `systemd --user`
 service so the bundled engine can keep running for the phone APK to
 reach over LAN, per the master plan, is also still open.
+
+## L4: local models on Linux, so far
+
+Function first: the goal is more working local models for research and
+coding, so the first L4 work is the two things that stopped a llama.cpp
+release build from running at all on Mint, plus discovery:
+
+- **A copied `llama-server` could not start.** `local_server_use` copied
+  only the binary into the app's folder, but a Linux release build is
+  linked against the `lib*.so` files beside it (rpath `$ORIGIN`), so the
+  copy died with "error while loading shared libraries: libllama.so".
+  It now takes every `lib*.so*` sibling along and sets the execute bit
+  (a zip unpacked from Nemo can drop it). `linux::paths::sibling_shared_libs`
+  is unit-tested against a real temp folder.
+- **Nothing installed outside the GUI PATH was found.** A GUI-launched
+  process on Cinnamon does not carry `~/.local/bin`, nor the
+  `~/llama.cpp/build/bin` an unzipped release usually sits in.
+  `linux::paths::extra_bin_dirs` adds those, `/usr/local/bin` (where
+  ollama.com's installer puts `ollama`), `/opt/llama.cpp/...`, and the
+  `build/bin` of a source-built whisper.cpp / stable-diffusion.cpp; all four
+  finders (`models.rs`, `whisper.rs`, `sd.rs`, `ollama.rs`) fall through to
+  it after PATH. A binary found this way is run from where it is, like the
+  Unsloth case, never copied.
+- The Settings copy no longer says "download the release for Windows":
+  on Linux it names the `ubuntu-vulkan-x64` (GPU) / `ubuntu-x64` (CPU)
+  zips and `build/bin/llama-server`; the dictation card no longer names
+  `whisper-cli.exe` on Linux; Ollama's "not installed" message stops
+  citing `%LOCALAPPDATA%`.
+- The `.deb` now `Recommends: libvulkan1`, so the Vulkan llama.cpp build
+  (the GPU path for AMD, Intel and NVIDIA alike) has its loader present.
+- The selection hotkey applies the same 60,000-unit cap on Linux that the
+  Windows path had, so selecting a whole file can't flood the Quick window
+  (this also removes the one dead-code warning that was in the Linux delta).
+
+`cargo clippy -D warnings` still fails on **upstream-owned** style lints
+(`manual_split_once` in `byok.rs`/`ollama.rs`, `manual_range_patterns` in
+`gguf.rs`, `too_many_arguments` in `local.rs`/`models.rs`/`sd.rs`, a
+`redundant_closure` in `net.rs`, dead `hub_file_url` in `models.rs`).
+They belong upstream (`AGENTS.md`: this repo owns the Linux delta only),
+so clippy stays `continue-on-error` in CI until they land there.
+
+Still open for L4: whisper.cpp publishes no Linux binaries, so Voice
+Type on Mint needs a source build (`cmake -B build && cmake --build build`)
+until this app ships or packages one; a real Vulkan run on Mint hardware;
+the Offline mode of L3.
 
 ## L2: the APK's look, so far
 

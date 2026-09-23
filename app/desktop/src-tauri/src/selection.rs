@@ -11,6 +11,8 @@
 // nothing is sent anywhere until the person picks an action.
 use std::sync::Mutex;
 use std::thread;
+// Only the Windows Ctrl+C path sleeps; Linux reads PRIMARY synchronously.
+#[cfg(windows)]
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
@@ -120,7 +122,10 @@ fn copy_selection() -> Option<String> {
     use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind};
     let mut clipboard = Clipboard::new().ok()?;
     let text = clipboard.get().clipboard(LinuxClipboardKind::Primary).text().ok()?;
-    let trimmed = text.trim().to_string();
+    // The same cap the Windows path applies: a whole selected file must not
+    // flood the Quick window.
+    let capped: Vec<u16> = text.encode_utf16().take(MAX_UNITS).collect();
+    let trimmed = String::from_utf16_lossy(&capped).trim().to_string();
     if trimmed.is_empty() {
         None
     } else {

@@ -38,6 +38,23 @@ export function fileManagerName(): string {
   return isLinux() ? 'Nemo' : 'Explorer';
 }
 
+/**
+ * Which llama.cpp release asset to download and what to pick from it. The
+ * Linux zips carry the server under build/bin with its .so files beside it;
+ * the Vulkan build is the GPU one for every vendor (AMD, Intel, NVIDIA).
+ */
+export function llamaServerDownloadHint(expectedName: string): string {
+  return isLinux()
+    ? `Download the Linux release (llama-…-bin-ubuntu-vulkan-x64.zip for a GPU, …-ubuntu-x64.zip for CPU only), ` +
+      `unzip it, then choose build/bin/${expectedName} — the app copies it and its .so files to its own folder and runs it from there.`
+    : 'Download the release for Windows, unzip it, then choose the file — the app copies it to its own folder and runs it from there.';
+}
+
+/** The whisper.cpp CLI's file name on this OS. */
+export function whisperBinaryName(): string {
+  return isLinux() ? 'whisper-cli' : 'whisper-cli.exe';
+}
+
 /** A placeholder path in this OS's own style, for a command/path input. */
 export function examplePathPlaceholder(): string {
   return isLinux() ? '/usr/bin/server' : 'C:\\…\\server.exe';
