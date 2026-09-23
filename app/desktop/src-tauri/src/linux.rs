@@ -80,12 +80,6 @@ pub mod paths {
         resolve(std::env::var_os("XDG_STATE_HOME"), std::env::var_os("HOME"), ".local/state").join(app)
     }
 
-    /// `$XDG_DATA_HOME` (the chat store, downloaded models -- what the
-    /// Windows build keeps under `%APPDATA%`/`%LOCALAPPDATA%`).
-    pub fn data_dir(app: &str) -> PathBuf {
-        resolve(std::env::var_os("XDG_DATA_HOME"), std::env::var_os("HOME"), ".local/share").join(app)
-    }
-
     /// Pure function behind both of the above, so it is unit-tested without
     /// touching the process environment -- `cargo test` runs tests from one
     /// process, and mutating `$HOME` in one would race every other test
@@ -122,6 +116,69 @@ pub mod paths {
         out.push(PathBuf::from("/usr/share/ollama/.ollama/models"));
         out.push(PathBuf::from("/var/lib/ollama/models"));
         out
+    }
+
+    /// Folders a locally installed model server (llama-server, whisper-cli,
+    /// sd-server, ollama) usually lands in on Linux, but which a
+    /// GUI-launched process's PATH usually does not carry: `~/.local/bin`
+    /// only joins PATH from `.profile`, and an unzipped llama.cpp release is
+    /// most often left in `~/llama.cpp` or `/opt/llama.cpp` and run from
+    /// its `build/bin` directly (the `.so` files sit beside the binary).
+    /// The plain PATH lookup comes first everywhere this is used; this only
+    /// adds the places that lookup never sees.
+    pub fn extra_bin_dirs(home: Option<&std::path::Path>) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        if let Some(home) = home {
+            out.push(home.join(".local").join("bin"));
+            out.push(home.join("bin"));
+            out.push(home.join("llama.cpp").join("build").join("bin"));
+            out.push(home.join("llama.cpp"));
+            out.push(home.join("whisper.cpp").join("build").join("bin"));
+            out.push(home.join("stable-diffusion.cpp").join("build").join("bin"));
+        }
+        out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/opt/llama.cpp/build/bin"));
+        out.push(PathBuf::from("/opt/llama.cpp/bin"));
+        out.push(PathBuf::from("/opt/llama.cpp"));
+        out.push(PathBuf::from("/usr/local/lib/ollama"));
+        out
+    }
+
+    /// `extra_bin_dirs` for this user, looking for one file name: the first
+    /// directory that actually holds it.
+    pub fn find_in_extra_bin_dirs(name: &str) -> Option<PathBuf> {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        extra_bin_dirs(home.as_deref())
+            .into_iter()
+            .map(|dir| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    }
+
+    /// The shared libraries a prebuilt llama.cpp / whisper.cpp / sd.cpp
+    /// binary is linked against with `$ORIGIN` as its rpath: every
+    /// `lib*.so*` next to it. Copying the binary anywhere without them
+    /// gives "error while loading shared libraries: libllama.so", so a copy
+    /// takes these along.
+    pub fn sibling_shared_libs(binary: &std::path::Path) -> Vec<PathBuf> {
+        let Some(dir) = binary.parent() else {
+            return Vec::new();
+        };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        let mut libs: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && is_shared_lib_name(&p.file_name().unwrap_or_default().to_string_lossy()))
+            .collect();
+        libs.sort();
+        libs
+    }
+
+    /// `libggml.so`, `libllama.so.0`, `libwhisper.so.1.7.5` -- but not
+    /// `README.md`, `llama-server` or `libfoo.a`.
+    pub fn is_shared_lib_name(name: &str) -> bool {
+        name.starts_with("lib") && (name.ends_with(".so") || name.contains(".so."))
     }
 
     #[cfg(test)]
@@ -165,6 +222,44 @@ pub mod paths {
             let out = known_model_dirs(Some(std::path::Path::new("/home/tester")));
             assert!(out.contains(&PathBuf::from("/home/tester/.ollama/models")));
             assert!(out.contains(&PathBuf::from("/home/tester/.cache/huggingface/hub")));
+        }
+
+        #[test]
+        fn extra_bin_dirs_cover_local_bin_and_an_unzipped_llama_cpp() {
+            let out = extra_bin_dirs(Some(std::path::Path::new("/home/tester")));
+            assert!(out.contains(&PathBuf::from("/home/tester/.local/bin")));
+            assert!(out.contains(&PathBuf::from("/home/tester/llama.cpp/build/bin")));
+            assert!(out.contains(&PathBuf::from("/usr/local/bin")));
+            // And without a home the system-wide ones are still offered.
+            assert!(extra_bin_dirs(None).contains(&PathBuf::from("/usr/local/bin")));
+        }
+
+        #[test]
+        fn shared_lib_names_are_lib_dot_so_with_or_without_a_version() {
+            assert!(is_shared_lib_name("libllama.so"));
+            assert!(is_shared_lib_name("libggml-vulkan.so"));
+            assert!(is_shared_lib_name("libwhisper.so.1.7.5"));
+            assert!(!is_shared_lib_name("llama-server"));
+            assert!(!is_shared_lib_name("libfoo.a"));
+            assert!(!is_shared_lib_name("README.md"));
+            assert!(!is_shared_lib_name("some.json"));
+        }
+
+        #[test]
+        fn sibling_shared_libs_finds_the_so_files_beside_a_binary() {
+            let dir = std::env::temp_dir().join(format!("neuraos-libs-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            for name in ["llama-server", "libllama.so", "libggml.so.0", "LICENSE"] {
+                std::fs::write(dir.join(name), b"x").unwrap();
+            }
+            let libs = sibling_shared_libs(&dir.join("llama-server"));
+            let names: Vec<String> = libs
+                .iter()
+                .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+                .collect();
+            assert_eq!(names, vec!["libggml.so.0", "libllama.so"]);
+            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 }

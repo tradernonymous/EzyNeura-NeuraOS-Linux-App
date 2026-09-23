@@ -60,8 +60,7 @@
 //     unbounded event rate is how a `yes` loop takes the window down.
 use base64::Engine;
 use portable_pty::{
-    native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem,
-    SlavePty,
+    native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtyPair, PtySize,
 };
 use std::collections::HashMap;
 use std::io::{Read, Write};

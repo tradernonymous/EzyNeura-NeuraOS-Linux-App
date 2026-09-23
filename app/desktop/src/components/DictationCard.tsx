@@ -4,7 +4,7 @@ import SelectPill from './SelectPill';
 import { hasShell, openUrl, whisperFind, whisperPickBinary, type WhisperFacts } from '../bridge';
 import { ENGINE_KEY, LANGUAGE_KEY, MODEL_KEY, normalizeEngine, pickModel, type EngineSetting } from '../dictate';
 import { HubDownloader } from './LocalImagesCard';
-import { builtInDictationHint } from '../platform';
+import { builtInDictationHint, whisperBinaryName } from '../platform';
 
 // Dictation, in Settings: which Whisper the mic uses. Local = the user's own
 // whisper.cpp build (whisper-cli) and a ggml model, run on this PC by the
@@ -98,7 +98,7 @@ export default function DictationCard() {
             <div className="dictation-row">
               <span className={`chip${facts?.found ? ' ok' : ''}`}>{facts?.found ? 'Found' : 'Not set up'}</span>
               <span className="mono dictation-path" title={facts?.binary || ''}>
-                {facts?.found ? facts.binary : `Choose ${facts?.expected_name || 'whisper-cli.exe'} from a whisper.cpp release.`}
+                {facts?.found ? facts.binary : `Choose ${facts?.expected_name || whisperBinaryName()} from a whisper.cpp release.`}
               </span>
               <button onClick={pick} disabled={busy}>{facts?.found ? 'Change…' : 'Choose whisper-cli…'}</button>
               <button onClick={refresh} disabled={busy}>Look again</button>

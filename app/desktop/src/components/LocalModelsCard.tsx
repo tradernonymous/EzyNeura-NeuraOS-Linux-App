@@ -25,6 +25,7 @@ import '../hf-models.js';
 import '../hf-auth.js';
 import '../saved-models.js';
 import MyModels from './MyModels';
+import { llamaServerDownloadHint } from '../platform';
 
 const localModels: typeof import('../local-models.js') = (globalThis as any).FreeAI4ULocalModels;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
@@ -461,8 +462,7 @@ export default function LocalModelsCard() {
         {!server?.found && (
           <div className="local-missing">
             <p className="settings-hint">
-              {server?.expected_name || 'llama-server'} is not here yet. Download the release for Windows, unzip it,
-              then choose the file — the app copies it to its own folder and runs it from there.
+              {server?.expected_name || 'llama-server'} is not here yet. {llamaServerDownloadHint(server?.expected_name || 'llama-server')}
             </p>
             <div className="local-status-row">
               <button onClick={() => localOpenReleases().catch(() => pushToast('warn', 'Could not open the browser.'))}>

@@ -131,8 +131,27 @@ fn ollama_binary() -> Option<std::path::PathBuf> {
             return Some(candidate);
         }
     }
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|dir| dir.join(name)).find(|p| p.is_file())
+    if let Some(path) = std::env::var_os("PATH") {
+        if let Some(found) = std::env::split_paths(&path).map(|dir| dir.join(name)).find(|p| p.is_file()) {
+            return Some(found);
+        }
+    }
+    // Linux: ollama.com's install script puts it in /usr/local/bin, which
+    // some desktop sessions leave off a GUI process's PATH.
+    #[cfg(target_os = "linux")]
+    if let Some(found) = crate::linux::paths::find_in_extra_bin_dirs(name) {
+        return Some(found);
+    }
+    None
+}
+
+/// Where this OS's Ollama installer puts it, for the "not installed" message.
+fn ollama_install_hint() -> &'static str {
+    if cfg!(windows) {
+        "looked in %LOCALAPPDATA%\\Programs\\Ollama and PATH"
+    } else {
+        "looked on PATH and in /usr/local/bin"
+    }
 }
 
 /// Start `ollama serve` if Ollama is installed and not answering. It is the
@@ -145,7 +164,7 @@ pub async fn ollama_start(base: Option<String>) -> Result<serde_json::Value, Str
         return Ok(serde_json::json!({ "started": false, "running": true }));
     }
     let binary = ollama_binary().ok_or_else(|| {
-        "Ollama is not installed here (looked in %LOCALAPPDATA%\\Programs\\Ollama and PATH). Get it from ollama.com.".to_string()
+        format!("Ollama is not installed here ({}). Get it from ollama.com.", ollama_install_hint())
     })?;
     let mut command = std::process::Command::new(&binary);
     command.arg("serve");
