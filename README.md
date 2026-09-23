@@ -14,7 +14,7 @@ Under **Assets**, download the file ending in `_amd64.deb`. The same page also h
 | :-- | :-- |
 | **Runs on** | Linux Mint 21.x, 22.x and 23, and Ubuntu 22.04 or newer (64-bit `amd64`) |
 | **Package** | `.deb` (recommended on Mint) or `.AppImage` (any distro, no install) |
-| **Updates** | Manual for now: download the newer `.deb` and install it over the old one. Updates through Mint Update Manager arrive with the apt repo (phase L7) |
+| **Updates** | Manual for now: download the newer `.deb` and install it over the old one. Updates through Mint Update Manager arrive with the apt repository (`packaging/apt/`) |
 
 ### Install the `.deb`
 
@@ -24,7 +24,7 @@ Either double-click the downloaded file to open it in Mint's package installer, 
 sudo apt install ./NeuraOS*_amd64.deb
 ```
 
-`apt` pulls in what the app needs (`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libsecret-1-0`). NeuraOS Desktop then shows up in the Mint menu.
+`apt` pulls in what the app needs (`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libdbus-1-3`) and recommends `libvulkan1` (GPU models), `xdotool` (Voice Type) and `bubblewrap` (the light sandbox). NeuraOS Desktop then shows up in the Mint menu.
 
 To uninstall: `sudo apt remove neuraos-desktop`
 
@@ -37,7 +37,25 @@ chmod +x NeuraOS*.AppImage
 
 ### Latest development build
 
-Every push to `main` builds a fresh `.deb` and AppImage in CI. To try one before it's released, open the newest green [Linux workflow run](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/actions/workflows/linux.yml), scroll to **Artifacts** and download `neuraos-linux-<commit>` (you need to be signed in to GitHub). Unzip it and install the `.deb` inside as shown above.
+Every push to `main` builds a fresh `.deb` and AppImage in CI and smoke-tests the binary under a virtual display. To try one before it's released, open the newest green [Linux workflow run](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/actions/workflows/linux.yml), scroll to **Artifacts** and download `neuraos-linux-<commit>` (you need to be signed in to GitHub). Unzip it and install the `.deb` inside as shown above. The run's `neuraos-smoke-screenshot` artifact is what that build looks like on first start.
+
+## What you get on Mint
+
+**Five spaces, one orb.** `Alt+1`–`Alt+5`: **Chat** (chat, plan, builds), **Code** (agent, local folder, files, parallel worktrees, ACP agents), **Create** (design, images), **Agents** (library, agents, recipes), **Activity** (everything waiting for you or running). The orb at the foot of the rail: click to dictate, hold for a new chat; it pulses while any agent works. Settings is the account row, or `Ctrl+,`. `Ctrl+K` reaches everything.
+
+**Local models on your GPU.** Settings → Local models shows your GPU, its memory and what size of model fits, and downloads the official llama.cpp build (Vulkan for NVIDIA, AMD and Intel alike, or CPU-only) into the app's own folder — no sudo. Ollama, an unzipped llama.cpp, whisper.cpp and sd.cpp are found wherever Linux installs put them.
+
+**The engine on your machine.** Settings → Engine downloads Node 24 (sha256-checked from nodejs.org) if Mint's is too old, runs the bundled engine on `127.0.0.1`, and can keep it running as a systemd user service after the window closes — Firefox at `127.0.0.1:47831` then shows the same NeuraOS, and your phone can reach it on the LAN.
+
+**Coding agents behind NeuraOS's approvals.** Code → Agents (ACP) runs Gemini CLI, Claude Code, Codex or any [Agent Client Protocol](https://agentclientprotocol.com) agent inside the open folder. Every file it wants to write and every permission it asks for is a card — and a desktop notification with **Allow / Reject** buttons, so you can keep working in another window.
+
+**Linux-native.**
+- **Voice Type** (Settings → Dictation): hold `Ctrl+Alt+V` anywhere, speak, let go — the words are typed into VS Code, the terminal, the browser. Mint's answer to Win+H.
+- **Ask about the selection**: highlight text in any app, press the selection hotkey, and the Quick window opens with it.
+- **Nemo right-click actions**: open a folder in NeuraOS Code, ask about a file, inspect a GGUF (Settings → Startup and desktop).
+- **Start at login, into the tray**; the tray icon shows a cyan dot while an agent works and an amber one when something needs your OK.
+- **Sandboxes**: bubblewrap (no daemon, no image, no network) beside Docker and Podman for the commands an agent runs.
+- Native Cinnamon titlebar, follows Mint's dark/light setting, secrets in your login keyring (Seahorse), reduce-motion respected.
 
 ## Build it yourself
 
@@ -49,8 +67,8 @@ npm install
 npx tauri build --bundles deb,appimage
 ```
 
-The `.deb` ends up in `app/desktop/src-tauri/target/release/bundle/deb/`.
+The `.deb` ends up in `app/desktop/src-tauri/target/release/bundle/deb/`. Checks a contributor runs: `npx tsc --noEmit`, `npm run build`, `node --test 'app/test/*.test.js'`, `cargo test --manifest-path app/desktop/src-tauri/Cargo.toml`, and `scripts/screenshot-smoke-test.sh` for a headless look at the window.
 
-## Plan
+## Plan and status
 
-[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md): the porting audit, design, architecture, phases L0–L9 and what you do yourself.
+[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md): the porting audit, design, architecture, phases L0–L9 and what you do yourself. [docs/BACKLOG.md](docs/BACKLOG.md): what each phase has landed, what was verified where, and what still needs a real Mint machine.

@@ -42,6 +42,7 @@ mod linux;
 mod quick;
 mod runtimes;
 mod desktop;
+mod acp;
 mod selection;
 mod save;
 mod sd;
@@ -99,6 +100,7 @@ fn app_relaunch(app: tauri::AppHandle) {
     sd::shutdown();
     engine::shutdown();
     mcp::shutdown();
+    acp::shutdown();
     app.restart();
 }
 
@@ -292,6 +294,12 @@ fn main() {
             desktop::voice_type_text,
             desktop::tray_state_set,
             desktop::notify_with_actions,
+            acp::acp_start,
+            acp::acp_prompt,
+            acp::acp_cancel,
+            acp::acp_respond,
+            acp::acp_stop,
+            acp::acp_list,
             save::save_file_dialog,
             net::remote_get,
             net::update_manifest,
@@ -511,6 +519,7 @@ fn main() {
                         engine::shutdown();
                         // The same for local MCP servers (mcp.rs).
                         mcp::shutdown();
+                        acp::shutdown();
                         // Ask the page to flush its chats (NEURA-021), then
                         // exit when it says quit_ready or after the wait.
                         let (tx, rx) = std::sync::mpsc::channel::<()>();
@@ -588,6 +597,7 @@ fn main() {
                     sd::shutdown();
                     engine::shutdown();
                     mcp::shutdown();
+                    acp::shutdown();
                     return;
                 }
                 let _ = window.hide();

@@ -13,8 +13,22 @@
           "libvulkan1",
           "xdotool",
           "bubblewrap"
-        ]
+        ],
+        "files": {
+          "/usr/share/mime/packages/neuraos-gguf.xml": "../../../packaging/mime/neuraos-gguf.xml"
+        }
       }
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "gguf"
+        ],
+        "name": "GGUF model",
+        "description": "Local AI model weights",
+        "role": "Viewer",
+        "mimeType": "application/x-gguf"
+      }
+    ]
   }
 }
