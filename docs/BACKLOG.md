@@ -127,6 +127,21 @@ one Library, and the Compare toggle beside the composer. This is the
 `docs/MASTER_PLAN.md` phase itself sized M→L — real UI work across
 `App.tsx`, `Sidebar.tsx` and the chat screen, not a single-commit change.
 
+A first look at renaming "Design" to "Create" (the master plan's own
+wording) found it isn't the small, contained change it looks like: the
+same word names the `/design` composer mode, a command-palette entry and
+export-file defaults (`composer.js`, `commands.js`, `design/exports.js`),
+so renaming only the rail label would leave the app calling the same
+thing two different names in different places -- worse than not renaming
+it. A real rename needs all of those touched together, deliberately, not
+as a side effect of a nav pass.
+
+**A real verification loop now exists for this phase** (section below):
+Xvfb + a real D-Bus session + `scrot` produces an actual screenshot of
+the running app, which can be inspected before anything is claimed to
+look right. Future L2 UI work should render → screenshot → look, the
+same way a code change gets `cargo test` before it's called done.
+
 ## A real screenshot, and what it found
 
 Xvfb (a virtual X server) plus a real D-Bus session bus (`dbus-launch`)
