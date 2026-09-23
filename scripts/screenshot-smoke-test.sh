@@ -40,6 +40,13 @@ command -v gnome-keyring-daemon >/dev/null && gnome-keyring-daemon --start --com
 "$BIN" >/tmp/screenshot-smoke-test.log 2>&1 &
 APP_PID=$!
 sleep "$WAIT"
+# Still running after the wait: a binary that started and died is a failure
+# whatever the screenshot shows (CI uses this as its gate, docs/BACKLOG.md L8).
+if ! kill -0 "$APP_PID" 2>/dev/null; then
+  echo "The app exited within ${WAIT}s. Its log:" >&2
+  tail -n 40 /tmp/screenshot-smoke-test.log >&2
+  exit 1
+fi
 scrot -o "$OUT"
 echo "Screenshot: $OUT"
 echo "App log: /tmp/screenshot-smoke-test.log"

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { pushToast } from '../components/Toasts';
 import { NAVIGATE_EVENT } from '../Sidebar';
-import { hasShell, mcpStdioList, notifyUser } from '../bridge';
+import { hasShell, mcpStdioList, notifyUser, notifyWithActions, onNotificationAction } from '../bridge';
 import { streamChat } from '../api';
 import { isSavedProvider, streamSaved } from '../run-model';
 import { runTurn, type ToolEvent, type TurnOptions } from '../agent-turn';
@@ -154,8 +154,9 @@ export async function runRecipeInBackground(recipe: Recipe, values: Record<strin
         if (gate.action !== 'ask') return true; // execute() runs or refuses it
         pauseClock();
         const line = recipesLib.approvalText(recipe.name, event.summary || event.name);
-        notifyUser(`${recipe.name} needs your approval`, line);
-        pushToast('warn', `${line}. See Library → Recipes.`);
+        notifyWithActions(`recipe:${recipe.id}:${event.name}`, `${recipe.name} needs your approval`, line, [['approve', 'Allow once'], ['reject', 'Deny']])
+          .then((r) => { if (!r.shown) notifyUser(`${recipe.name} needs your approval`, line); });
+        pushToast('warn', `${line}. See Activity.`);
         const decision = await recipesLib.approvals.request({
           recipeId: recipe.id,
           recipeName: recipe.name,
@@ -217,6 +218,17 @@ export async function runRecipeInBackground(recipe: Recipe, values: Record<strin
 function RecipeApprovals() {
   const [pending, setPending] = useState(() => recipesLib.approvals.pending());
   useEffect(() => recipesLib.approvals.subscribe(setPending), []);
+  // Allow once / Deny pressed on the notification (Linux): answer the card.
+  useEffect(() => {
+    let off = () => {};
+    onNotificationAction((id, action) => {
+      const m = /^recipe:([^:]+):(.+)$/.exec(id);
+      if (!m || (action !== 'approve' && action !== 'reject')) return;
+      const hit = recipesLib.approvals.pending().find((p) => p.recipeId === m[1] && p.tool === m[2]);
+      if (hit) recipesLib.approvals.answer(hit.id, action === 'approve' ? 'once' : 'deny');
+    }).then((fn) => { off = fn; });
+    return () => off();
+  }, []);
   if (!pending.length) return null;
   const minutesLeft = (at: number) => Math.max(1, Math.ceil((at - Date.now()) / 60000));
   return (

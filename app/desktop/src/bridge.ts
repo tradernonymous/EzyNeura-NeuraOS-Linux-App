@@ -1119,3 +1119,54 @@ export async function engineServiceStatus(): Promise<EngineServiceStatus> {
 export async function engineServiceSet(on: boolean): Promise<EngineServiceStatus> {
   return call<EngineServiceStatus>('engine_service_set', { on });
 }
+
+// ---- Linux desktop integration (desktop.rs, L5) -------------------------------
+export interface NemoStatus { available: boolean; nemo: boolean; installed: boolean; dir: string }
+
+export async function nemoActionsStatus(): Promise<NemoStatus> {
+  return call<NemoStatus>('nemo_actions_status');
+}
+
+export async function nemoActionsSet(on: boolean): Promise<NemoStatus> {
+  return call<NemoStatus>('nemo_actions_set', { on });
+}
+
+/** Type text into whatever app has focus (xdotool on X11, wtype on Wayland). */
+export async function voiceTypeText(text: string): Promise<{ typed: number; tool?: string }> {
+  return call('voice_type_text', { text });
+}
+
+/** Take (or, with '', release) the hold-to-talk chord. */
+export async function voiceHotkeySet(combo: string): Promise<string> {
+  return call<string>('voice_hotkey_set', { combo });
+}
+
+/** The chord's press ('start') and release ('stop'). */
+export function onVoiceType(handler: (state: 'start' | 'stop') => void): Promise<() => void> {
+  return subscribe<{ state: 'start' | 'stop' }>('voice-type', (p) => handler(p.state));
+}
+
+/** The tray icon's badge: idle, thinking (cyan) or approval (amber). */
+export async function trayStateSet(state: 'idle' | 'thinking' | 'approval'): Promise<boolean> {
+  if (!hasShell()) return false;
+  try { return await call<boolean>('tray_state_set', { state }); } catch { return false; }
+}
+
+/**
+ * A notification with buttons. `actions` are [key, label] pairs; the pressed
+ * key comes back through onNotificationAction with the same `id`
+ * ('dismissed' when it was closed). Off Linux the buttons are dropped and
+ * `actions` in the result says so.
+ */
+export async function notifyWithActions(id: string, title: string, body: string, actions: Array<[string, string]>): Promise<{ shown: boolean; actions: boolean }> {
+  if (!hasShell()) return { shown: false, actions: false };
+  try {
+    return await call('notify_with_actions', { id, title, body, actions });
+  } catch {
+    return { shown: false, actions: false };
+  }
+}
+
+export function onNotificationAction(handler: (id: string, action: string) => void): Promise<() => void> {
+  return subscribe<{ id: string; action: string }>('notification-action', (p) => handler(p.id, p.action));
+}

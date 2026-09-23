@@ -27,11 +27,22 @@ pub const DEFAULT_HOTKEY: &str = "ctrl+alt+space";
 static CURRENT: Mutex<Option<Shortcut>> = Mutex::new(None);
 /// The selection hotkey (selection.rs): same plugin, different action.
 static SELECTION: Mutex<Option<Shortcut>> = Mutex::new(None);
+/// Voice Type's hold-to-talk chord (desktop.rs, L5): press starts the mic,
+/// release stops it and types what was said into the focused app.
+static VOICE: Mutex<Option<Shortcut>> = Mutex::new(None);
+pub const VOICE_EVENT: &str = "voice-type";
 
 /// The global-shortcut plugin, with the one handler this app needs.
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
+            let is_voice = VOICE.lock().ok().map(|s| *s == Some(*shortcut)).unwrap_or(false);
+            if is_voice {
+                use tauri::Emitter;
+                let state = if event.state() == ShortcutState::Pressed { "start" } else { "stop" };
+                let _ = app.emit(VOICE_EVENT, serde_json::json!({ "state": state }));
+                return;
+            }
             if event.state() != ShortcutState::Pressed {
                 return;
             }
@@ -150,4 +161,32 @@ pub fn notify(app: AppHandle, title: String, body: String) -> bool {
     let title: String = title.chars().take(80).collect();
     let body: String = body.chars().take(240).collect();
     app.notification().builder().title(title).body(body).show().is_ok()
+}
+
+/// Take (or, with an empty combo, release) the Voice Type chord.
+pub fn register_voice(app: &AppHandle, combo: &str) -> Result<String, String> {
+    let shortcuts = app.global_shortcut();
+    let mut current = VOICE.lock().map_err(|_| "the hotkey is being changed".to_string())?;
+    if let Some(old) = current.take() {
+        let _ = shortcuts.unregister(old);
+    }
+    if combo.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let shortcut = Shortcut::from_str(combo.trim()).map_err(|e| format!("\"{}\" is not a shortcut: {}", combo, e))?;
+    let taken = CURRENT.lock().ok().map(|c| *c == Some(shortcut)).unwrap_or(false)
+        || SELECTION.lock().ok().map(|c| *c == Some(shortcut)).unwrap_or(false);
+    if taken {
+        return Err(format!("{} is already another NeuraOS hotkey", combo));
+    }
+    shortcuts
+        .register(shortcut)
+        .map_err(|e| format!("could not take {} (another app may own it): {}", combo, e))?;
+    *current = Some(shortcut);
+    Ok(combo.trim().to_string())
+}
+
+#[tauri::command]
+pub fn voice_hotkey_set(app: AppHandle, combo: String) -> Result<String, String> {
+    register_voice(&app, &combo)
 }

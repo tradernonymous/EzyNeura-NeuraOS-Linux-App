@@ -41,6 +41,7 @@ mod launch;
 mod linux;
 mod quick;
 mod runtimes;
+mod desktop;
 mod selection;
 mod save;
 mod sd;
@@ -285,6 +286,12 @@ fn main() {
             runtimes::runtime_facts,
             engine::engine_service_status,
             engine::engine_service_set,
+            quick::voice_hotkey_set,
+            desktop::nemo_actions_status,
+            desktop::nemo_actions_set,
+            desktop::voice_type_text,
+            desktop::tray_state_set,
+            desktop::notify_with_actions,
             save::save_file_dialog,
             net::remote_get,
             net::update_manifest,

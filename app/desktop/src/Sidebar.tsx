@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon, { type IconName } from './components/Icon';
 import './threads.js';
+import { trayStateSet } from './bridge';
 
 const threadsLib: typeof import('./threads.js') = (globalThis as any).FreeAI4UThreads;
 import { APP_VERSION } from './version';
@@ -206,6 +207,10 @@ export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePan
     window.dispatchEvent(new CustomEvent(ORB_EVENT));
   };
   const orbState = listening === 'recording' ? 'listening' : listening === 'working' || busy ? 'thinking' : 'idle';
+  // The tray shows the same three states: a person needed beats working.
+  useEffect(() => {
+    void trayStateSet(approvals > 0 ? 'approval' : busy ? 'thinking' : 'idle');
+  }, [approvals, busy]);
   // A peeking rail is held open by the pointer and by focus, so Escape closes
   // it by letting the focus go; there is no "open" flag to clear. A pinned rail
   // is where the person put it, and stays. Escape is not swallowed -- the

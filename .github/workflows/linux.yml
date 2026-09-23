@@ -64,6 +64,29 @@ jobs:
         working-directory: app/desktop
         run: npx tauri build --bundles deb,appimage
 
+      # L8: the built binary must actually start a window, not just link. A
+      # virtual X server and a session bus are enough for WebKitGTK to
+      # create the webview; a PANIC or FATAL line in the app's own log, or
+      # a process that is gone after the wait, fails the job. The screenshot
+      # is uploaded so a UI change can be looked at from the run page.
+      - name: Headless smoke test (Xvfb) of the built binary
+        run: |
+          sudo apt-get install -y xvfb dbus-x11 scrot
+          bash scripts/screenshot-smoke-test.sh \
+            app/desktop/src-tauri/target/release/freeai4u-desktop \
+            "$RUNNER_TEMP/neuraos-smoke.png" 12
+          if grep -E 'PANIC|FATAL' /tmp/screenshot-smoke-test.log; then
+            echo "the app logged a panic or a fatal error" >&2
+            exit 1
+          fi
+
+      - name: Upload the smoke-test screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraos-smoke-screenshot-${{ github.sha }}
+          path: ${{ runner.temp }}/neuraos-smoke.png
+          if-no-files-found: error
+
       - name: Upload the bundles
         uses: actions/upload-artifact@v4
         with:

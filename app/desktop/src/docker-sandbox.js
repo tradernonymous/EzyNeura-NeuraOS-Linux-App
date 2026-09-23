@@ -39,7 +39,10 @@
   var KEY = 'freeai4u.docker_sandbox';
   var DEFAULT_IMAGE = 'node:22-bookworm';
   var DEFAULT_BINARY = 'docker';
-  var BINARIES = ['docker', 'podman'];
+  // bwrap (bubblewrap) is the lighter Linux sandbox: no daemon, no image --
+  // the whole system read-only, the project read-write at /work, no network
+  // (docs/MASTER_PLAN.md section 6).
+  var BINARIES = ['docker', 'podman', 'bwrap'];
   /** The first run may pull the image, so it gets longer than a plain command. */
   var RUN_TIMEOUT_MS = 300000;
   var CHECK_TIMEOUT_MS = 30000;
@@ -216,13 +219,21 @@
     }
     var r = checkRoot(o.root);
     if (!r.ok) return r;
-    var img = checkImage(o.image);
-    if (!img.ok) return img;
+    var binary = cleanBinary(o.binary);
     var cwd = checkCwd(o.cwd);
     if (cwd === null) return { ok: false, reason: 'The folder to run in must be a plain path inside the project (no .., no absolute path).' };
     var workdir = cwd ? '"/work/' + cwd + '"' : '/work';
-    var binary = cleanBinary(o.binary);
-    var head = binary + ' run --rm -v "' + r.root + ':/work" -w ' + workdir + ' ' + img.image + ' ';
+    var head;
+    if (binary === 'bwrap') {
+      // bubblewrap needs no image: the host's own tools, read-only, with the
+      // project bound read-write at /work and no network.
+      head = 'bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --bind "' + r.root + '" /work' +
+        ' --chdir ' + workdir + ' --unshare-net --die-with-parent ';
+    } else {
+      var img = checkImage(o.image);
+      if (!img.ok) return img;
+      head = binary + ' run --rm -v "' + r.root + ':/work" -w ' + workdir + ' ' + img.image + ' ';
+    }
     if (!unsafeChar(command, false)) {
       return { ok: true, command: head + 'sh -lc "' + command + '"' };
     }
