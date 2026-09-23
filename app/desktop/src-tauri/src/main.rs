@@ -53,6 +53,22 @@ use tauri_plugin_deep_link::DeepLinkExt;
 // Set only by the tray Quit: the close handler hides the window (tray-style),
 // so it has to be able to tell a close from a quit.
 static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Whether the tray icon exists. Closing the window hides into the tray only
+/// when there is one to come back from; otherwise close means quit.
+static TRAY_OK: AtomicBool = AtomicBool::new(false);
+/// The argument the autostart entry launches with: start into the tray.
+const HIDDEN_ARG: &str = "--hidden";
+
+/// Restart through Tauri's own path (the shutdown runs, window state is
+/// saved): the crash screen's way out of a broken page.
+#[tauri::command]
+fn app_relaunch(app: tauri::AppHandle) {
+    models::shutdown();
+    sd::shutdown();
+    engine::shutdown();
+    mcp::shutdown();
+    app.restart();
+}
 
 // NEURA-050: which machines may actually be asked for Mica.
 //
@@ -188,10 +204,29 @@ fn main() {
     #[cfg(target_os = "linux")]
     linux::dmabuf::apply_guard_if_needed();
 
-    tauri::Builder::default()
-        // Registered first: a second launch must focus the window that exists
-        // rather than build a second tray icon and a second app object.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+    // A GUI process on Linux has the display manager's PATH, not the user's
+    // (no ~/.local/bin, nvm, cargo). Adopt the login shell's PATH once, before
+    // anything looks a binary up.
+    #[cfg(target_os = "linux")]
+    linux::path_env::fix();
+
+    let builder = tauri::Builder::default();
+
+    // Registered first: a second launch must focus the window that exists
+    // rather than build a second tray icon and a second app object.
+    //
+    // On Linux the plugin needs a session D-Bus and panics without one (a
+    // TTY-launched AppImage, a bare Xvfb). No bus: no plugin, one crash-log
+    // line, and the app still starts -- a second copy is the lesser harm.
+    #[cfg(target_os = "linux")]
+    let single_instance = linux::dbus::session_reachable();
+    #[cfg(not(target_os = "linux"))]
+    let single_instance = true;
+    if !single_instance {
+        crash::log("single-instance: no session D-Bus; a second launch will open a second window");
+    }
+    let builder = if single_instance {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // A neuraos:// link in the second launch's argv is delivered by
             // the deep-link plugin (single-instance's `deep-link` feature).
             // A .gguf file or a folder ("Open with", Explorer's verb) is ours.
@@ -205,8 +240,14 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
+    } else {
+        builder
+    };
+
+    builder
         .invoke_handler(generate_handler![
             window_has_mica,
+            app_relaunch,
             save::save_file_dialog,
             net::remote_get,
             net::update_manifest,
@@ -306,6 +347,13 @@ fn main() {
         .plugin(quick::plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        // Settings → Startup: start with the login session, hidden into the
+        // tray (`--hidden` is read in setup below). On Linux this is an
+        // ~/.config/autostart .desktop entry; the OS owns it, we only ask.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![HIDDEN_ARG]),
+        ))
         // Registered for the frontend's future use; today the app stores its
         // settings in localStorage. It must NOT be given a config map here:
         // this plugin version rejects one and the app panics at startup.
@@ -371,7 +419,7 @@ fn main() {
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());
             }
-            let _tray = tray
+            let built = tray
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
@@ -449,7 +497,25 @@ fn main() {
                     }
                     _ => {}
                 })
-                .build(app)?;
+                .build(app);
+            // A tray that cannot be built (Linux without an indicator host or
+            // a session bus) is a line in the crash log, not a dead app --
+            // and the close button then quits instead of hiding into a tray
+            // that is not there (see on_window_event).
+            match built {
+                Ok(_) => TRAY_OK.store(true, Ordering::SeqCst),
+                Err(e) => crash::log(&format!("tray: not created: {}", e)),
+            }
+
+            // Started by the login session (Settings → Startup): stay in the
+            // tray until asked for. Without a tray there is nothing to come
+            // back from, so the window shows as usual.
+            let args: Vec<String> = std::env::args().collect();
+            if args.iter().any(|a| a == HIDDEN_ARG) && TRAY_OK.load(Ordering::SeqCst) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
 
             Ok(())
         })
@@ -464,6 +530,18 @@ fn main() {
                 // except while quitting, when the close must go through so
                 // Tauri's own shutdown can run.
                 if QUITTING.load(Ordering::SeqCst) {
+                    return;
+                }
+                // No tray to come back from: the close is a real close, and
+                // the same clean quit the tray's Quit does.
+                if !TRAY_OK.load(Ordering::SeqCst) {
+                    if QUITTING.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+                    models::shutdown();
+                    sd::shutdown();
+                    engine::shutdown();
+                    mcp::shutdown();
                     return;
                 }
                 let _ = window.hide();

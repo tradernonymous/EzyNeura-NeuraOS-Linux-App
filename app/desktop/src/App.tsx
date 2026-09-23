@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspen
 import { api } from './api';
 import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
 import TitleBar from './TitleBar';
+import { isLinux } from './platform';
 import ChatScreen, { OPEN_CHAT_EVENT, NEW_CHAT_EVENT, MODEL_PICK_EVENT, TOOL_CARDS_EVENT, PENDING_COMMAND_KEY, RUN_COMMAND_EVENT } from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ConnectScreen from './screens/ConnectScreen';
@@ -552,9 +553,14 @@ export default function App() {
 
   return (
     <div className={zen ? 'app zen' : 'app'}>
-      <TitleBar onToggleTheme={toggle} theme={theme} />
+      {/* Mint draws its own titlebar (native decorations stay on Linux; a
+          second, in-app one was 32px of dead space). The theme toggle it
+          carried lives in the sidebar's footer there. */}
+      {!isLinux() && <TitleBar onToggleTheme={toggle} theme={theme} />}
       <div className="app-body">
         <Sidebar
+          theme={theme}
+          onToggleTheme={toggle}
           active={view}
           onNavigate={navigate}
           onOpenPalette={openPalette}

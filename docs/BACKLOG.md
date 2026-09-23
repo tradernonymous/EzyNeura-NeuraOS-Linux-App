@@ -205,6 +205,47 @@ Type on Mint needs a source build (`cmake -B build && cmake --build build`)
 until this app ships or packages one; a real Vulkan run on Mint hardware;
 the Offline mode of L3.
 
+## Shell hardening on Linux (harness functions), from a survey of 11 Tauri apps
+
+Patterns taken from a read of openhuman, racemo, barqly-vault, 3uxo,
+tauri-app-template, create-tauri-react, whisper-ui, UniGit and
+tauri-plugin-decorum (TauriKit and stark turned out to hold no Tauri code):
+
+- **The login shell's PATH, adopted at startup** (`linux::path_env::fix`,
+  barqly-vault's `fix_path_env` idea, done in 30 lines): a GUI process on
+  Cinnamon has the display manager's PATH, so `~/.local/bin`, nvm and cargo
+  were invisible to every lookup and spawn. Merged, login entries first,
+  nothing dropped; unit-tested.
+- **Single-instance only with a session D-Bus** (`linux::dbus`): the plugin
+  panics without one (TTY-launched AppImage, bare Xvfb). Probed first; no
+  bus means one crash-log line and a second window, not a dead app.
+- **A tray that fails is not fatal, and close-to-tray needs a tray**
+  (`TRAY_OK`): openhuman disables its tray on Linux over GTK panics in
+  packaged runs. Here the tray is attempted, a failure logged, and the
+  close button then quits cleanly (child servers stopped) instead of hiding
+  the window into a tray that is not there.
+- **Start at login, into the tray** (`tauri-plugin-autostart`, Settings →
+  Startup, `--hidden`): an `~/.config/autostart` entry the OS owns; the
+  toggle reads back what the OS has. `--hidden` is honoured only when the
+  tray exists, for the same reason as above.
+- **A crash screen with Relaunch** (`components/CrashScreen.tsx`,
+  `app_relaunch`): a render error after boot used to unmount everything into
+  a blank window (only boot-time faults had a screen). Relaunch goes through
+  Tauri's restart so the shutdown runs and window state is saved.
+- **Native decorations stay; the in-app titlebar goes on Linux.**
+  tauri-plugin-decorum's own Linux path leaves decorations to the WM, and
+  Cinnamon's titlebar keeps theme colours, tiling and resize grips. The
+  32px in-app bar under it was dead space: not rendered on Linux, its theme
+  toggle now in the sidebar footer, and the sidebar brand is the real
+  emblem (`app/assets/branding/neuraos-emblem.svg`) instead of an "N" box.
+  Verified with `scripts/screenshot-smoke-test.sh` on the debug build.
+
+Deliberately not taken: a custom CSD titlebar (loses WM resize/tiling on
+X11), openhuman's hand-rolled window-state (the plugin already does it),
+Sentry (secrets-never-travel; the crash log stays local), a bundled
+whisper sidecar (whisper.cpp ships no Linux binaries; a source build stays
+the L4 answer).
+
 ## L2: the APK's look, so far
 
 The `.exe`'s accent system is already a single-hue OKLCH design (one

@@ -5735,3 +5735,69 @@ button:hover,
     to { transform: translateX(120%); }
   }
 }
+
+/* ---- Linux shell: the sidebar carries what the (absent) titlebar did ------ */
+.sidebar-emblem {
+  object-fit: contain;
+  background: transparent;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-theme {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-theme:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+
+/* ---- The crash screen (components/CrashScreen.tsx) ----------------------- */
+.crash-screen {
+  max-width: 640px;
+  margin: 14vh auto 0;
+  padding: 24px;
+  color: var(--text-1);
+}
+
+.crash-screen h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.crash-message {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.crash-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}

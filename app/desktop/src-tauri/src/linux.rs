@@ -69,6 +69,115 @@ pub mod webkit {
     }
 }
 
+pub mod path_env {
+    //! A GUI-launched process on Linux inherits the PATH the display manager
+    //! gave the session -- `/usr/bin` and friends, none of what `.profile`
+    //! or `.bashrc` adds (`~/.local/bin`, nvm, pyenv, cargo). Every "not
+    //! found" bug the Windows build never sees comes from that. The fix
+    //! everyone converges on (tauri-apps/fix-path-env-rs): ask the user's
+    //! login shell for its PATH once, at startup, and adopt it for this
+    //! process, so every later lookup and spawn sees what a terminal sees.
+    use std::process::Command;
+
+    /// The shell that owns the user's PATH lines: `$SHELL`, else bash.
+    fn shell() -> String {
+        std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/bash".to_string())
+    }
+
+    /// The login shell's PATH, or None if it could not be asked.
+    fn login_path() -> Option<String> {
+        let out = Command::new(shell()).arg("-lc").arg("echo -n \"$PATH\"").output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+
+    /// The PATH to run with: the login shell's entries first, then any the
+    /// current PATH had that the shell did not, so nothing is lost. Pure,
+    /// so it is tested without a shell.
+    pub fn merged(login: &str, current: &str) -> String {
+        let mut seen: Vec<&str> = Vec::new();
+        for entry in login.split(':').chain(current.split(':')) {
+            if !entry.is_empty() && !seen.contains(&entry) {
+                seen.push(entry);
+            }
+        }
+        seen.join(":")
+    }
+
+    /// Adopt the login shell's PATH. Called once, before Tauri starts, so
+    /// nothing that reads PATH runs before it. Silent when the shell can't
+    /// answer: the session's PATH stands, as it always did.
+    pub fn fix() {
+        let Some(login) = login_path() else {
+            return;
+        };
+        let current = std::env::var("PATH").unwrap_or_default();
+        let merged = merged(&login, &current);
+        if merged != current {
+            std::env::set_var("PATH", merged);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::merged;
+
+        #[test]
+        fn the_login_path_comes_first_and_nothing_is_dropped() {
+            let got = merged("/home/t/.local/bin:/usr/bin", "/usr/bin:/opt/only-here");
+            assert_eq!(got, "/home/t/.local/bin:/usr/bin:/opt/only-here");
+        }
+
+        #[test]
+        fn empty_entries_and_duplicates_are_dropped() {
+            assert_eq!(merged("/a::/a", ":/a:/b:"), "/a:/b");
+        }
+    }
+}
+
+pub mod dbus {
+    //! tauri-plugin-single-instance talks over the session D-Bus on Linux
+    //! and panics when there is none (a bare Xvfb, a TTY-launched AppImage,
+    //! some SSH -X sessions). One process instead of one crash: check that
+    //! a session bus is at least plausible before registering the plugin.
+    use std::path::Path;
+
+    /// Pure check over the two ways a session bus announces itself, so
+    /// it is tested without touching the environment.
+    pub fn plausible(address: Option<&str>, runtime_dir: Option<&str>) -> bool {
+        if address.map(|a| !a.trim().is_empty()).unwrap_or(false) {
+            return true;
+        }
+        runtime_dir
+            .map(|dir| Path::new(dir).join("bus").exists())
+            .unwrap_or(false)
+    }
+
+    pub fn session_reachable() -> bool {
+        let address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
+        let runtime = std::env::var("XDG_RUNTIME_DIR").ok();
+        plausible(address.as_deref(), runtime.as_deref())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::plausible;
+
+        #[test]
+        fn an_address_is_enough() {
+            assert!(plausible(Some("unix:path=/run/user/1000/bus"), None));
+        }
+
+        #[test]
+        fn nothing_means_no_bus() {
+            assert!(!plausible(None, None));
+            assert!(!plausible(Some(""), Some("/definitely/not/a/dir")));
+        }
+    }
+}
+
 pub mod paths {
     use std::ffi::OsString;
     use std::path::PathBuf;

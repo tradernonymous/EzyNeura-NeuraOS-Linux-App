@@ -15,6 +15,8 @@
 import { useEffect, useState } from 'react';
 import Icon, { type IconName } from './components/Icon';
 import { APP_VERSION } from './version';
+import { isLinux } from './platform';
+import emblem from '../../assets/branding/neuraos-emblem.svg';
 // Paused background recipe runs waiting for an answer (NEURA-036): a badge on
 // Library, whose Recipes tab holds the approval cards.
 import './recipes.js';
@@ -119,6 +121,9 @@ interface SidebarProps {
       the floor keeps a rail's width of margin, so nothing hides underneath. */
   pinned: boolean;
   onTogglePin: () => void;
+  /** The theme toggle sits here on Linux, where there is no in-app titlebar. */
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
 }
 
 // The name is the product's, not the engine's: this is NeuraOS, and the engine
@@ -126,7 +131,7 @@ interface SidebarProps {
 // identifier and the localStorage keys all keep their freeai4u-* spelling, so
 // an existing install updates in place and existing chats and settings survive
 // the rename.
-export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePanel, panels, pinned, onTogglePin }: SidebarProps) {
+export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePanel, panels, pinned, onTogglePin, theme, onToggleTheme }: SidebarProps) {
   const approvals = usePendingApprovals();
   // A peeking rail is held open by the pointer and by focus, so Escape closes
   // it by letting the focus go; there is no "open" flag to clear. A pinned rail
@@ -140,7 +145,9 @@ export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePan
   return (
     <aside className="sidebar" data-pinned={pinned ? 'true' : 'false'} onKeyDown={onKeyDown}>
       <div className="sidebar-brand">
-        <div className="sidebar-logo">N</div>
+        {/* The real emblem (app/assets/branding), not a letter in a box: the
+            same mark as the Android app's icon and the tray. */}
+        <img className="sidebar-logo sidebar-emblem" src={emblem} alt="" width={24} height={24} draggable={false} />
         <span className="sidebar-title">NeuraOS</span>
       </div>
 
@@ -205,6 +212,17 @@ export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePan
       </button>
 
       <div className="sidebar-footer">
+        {isLinux() && onToggleTheme && (
+          <button
+            className="sidebar-theme"
+            type="button"
+            onClick={onToggleTheme}
+            aria-label="Toggle theme"
+            title={`${theme === 'dark' ? 'Light' : 'Dark'} theme`}
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        )}
         <span className="sidebar-version" title="FreeAI4U Desktop">v{APP_VERSION}</span>
       </div>
     </aside>

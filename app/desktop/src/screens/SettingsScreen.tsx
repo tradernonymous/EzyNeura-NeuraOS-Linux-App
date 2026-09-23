@@ -8,6 +8,7 @@ import DictationCard from '../components/DictationCard';
 import ConnectorsCard from '../components/ConnectorsCard';
 import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
+import StartupCard from '../components/StartupCard';
 import FileTree from '../components/FileTree';
 import Terminal from '../components/Terminal';
 
@@ -184,6 +185,8 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
               server sets WORKSPACE_RUN=1 and the account is signed in, which is
               why it is not a sidebar row any more: the local folder and the
               local terminal answer for the app's own machine. */}
+          <StartupCard />
+
           <section className="settings-section">
             <h2>Advanced</h2>
             <div className="settings-card">
