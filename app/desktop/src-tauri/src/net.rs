@@ -184,7 +184,7 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("http client: {}", e))
 }
 
-async fn get_following(url: &str, extra: &[String]) -> Result<reqwest::Response, String> {
+pub async fn get_following(url: &str, extra: &[String]) -> Result<reqwest::Response, String> {
     get_following_with(url, extra, None, None).await
 }
 

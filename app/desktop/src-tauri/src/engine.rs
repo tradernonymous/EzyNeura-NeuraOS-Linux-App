@@ -168,6 +168,15 @@ fn shell_quote(path: &std::path::Path) -> String {
 /// layout directly (covers the common case where neither shell trick
 /// sources `.bashrc`). The first that answers wins.
 pub fn find_node() -> Option<(NodeLocation, u32)> {
+    // The Node this app installed itself (Settings -> Engine, runtimes.rs)
+    // wins: it is the one version known to be new enough.
+    if let Some(node) = crate::runtimes::managed_node() {
+        if let Some(major) = probe_node(Command::new(&node)) {
+            if major >= MIN_NODE_MAJOR {
+                return Some((NodeLocation::Direct(node), major));
+            }
+        }
+    }
     if let Some(major) = probe_node(Command::new("node")) {
         return Some((NodeLocation::Direct(PathBuf::from("node")), major));
     }
@@ -260,6 +269,14 @@ pub fn engine_status() -> serde_json::Value {
             "port": run.port,
             "url": format!("http://127.0.0.1:{}", run.port),
         }),
+        // The systemd user service (Linux) counts as running too.
+        None if port_is_up(SERVICE_PORT) => serde_json::json!({
+            "running": true,
+            "port": SERVICE_PORT,
+            "url": format!("http://127.0.0.1:{}", SERVICE_PORT),
+            "already_running": true,
+            "service": true,
+        }),
         None => serde_json::json!({ "running": false }),
     }
 }
@@ -281,6 +298,15 @@ pub fn engine_start(app: tauri::AppHandle) -> Result<serde_json::Value, String> 
                 "already_running": true,
             }));
         }
+    }
+    // The service's engine, if it is up, is the one to use.
+    if port_is_up(SERVICE_PORT) {
+        return Ok(serde_json::json!({
+            "port": SERVICE_PORT,
+            "url": format!("http://127.0.0.1:{}", SERVICE_PORT),
+            "already_running": true,
+            "service": true,
+        }));
     }
     let (location, major) = find_node().ok_or_else(|| {
         format!("No `node` found. Install Node {}+ (nvm, or your distro's NodeSource repository) to run the engine on this machine.", MIN_NODE_MAJOR)
@@ -401,5 +427,124 @@ mod tests {
     fn shell_quote_survives_a_single_quote_in_the_path() {
         let quoted = shell_quote(std::path::Path::new("/home/o'brien/app"));
         assert_eq!(quoted, r"'/home/o'\''brien/app'");
+    }
+}
+
+// ---- The engine as a systemd user service (docs/MASTER_PLAN.md L3) --------
+//
+// `neuraos-engine.service` under ~/.config/systemd/user keeps the engine up
+// after the window closes, on one fixed loopback port, so Firefox at that
+// address shows the same NeuraOS and the phone app can reach it over a LAN.
+// The app's own "run it here" then finds that engine instead of starting a
+// second one. The unit runs the same Node and server.js the app would.
+
+/// The service's port: fixed, so it can be typed into a browser.
+pub const SERVICE_PORT: u16 = 47831;
+pub const SERVICE_UNIT: &str = "neuraos-engine.service";
+
+#[cfg(target_os = "linux")]
+fn systemctl(args: &[&str]) -> Result<String, String> {
+    let out = Command::new("systemctl").arg("--user").args(args).output()
+        .map_err(|e| format!("systemctl: {}", e))?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if out.status.success() {
+        Ok(text)
+    } else {
+        Err(format!("{} {}", text, String::from_utf8_lossy(&out.stderr).trim()).trim().to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unit_path() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("no HOME")?;
+    let dir = PathBuf::from(home).join(".config").join("systemd").join("user");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+    Ok(dir.join(SERVICE_UNIT))
+}
+
+/// The unit text for a given node and engine folder. Pure, so it is tested.
+pub fn unit_text(node: &std::path::Path, engine_dir: &std::path::Path, port: u16) -> String {
+    format!(
+        "[Unit]\nDescription=NeuraOS engine (local, started at login)\nAfter=network.target\n\n\
+         [Service]\nExecStart=\"{}\" \"{}\"\nWorkingDirectory=\"{}\"\nEnvironment=PORT={}\nRestart=on-failure\nRestartSec=3\n\n\
+         [Install]\nWantedBy=default.target\n",
+        node.display(),
+        engine_dir.join("server.js").display(),
+        engine_dir.display(),
+        port
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn engine_service_status() -> serde_json::Value {
+    let available = Command::new("systemctl").args(["--user", "--version"]).stdout(Stdio::null()).stderr(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
+    let enabled = available && systemctl(&["is-enabled", SERVICE_UNIT]).map(|s| s == "enabled").unwrap_or(false);
+    let active = available && systemctl(&["is-active", SERVICE_UNIT]).map(|s| s == "active").unwrap_or(false);
+    serde_json::json!({ "available": available, "enabled": enabled, "active": active, "port": SERVICE_PORT, "unit": SERVICE_UNIT })
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn engine_service_status() -> serde_json::Value {
+    serde_json::json!({ "available": false, "enabled": false, "active": false, "port": SERVICE_PORT, "unit": SERVICE_UNIT })
+}
+
+/// The absolute path of the Node a unit file can run: a unit has no PATH of
+/// ours, so a bare `node` or a login-shell one is resolved first.
+#[cfg(target_os = "linux")]
+fn node_path_for_unit(location: NodeLocation) -> Result<PathBuf, String> {
+    let which = |cmd: &mut Command| -> String {
+        cmd.output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+    };
+    let path = match location {
+        NodeLocation::Direct(p) if p.is_absolute() => p,
+        NodeLocation::Direct(p) => PathBuf::from(which(Command::new("sh").arg("-c").arg(format!("command -v {}", p.display())))),
+        NodeLocation::ViaLoginShell => PathBuf::from(which(Command::new(crate::local::login_shell()).arg("-lc").arg("command -v node"))),
+    };
+    if path.as_os_str().is_empty() {
+        return Err("could not resolve node's path for the unit".to_string());
+    }
+    Ok(path)
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command(async)]
+pub fn engine_service_set(app: tauri::AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    let path = unit_path()?;
+    if on {
+        let (location, major) = find_node().ok_or("No Node 24+ found; download it above first.")?;
+        if major < MIN_NODE_MAJOR {
+            return Err(format!("Node {} is too old for the engine (needs {}+).", major, MIN_NODE_MAJOR));
+        }
+        let node = node_path_for_unit(location)?;
+        let dir = engine_dir(&app)?;
+        std::fs::write(&path, unit_text(&node, &dir, SERVICE_PORT)).map_err(|e| format!("cannot write {}: {}", path.display(), e))?;
+        systemctl(&["daemon-reload"])?;
+        systemctl(&["enable", "--now", SERVICE_UNIT])?;
+    } else {
+        let _ = systemctl(&["disable", "--now", SERVICE_UNIT]);
+        let _ = std::fs::remove_file(&path);
+        let _ = systemctl(&["daemon-reload"]);
+    }
+    Ok(engine_service_status())
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command(async)]
+pub fn engine_service_set(_app: tauri::AppHandle, _on: bool) -> Result<serde_json::Value, String> {
+    Err("the engine service is a Linux (systemd) feature".to_string())
+}
+
+#[cfg(test)]
+mod service_tests {
+    use super::*;
+
+    #[test]
+    fn the_unit_names_node_the_engine_and_the_port() {
+        let text = unit_text(std::path::Path::new("/opt/node/bin/node"), std::path::Path::new("/usr/lib/NeuraOS Desktop/engine"), 47831);
+        assert!(text.contains("ExecStart=\"/opt/node/bin/node\" \"/usr/lib/NeuraOS Desktop/engine/server.js\""));
+        assert!(text.contains("Environment=PORT=47831"));
+        assert!(text.contains("WantedBy=default.target"));
     }
 }

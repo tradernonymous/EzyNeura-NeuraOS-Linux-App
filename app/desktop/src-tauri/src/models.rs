@@ -76,7 +76,7 @@ pub fn shutdown() {
     }
 }
 
-fn llama_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn llama_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, getServer, setServer, normalizeServer, DEFAULT_SERVER } from '../api';
-import { hasShell, engineFindNode, engineStart, engineStatus, setPreferLocalEngine, type EngineNode, type EngineStatus } from '../bridge';
+import { hasShell, engineFindNode, engineStart, engineStatus, engineServiceStatus, engineServiceSet, setPreferLocalEngine, type EngineNode, type EngineServiceStatus, type EngineStatus } from '../bridge';
+import RuntimeButton from './RuntimeButton';
+import { isLinux } from '../platform';
 import '../connection.js';
 
 const connection: typeof import('../connection.js') = (globalThis as any).FreeAI4UConnection;
@@ -29,12 +31,28 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
   const [engine, setEngine] = useState<EngineStatus | null>(null);
   const [engineBusy, setEngineBusy] = useState(false);
   const [engineMessage, setEngineMessage] = useState('');
+  const [service, setService] = useState<EngineServiceStatus | null>(null);
+  const [serviceBusy, setServiceBusy] = useState(false);
 
-  useEffect(() => {
+  const refreshEngineFacts = useCallback(() => {
     if (!hasShell()) return;
     engineFindNode().then(setNode).catch(() => setNode(null));
     engineStatus().then(setEngine).catch(() => setEngine(null));
+    if (isLinux()) engineServiceStatus().then(setService).catch(() => setService(null));
   }, []);
+  useEffect(() => { refreshEngineFacts(); }, [refreshEngineFacts]);
+
+  const flipService = async (on: boolean) => {
+    setServiceBusy(true);
+    try {
+      setService(await engineServiceSet(on));
+      setEngineMessage(on ? 'The engine now starts with your login and keeps running after the window closes.' : 'The engine service is off; the app starts the engine only while it is open.');
+    } catch (e) {
+      setEngineMessage((e as Error).message || String(e));
+    } finally {
+      setServiceBusy(false);
+    }
+  };
 
   const probe = useCallback(async () => {
     try {
@@ -168,10 +186,40 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
               <span className="settings-hint">Node {node.major} found on PATH.</span>
             </>
           ) : (
-            <span className="settings-hint">
-              {node?.reason || 'Checking for Node…'}
-            </span>
+            <>
+              <span className="settings-hint">
+                {node?.reason || 'Checking for Node…'}
+              </span>
+              {isLinux() && node && !node.ok && (
+                <RuntimeButton
+                  kind="node"
+                  label="Download Node 24 for NeuraOS"
+                  title="Fetches the official Node 24 build from nodejs.org into this app's own folder (sha256 checked). No sudo, nothing outside ~/.local/share."
+                  onDone={refreshEngineFacts}
+                />
+              )}
+            </>
           )}
+        </div>
+      )}
+      {hasShell() && isLinux() && node?.ok && service && (
+        <div className="setting-row">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={service.enabled}
+              disabled={serviceBusy || !service.available}
+              onChange={(e) => flipService(e.target.checked)}
+            />
+            Keep the engine running after the app closes (systemd user service)
+          </label>
+          <span className="settings-hint">
+            {!service.available
+              ? 'systemd --user is not available in this session.'
+              : service.active
+                ? `Running as a service on 127.0.0.1:${service.port}.`
+                : 'Off. When on, Firefox at that address shows the same NeuraOS, and your phone can reach it over the LAN.'}
+          </span>
         </div>
       )}
       {engineMessage && <p className="settings-hint connection-message">{engineMessage}</p>}
