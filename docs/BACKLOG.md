@@ -9,7 +9,7 @@ not merely once its code is green in CI.
 | Phase | What | Status |
 | :-- | :-- | :-- |
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
-| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
+| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | Code complete + CI green, including the `.gguf` MIME association (`tauri.linux.conf.json` + `packaging/mime/`); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine |
 | L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
@@ -325,7 +325,12 @@ folder (`~/.local/share/com.freeai4u.desktop/runtimes`):
 
 Not done: whisper.cpp one-click (no Linux release binaries exist),
 sd.cpp one-click (asset naming unverified from here), tokens/s in the
-status bar.
+status bar, and an in-app updater for the `.deb`/AppImage (`net.rs`'s
+update flow is upstream's Windows nsis/msi path and its manifest is
+upstream's release feed; on Linux `install_kind` reports "portable", so
+the banner saves the download and the person installs it -- the apt
+repository in `packaging/apt/` is the Mint answer, the AppImage feed is
+still open).
 
 ## Shell hardening on Linux (harness functions), from a survey of 11 Tauri apps
 
