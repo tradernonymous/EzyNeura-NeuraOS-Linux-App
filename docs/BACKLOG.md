@@ -127,6 +127,43 @@ one Library, and the Compare toggle beside the composer. This is the
 `docs/MASTER_PLAN.md` phase itself sized M→L — real UI work across
 `App.tsx`, `Sidebar.tsx` and the chat screen, not a single-commit change.
 
+## A real screenshot, and what it found
+
+Xvfb (a virtual X server) plus a real D-Bus session bus (`dbus-launch`)
+let the actual built binary run further than the first smoke test could:
+`wmctrl`/`xdotool` see a genuine window titled "NeuraOS", and `scrot`
+captured it. The page renders correctly: the Connect-to-an-engine screen,
+styled, readable, with a live "unreachable" status for the default Railway
+engine (expected -- this container has no route to it).
+
+This also surfaced a real, useful finding about W8 (the Secret Service
+keyring backend):
+
+1. With no D-Bus session bus at all: the app warns "the encrypted store
+   is unavailable ... The name org.freedesktop.secrets was not provided
+   by any .service files" -- graceful, not a crash.
+2. With a bus but no `gnome-keyring-daemon` (or another Secret Service
+   provider) running: the same warning.
+3. With `gnome-keyring-daemon --start --components=secrets` running: the
+   D-Bus name resolves, but the warning changes to "Secret Service: no
+   result found" -- there is no default (unlocked) collection yet.
+4. Creating one needs an interactive prompt
+   (`org.freedesktop.Secret.Prompt`, normally a "set a keyring password"
+   dialog) that has nothing to answer it headlessly, so it hangs. This is
+   as far as a container without a real login session can go.
+
+**What this means for real Mint hardware:** Cinnamon's login unlocks the
+default "Login" keyring automatically via PAM (`pam_gnome_keyring`) using
+the login password, which is exactly step 4 above happening invisibly at
+login instead of hanging. On a normal Mint desktop session this should
+just work. **If the installed app ever shows this same "credential store
+unavailable" warning on a real machine**, it means `gnome-keyring-daemon`
+either isn't running or isn't PAM-unlocked for that session --
+`systemctl --user status` won't show it (it's not a systemd unit by
+default), but `echo -n test | secret-tool store --label=t service t
+account t` hanging or erroring is the same symptom this test hit, and is
+the thing to debug first.
+
 Not yet verified anywhere (needs real Mint hardware): the 10-step checklist
 in `docs/MASTER_PLAN.md` section 7 — installing the `.deb` with `apt`,
 launching it, a reboot to confirm keyring secrets persist, the real PTY
