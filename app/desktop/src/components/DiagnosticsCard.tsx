@@ -6,7 +6,7 @@
 // safe to paste: no token, no key, no chat content.
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { diagnosticsFacts, hasShell, type DiagnosticsFacts } from '../bridge';
+import { crashLogReveal, diagnosticsFacts, hasShell, type DiagnosticsFacts } from '../bridge';
 import '../diagnostics.js';
 
 const diagnostics: typeof import('../diagnostics.js') = (globalThis as any).FreeAI4UDiagnostics;
@@ -68,6 +68,11 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
           <button type="button" onClick={() => setOpen((v) => !v)}>
             {open ? 'Hide' : 'Show'}
           </button>
+          {hasShell() && (
+            <button type="button" onClick={() => crashLogReveal().catch((e: Error) => setMessage(e.message || String(e)))}>
+              Open the logs folder
+            </button>
+          )}
         </div>
         {message && <p className="settings-hint">{message}</p>}
         {open && <pre className="diagnostics-report">{report}</pre>}

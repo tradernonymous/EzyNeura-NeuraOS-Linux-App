@@ -32,7 +32,7 @@ import Icon from './components/Icon';
 import Toasts, { pushToast } from './components/Toasts';
 import './index.css';
 import { APP_VERSION } from './version';
-import { applyTheme, readTheme, toggleTheme, useParallax, type Theme } from './theme';
+import { applyTheme, readTheme, toggleTheme, useParallax, readFollowSystem, watchSystemTheme, FOLLOW_SYSTEM_EVENT, type Theme } from './theme';
 import { useUpdateCheck } from './useUpdateCheck';
 // UMD modules load for their side effect and are picked up off globalThis.
 import './chats.js';
@@ -58,6 +58,7 @@ const rails: typeof import('./workbench.js') = (globalThis as any).FreeAI4UWorkb
 const DesignScreen = lazy(() => import('./screens/DesignScreen'));
 const ImagesScreen = lazy(() => import('./screens/ImagesScreen'));
 const BuildScreen = lazy(() => import('./screens/BuildScreen'));
+const ActivityScreen = lazy(() => import('./screens/ActivityScreen'));
 const LibraryScreen = lazy(() => import('./screens/LibraryScreen'));
 const FilesScreen = lazy(() => import('./screens/FilesScreen'));
 const EvalsScreen = lazy(() => import('./screens/EvalsScreen'));
@@ -159,6 +160,20 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Settings → Appearance → "Follow the system": Mint's dark/light choice
+  // drives the theme while it is on, and a flip in Mint's Themes panel
+  // arrives through prefers-color-scheme without a restart.
+  const [followSystem, setFollowSystem] = useState<boolean>(readFollowSystem);
+  useEffect(() => {
+    const on = () => setFollowSystem(readFollowSystem());
+    window.addEventListener(FOLLOW_SYSTEM_EVENT, on);
+    return () => window.removeEventListener(FOLLOW_SYSTEM_EVENT, on);
+  }, []);
+  useEffect(() => {
+    if (!followSystem) return;
+    return watchSystemTheme((t) => setTheme(t));
+  }, [followSystem]);
 
   // One probe decides everything the shell shows. A failure is classified, not
   // collapsed: "the engine wants a login" and "the engine never answered" are
@@ -506,6 +521,7 @@ export default function App() {
       switch (hit.action) {
         case 'palette': setPaletteOpen((open) => !open); break;
         case 'zen': setZen((on) => !on); break;
+        case 'settings': setView('settings'); break;
         case 'new-chat':
           setView('chat');
           window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT));
@@ -577,6 +593,7 @@ export default function App() {
         <Sidebar
           theme={theme}
           onToggleTheme={toggle}
+          onNewChat={() => { setView('chat'); window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT)); }}
           active={view}
           onNavigate={navigate}
           onOpenPalette={openPalette}
@@ -686,6 +703,7 @@ export default function App() {
                   )}
                   {view === 'files' && <FilesScreen />}
                   {view === 'evals' && <EvalsScreen />}
+                  {view === 'activity' && <ActivityScreen onOpen={navigate} />}
                   {view === 'agents' && <AgentsScreen />}
                   {view === 'recipes' && <RecipesScreen />}
                   {view === 'parallel' && <ParallelScreen localRoot={localRoot} />}

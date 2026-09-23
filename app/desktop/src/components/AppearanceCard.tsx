@@ -10,6 +10,8 @@ import {
   readAccentHue,
   readReduceMotion,
   systemPrefersReducedMotion,
+  readFollowSystem,
+  writeFollowSystem,
 } from '../theme';
 
 // Appearance, in Settings: the accent hue and the amount of motion. The hue
@@ -30,6 +32,7 @@ export default function AppearanceCard() {
   const [hue, setHue] = useState<number>(readAccentHue);
   const [reduced, setReduced] = useState<boolean>(readReduceMotion);
   const [material, setMaterial] = useState(readMaterial);
+  const [followSystem, setFollowSystem] = useState<boolean>(readFollowSystem);
   const systemReduced = systemPrefersReducedMotion();
   // Asked once, on the shell's answer from boot: a machine that cannot show
   // Mica gets an explanation instead of a switch that changes nothing.
@@ -77,6 +80,20 @@ export default function AppearanceCard() {
         <span className="appearance-preview-link">Accent text</span>
         <span className="appearance-preview-chip">Selected</span>
       </div>
+
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={followSystem}
+          onChange={(e) => { writeFollowSystem(e.target.checked); setFollowSystem(e.target.checked); }}
+        />
+        Follow the system's dark or light setting
+      </label>
+      <p className="settings-hint">
+        {followSystem
+          ? 'The theme follows Mint’s Themes panel (or the OS setting); the toggle in the rail is paused while this is on.'
+          : 'On: the app switches with the desktop. Off: the theme you picked stays.'}
+      </p>
 
       <label className="toggle">
         <input

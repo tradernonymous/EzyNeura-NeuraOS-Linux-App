@@ -5801,3 +5801,114 @@ button:hover,
   gap: 8px;
   margin-bottom: 12px;
 }
+
+/* ---- The orb (docs/MASTER_PLAN.md section 4): calm until it thinks ------- */
+.orb {
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  margin: 8px 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.orb-core {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--accent-strong), var(--accent) 60%, var(--accent-dim));
+  box-shadow: 0 0 0 1px var(--border);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+
+.orb:hover .orb-core { transform: scale(1.08); }
+.orb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Thinking: a soft cyan-violet pulse, the app's one "working" signal. */
+.orb[data-state="thinking"] .orb-core {
+  box-shadow: 0 0 0 2px var(--accent-dim), 0 0 18px 2px var(--accent);
+}
+/* Listening: a slow breath. */
+.orb[data-state="listening"] .orb-core {
+  box-shadow: 0 0 0 3px var(--accent-dim), 0 0 22px 4px var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion='reduced']) .orb[data-state="thinking"] .orb-core {
+    animation: orb-pulse 1.6s ease-in-out infinite;
+  }
+  :root:not([data-motion='reduced']) .orb[data-state="listening"] .orb-core {
+    animation: orb-breathe 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes orb-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--accent-dim), 0 0 10px 1px var(--accent); }
+  50% { box-shadow: 0 0 0 3px var(--accent-dim), 0 0 22px 4px var(--accent); }
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+.sidebar-account { margin: 0 var(--rail-pad) 4px; }
+
+/* ---- Activity space ------------------------------------------------------ */
+.activity-section {
+  margin: 0 0 22px;
+}
+
+.activity-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 0 0 10px;
+}
+
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.activity-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.activity-list .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+}
+
+.activity-list .dot.on {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.activity-list .link-button { margin-left: auto; }

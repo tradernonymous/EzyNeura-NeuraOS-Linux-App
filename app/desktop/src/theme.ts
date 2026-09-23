@@ -34,6 +34,53 @@ export function toggleTheme(theme: Theme): Theme {
   return theme === 'dark' ? 'light' : 'dark';
 }
 
+// ---- follow the system's dark/light setting --------------------------------
+//
+// Mint's Themes panel flips `prefers-color-scheme` through the GTK theme, and
+// WebKitGTK passes it on; when this is on, the app follows it instead of its
+// own saved theme. Off by default, so an existing install keeps its choice.
+export const FOLLOW_SYSTEM_KEY = 'freeai4u.theme_follow_system';
+/** Fired after writeFollowSystem, so App picks the change up at once. */
+export const FOLLOW_SYSTEM_EVENT = 'neuraos:theme-follow-system';
+
+export function readFollowSystem(): boolean {
+  try {
+    return localStorage.getItem(FOLLOW_SYSTEM_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeFollowSystem(on: boolean): void {
+  try {
+    localStorage.setItem(FOLLOW_SYSTEM_KEY, on ? '1' : '0');
+  } catch { /* still applies to this window */ }
+  window.dispatchEvent(new CustomEvent(FOLLOW_SYSTEM_EVENT));
+}
+
+export function systemTheme(): Theme {
+  try {
+    return globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
+/** Call `onChange` with the system theme now and whenever it flips. */
+export function watchSystemTheme(onChange: (theme: Theme) => void): () => void {
+  let query: MediaQueryList | null = null;
+  try {
+    query = globalThis.matchMedia?.('(prefers-color-scheme: light)') ?? null;
+  } catch {
+    query = null;
+  }
+  onChange(systemTheme());
+  if (!query) return () => {};
+  const listener = () => onChange(systemTheme());
+  query.addEventListener('change', listener);
+  return () => query?.removeEventListener('change', listener);
+}
+
 // ---- appearance: the accent hue and the amount of motion -------------------
 //
 // Both are read and painted in main.tsx BEFORE React renders, so the first

@@ -4,7 +4,7 @@
 // back (Relaunch, through Tauri's own restart so the shutdown runs and the
 // window state is saved), and where the note went (the crash log).
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { appRelaunch, hasShell } from '../bridge';
+import { appRelaunch, hasShell, logClientEvent } from '../bridge';
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -20,6 +20,7 @@ export default class CrashScreen extends Component<Props, State> {
     // The console is the only log a webview has of its own; keep the stack
     // there for a report, but never send it anywhere.
     console.error('NeuraOS render error', error, info.componentStack);
+    void logClientEvent('render', `${error.name}: ${error.message}${info.componentStack ? ' at' + String(info.componentStack).split('\n').slice(0, 3).join(' ') : ''}`);
   }
 
   render() {
