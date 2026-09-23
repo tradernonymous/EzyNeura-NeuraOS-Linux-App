@@ -40,6 +40,7 @@ mod launch;
 #[cfg(target_os = "linux")]
 mod linux;
 mod quick;
+mod runtimes;
 mod selection;
 mod save;
 mod sd;
@@ -280,6 +281,10 @@ fn main() {
             app_relaunch,
             log_client_event,
             crash_log_reveal,
+            runtimes::runtime_install,
+            runtimes::runtime_facts,
+            engine::engine_service_status,
+            engine::engine_service_set,
             save::save_file_dialog,
             net::remote_get,
             net::update_manifest,
@@ -396,6 +401,8 @@ fn main() {
             if let Ok(dir) = app.path().app_log_dir() {
                 crash::set_path(dir.join(crash::CRASH_FILE));
             }
+            // Where one-click runtimes (Node 24, llama.cpp) are installed.
+            runtimes::init(app.handle());
             // Deep links arrive as a list of URLs; the frontend decides what
             // a neuraos://model?repo=... means.
             let handle = app.handle().clone();

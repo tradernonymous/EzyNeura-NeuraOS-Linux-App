@@ -25,7 +25,9 @@ import '../hf-models.js';
 import '../hf-auth.js';
 import '../saved-models.js';
 import MyModels from './MyModels';
-import { llamaServerDownloadHint } from '../platform';
+import { isLinux, llamaServerDownloadHint } from '../platform';
+import RuntimeButton from './RuntimeButton';
+import { runtimeFacts, type RuntimeFacts } from '../bridge';
 
 const localModels: typeof import('../local-models.js') = (globalThis as any).FreeAI4ULocalModels;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
@@ -119,6 +121,12 @@ export default function LocalModelsCard() {
   const [error, setError] = useState('');
   const [gpu, setGpu] = useState(false);
   const facts = localModels.machine();
+  // The shell's hardware facts (GPU, VRAM, Vulkan) and what it has installed.
+  const [runtime, setRuntime] = useState<RuntimeFacts | null>(null);
+  useEffect(() => {
+    if (!hasShell()) return;
+    runtimeFacts().then(setRuntime).catch(() => setRuntime(null));
+  }, [server?.found]);
 
   // The models folder and its files.
   const [downloaded, setDownloaded] = useState<LocalModelFile[]>([]);
@@ -464,6 +472,22 @@ export default function LocalModelsCard() {
             <p className="settings-hint">
               {server?.expected_name || 'llama-server'} is not here yet. {llamaServerDownloadHint(server?.expected_name || 'llama-server')}
             </p>
+            {isLinux() && (
+              <div className="local-status-row">
+                <RuntimeButton
+                  kind="llama-vulkan"
+                  label={`Download llama.cpp (Vulkan${runtime?.gpu?.vulkan === false ? ' — no Vulkan driver found' : ', GPU'})`}
+                  title="The official ubuntu-vulkan-x64 release build, into this app's folder. Works on NVIDIA, AMD and Intel through Vulkan; needs libvulkan1 and your GPU's Vulkan driver."
+                  onDone={refresh}
+                />
+                <RuntimeButton
+                  kind="llama-cpu"
+                  label="Download llama.cpp (CPU only)"
+                  title="The official ubuntu-x64 release build, into this app's folder."
+                  onDone={refresh}
+                />
+              </div>
+            )}
             <div className="local-status-row">
               <button onClick={() => localOpenReleases().catch(() => pushToast('warn', 'Could not open the browser.'))}>
                 Open the llama.cpp releases
@@ -485,7 +509,19 @@ export default function LocalModelsCard() {
           </label>
           <span className="settings-hint">
             About {facts.ramGb} GB of memory reported{facts.ramKnown ? '' : ' (estimated)'} · {facts.cores} threads
+            {runtime?.gpu && (
+              <>
+                {' · '}GPU: {runtime.gpu.name || runtime.gpu.vendor}
+                {runtime.gpu.vram_mb ? ` · ${(runtime.gpu.vram_mb / 1024).toFixed(1)} GB VRAM` : ' · VRAM unknown'}
+                {' · '}{runtime.gpu.vulkan ? 'Vulkan ready' : 'no Vulkan driver'}
+              </>
+            )}
           </span>
+          {runtime?.gpu && (
+            <span className="settings-hint hardware-suggestion" title="From the GPU memory (or RAM when none is reported): what fits beside the KV cache">
+              Fits here: {runtime.gpu.suggestion}
+            </span>
+          )}
         </div>
 
         <MyModels />

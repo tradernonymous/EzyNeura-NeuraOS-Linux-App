@@ -1058,3 +1058,64 @@ export async function logClientEvent(scope: string, message: string): Promise<vo
 export async function crashLogReveal(): Promise<void> {
   await call('crash_log_reveal');
 }
+
+// ---- One-click runtimes (runtimes.rs): Node 24 and llama.cpp ----------------
+export interface GpuFacts {
+  vendor: string;
+  name: string;
+  vram_mb: number | null;
+  vulkan: boolean;
+  nvidia_driver: boolean;
+  ram_gb: number;
+  suggestion: string;
+}
+
+export interface RuntimeFacts {
+  dir: string;
+  node: { path: string; version: string } | null;
+  llama: { tag: string; asset: string; sha256: string; vulkan: boolean; files: number } | null;
+  gpu: GpuFacts | null;
+  tools: { tar: boolean; unzip: boolean };
+  min_node_major: number;
+}
+
+export type RuntimeKind = 'node' | 'llama-vulkan' | 'llama-cpu';
+
+export interface RuntimeProgress {
+  kind: RuntimeKind;
+  phase: 'resolve' | 'download' | 'extract' | 'done' | 'error';
+  received: number;
+  total: number;
+  done: boolean;
+  error: string;
+}
+
+export async function runtimeFacts(): Promise<RuntimeFacts> {
+  return call<RuntimeFacts>('runtime_facts');
+}
+
+/** Download and install one runtime; progress arrives on onRuntimeDownload. */
+export async function runtimeInstall(kind: RuntimeKind): Promise<{ path: string; verified: boolean; version?: string; tag?: string }> {
+  return call('runtime_install', { kind });
+}
+
+export function onRuntimeDownload(handler: (p: RuntimeProgress) => void): Promise<() => void> {
+  return subscribe<RuntimeProgress>('runtime-download', handler);
+}
+
+// ---- The engine as a systemd user service (engine.rs, Linux) ---------------
+export interface EngineServiceStatus {
+  available: boolean;
+  enabled: boolean;
+  active: boolean;
+  port: number;
+  unit: string;
+}
+
+export async function engineServiceStatus(): Promise<EngineServiceStatus> {
+  return call<EngineServiceStatus>('engine_service_status');
+}
+
+export async function engineServiceSet(on: boolean): Promise<EngineServiceStatus> {
+  return call<EngineServiceStatus>('engine_service_set', { on });
+}

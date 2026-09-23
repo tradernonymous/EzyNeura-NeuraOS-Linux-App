@@ -5912,3 +5912,6 @@ button:hover,
 }
 
 .activity-list .link-button { margin-left: auto; }
+
+.runtime-button { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hardware-suggestion { display: block; margin-top: 4px; color: var(--text-1); }

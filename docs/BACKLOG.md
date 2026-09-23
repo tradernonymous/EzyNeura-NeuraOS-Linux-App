@@ -11,8 +11,8 @@ not merely once its code is green in CI.
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
 | L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
-| L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); Offline mode (Ollama/llama-server direct, no engine) not started |
-| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — a prebuilt llama.cpp release now actually starts on Linux, and every local server is found where Linux installs put it (below); a Mint hardware run of llama-server (Vulkan) and Ollama still open |
+| L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
+| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | Not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Not started |
@@ -219,6 +219,39 @@ Still open for L4: whisper.cpp publishes no Linux binaries, so Voice
 Type on Mint needs a source build (`cmake -B build && cmake --build build`)
 until this app ships or packages one; a real Vulkan run on Mint hardware;
 the Offline mode of L3.
+
+## L3/L4: one-click runtimes and the hardware card
+
+`runtimes.rs` installs, without sudo and only under the app's own data
+folder (`~/.local/share/com.freeai4u.desktop/runtimes`):
+
+- **Node 24** from `nodejs.org/dist/latest-v24.x/`: the tarball is checked
+  against that folder's `SHASUMS256.txt` and refused on a mismatch, then
+  unpacked with the system `tar`. `engine.rs::find_node` tries it first.
+  Settings → Engine shows "Download Node 24 for NeuraOS" whenever no usable
+  Node is found. Recipe proven in this container: sha matches, `tar -xJf`
+  unpacks, `node --version` answers v24.21.0.
+- **llama.cpp** (Vulkan or CPU): the newest release from GitHub's API, the
+  `ubuntu-vulkan-x64` / `ubuntu-x64` zip, unpacked with `unzip`, and
+  `llama-server` plus its `lib*.so` copied into the folder `models.rs`
+  looks in first. GitHub publishes no digest for these, so the result says
+  `verified: false` and records the sha256 we computed in `llama.json`.
+  Not run end to end here: this container's proxy refuses github.com API
+  and page requests (release downloads themselves pass).
+- **The hardware line** (`linux::gpu`): vendor from `/sys/class/drm`,
+  VRAM from `mem_info_vram_total` (amdgpu) or `nvidia-smi`, the name from
+  `lspci`, whether a Vulkan ICD is installed, and a size suggestion
+  (`suggestion()`: Q4 in the 4 GB class, Q5/Q6 above, CPU sizes when no
+  GPU memory is reported). Shown in Settings → Local models.
+- **The engine as a systemd user service** (Settings → Engine): writes
+  `~/.config/systemd/user/neuraos-engine.service` running the same Node and
+  `server.js` on `127.0.0.1:47831`, `enable --now`; `engine_status` and
+  "run it here" find that engine first. Firefox at that address shows the
+  same NeuraOS. Not run here (no systemd user session in the container).
+
+Not done: whisper.cpp one-click (no Linux release binaries exist),
+sd.cpp one-click (asset naming unverified from here), tokens/s in the
+status bar.
 
 ## Shell hardening on Linux (harness functions), from a survey of 11 Tauri apps
 

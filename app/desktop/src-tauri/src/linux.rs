@@ -178,6 +178,147 @@ pub mod dbus {
     }
 }
 
+pub mod gpu {
+    //! What GPU this machine has and how much memory it carries, for the
+    //! hardware card and the model-size suggestion (docs/MASTER_PLAN.md
+    //! L4). Read from the kernel's own files first (`/sys/class/drm`),
+    //! `nvidia-smi` for the proprietary driver's memory figure, and
+    //! `lspci` for a human name when it is installed. Nothing here needs
+    //! root, and every probe failing just yields "unknown".
+    use std::path::Path;
+    use std::process::Command;
+
+    /// PCI vendor ids -> a name.
+    pub fn vendor_name(id: &str) -> &'static str {
+        match id.trim().trim_start_matches("0x").to_ascii_lowercase().as_str() {
+            "10de" => "NVIDIA",
+            "1002" => "AMD",
+            "8086" => "Intel",
+            _ => "unknown",
+        }
+    }
+
+    /// `name, memory` from `nvidia-smi --query-gpu=name,memory.total
+    /// --format=csv,noheader,nounits`: `("NVIDIA GeForce RTX 3050", 4096)`.
+    pub fn parse_nvidia_smi(line: &str) -> Option<(String, u64)> {
+        let (name, mem) = line.trim().rsplit_once(',')?;
+        Some((name.trim().to_string(), mem.trim().parse().ok()?))
+    }
+
+    /// The quantisation and size that fits the memory the model runs in.
+    /// Rough on purpose, and conservative: the L4 plan's "Q4 for 4 GB,
+    /// Q5/Q6 above", with the size class that fits beside the KV cache.
+    pub fn suggestion(vram_mb: Option<u64>, ram_gb: u64) -> String {
+        match vram_mb {
+            Some(v) if v >= 20_000 => "Up to ~30B at Q4_K_M, or 14B at Q6_K, on the GPU".to_string(),
+            Some(v) if v >= 11_000 => "14B at Q4_K_M, or 8B at Q6_K, on the GPU".to_string(),
+            Some(v) if v >= 7_000 => "8B at Q5_K_M on the GPU; 14B at Q4 spills to RAM".to_string(),
+            Some(v) if v >= 3_500 => "7B–8B at Q4_K_M on the GPU (the 4 GB class)".to_string(),
+            Some(_) => "A 3B–4B model at Q4_K_M; larger ones run on the CPU".to_string(),
+            None if ram_gb >= 32 => "No GPU memory reported: 14B at Q4_K_M on the CPU".to_string(),
+            None if ram_gb >= 16 => "No GPU memory reported: 7B–8B at Q4_K_M on the CPU".to_string(),
+            None => "No GPU memory reported: a 3B–4B model at Q4_K_M on the CPU".to_string(),
+        }
+    }
+
+    fn read_trim(path: &Path) -> Option<String> {
+        std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+    }
+
+    /// Whether a Vulkan driver is installed (an ICD manifest exists), which
+    /// is what the Vulkan llama.cpp build needs besides libvulkan1.
+    pub fn vulkan_icd_present() -> bool {
+        ["/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d", "/usr/local/share/vulkan/icd.d"]
+            .iter()
+            .any(|dir| std::fs::read_dir(dir).map(|mut d| d.next().is_some()).unwrap_or(false))
+    }
+
+    pub fn facts() -> serde_json::Value {
+        let mut vendor = "unknown".to_string();
+        let mut name = String::new();
+        let mut vram_mb: Option<u64> = None;
+        let mut slot = String::new();
+        if let Ok(cards) = std::fs::read_dir("/sys/class/drm") {
+            for card in cards.flatten() {
+                let file = card.file_name().to_string_lossy().to_string();
+                if !file.starts_with("card") || file.contains('-') {
+                    continue;
+                }
+                let device = card.path().join("device");
+                let Some(id) = read_trim(&device.join("vendor")) else { continue };
+                vendor = vendor_name(&id).to_string();
+                if let Some(bytes) = read_trim(&device.join("mem_info_vram_total")).and_then(|s| s.parse::<u64>().ok()) {
+                    vram_mb = Some(bytes / (1024 * 1024));
+                }
+                if let Ok(link) = std::fs::read_link(&device) {
+                    slot = link.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                }
+                if vendor != "unknown" {
+                    break;
+                }
+            }
+        }
+        if let Ok(out) = Command::new("nvidia-smi").args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]).output() {
+            if out.status.success() {
+                if let Some((n, mem)) = parse_nvidia_smi(&String::from_utf8_lossy(&out.stdout)) {
+                    vendor = "NVIDIA".to_string();
+                    name = n;
+                    vram_mb = Some(mem);
+                }
+            }
+        }
+        if name.is_empty() && !slot.is_empty() {
+            if let Ok(out) = Command::new("lspci").args(["-mm", "-s", &slot]).output() {
+                // `00:02.0 "VGA compatible controller" "Intel Corporation" "UHD Graphics 620" ...`
+                let text = String::from_utf8_lossy(&out.stdout);
+                let quoted: Vec<&str> = text.split('"').filter(|s| !s.trim().is_empty() && !s.trim().starts_with("00:") && !s.contains(':')).collect();
+                if quoted.len() >= 3 {
+                    name = format!("{} {}", quoted[1].trim(), quoted[2].trim());
+                }
+            }
+        }
+        let ram_gb = std::fs::read_to_string("/proc/meminfo").ok()
+            .and_then(|m| m.lines().find(|l| l.starts_with("MemTotal:")).and_then(|l| l.split_whitespace().nth(1)).and_then(|kb| kb.parse::<u64>().ok()))
+            .map(|kb| kb / (1024 * 1024))
+            .unwrap_or(0);
+        serde_json::json!({
+            "vendor": vendor,
+            "name": name,
+            "vram_mb": vram_mb,
+            "vulkan": vulkan_icd_present(),
+            "nvidia_driver": Path::new("/proc/driver/nvidia/version").exists(),
+            "ram_gb": ram_gb,
+            "suggestion": suggestion(vram_mb, ram_gb),
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn vendors_are_named_from_pci_ids() {
+            assert_eq!(vendor_name("0x10de"), "NVIDIA");
+            assert_eq!(vendor_name("0x1002"), "AMD");
+            assert_eq!(vendor_name("8086"), "Intel");
+            assert_eq!(vendor_name("0xbeef"), "unknown");
+        }
+
+        #[test]
+        fn nvidia_smi_lines_parse_with_commas_in_the_name() {
+            assert_eq!(parse_nvidia_smi("NVIDIA GeForce RTX 3050, 4096\n"), Some(("NVIDIA GeForce RTX 3050".to_string(), 4096)));
+            assert!(parse_nvidia_smi("garbage").is_none());
+        }
+
+        #[test]
+        fn suggestions_scale_with_memory() {
+            assert!(suggestion(Some(4096), 16).contains("7B"));
+            assert!(suggestion(Some(24_000), 64).contains("30B"));
+            assert!(suggestion(None, 8).contains("3B"));
+        }
+    }
+}
+
 pub mod paths {
     use std::ffi::OsString;
     use std::path::PathBuf;
