@@ -17,7 +17,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import QuickAsk from './screens/QuickAsk';
 import CrashScreen from './components/CrashScreen';
-import { isQuickWindow, windowHasMica } from './bridge';
+import { isQuickWindow, logClientEvent, windowHasMica } from './bridge';
 import { applyMaterial, paintAppearance, readMaterial } from './theme';
 // Bundled, not borrowed from the machine: the app should look the same on every
 // Windows build rather than inheriting whatever Segoe happens to be installed.
@@ -56,9 +56,11 @@ export function paintFailure(error: unknown): void {
 
 window.addEventListener('error', (event) => {
   if (rootIsEmpty()) paintFailure(event.error ?? event.message);
+  void logClientEvent('error', String((event.error && (event.error as Error).message) || event.message));
 });
 window.addEventListener('unhandledrejection', (event) => {
   if (rootIsEmpty()) paintFailure(event.reason);
+  void logClientEvent('rejection', String((event.reason && (event.reason as Error).message) || event.reason));
 });
 
 // Theme, accent hue and motion are on <html> before React renders anything, so

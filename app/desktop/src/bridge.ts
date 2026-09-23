@@ -1046,3 +1046,15 @@ export async function autostartSet(on: boolean): Promise<void> {
 export async function appRelaunch(): Promise<void> {
   await call('app_relaunch');
 }
+
+// ---- The crash log, from the page's side -------------------------------------
+/** Append one line to the shell's crash log (no secrets: redact first). */
+export async function logClientEvent(scope: string, message: string): Promise<void> {
+  if (!hasShell()) return;
+  try { await call('log_client_event', { scope, message }); } catch { /* the console still has it */ }
+}
+
+/** Open the folder the crash log lives in, in the file manager. */
+export async function crashLogReveal(): Promise<void> {
+  await call('crash_log_reveal');
+}

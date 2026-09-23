@@ -8,7 +8,7 @@ import { captureScreen, imageFileToDataUrl, imagesIn, withImages, MAX_IMAGES } f
 import Icon from '../components/Icon';
 import ModelPicker from '../components/ModelPicker';
 import Composer from '../components/Composer';
-import { NAVIGATE_EVENT } from '../Sidebar';
+import { DICTATION_EVENT, NAVIGATE_EVENT, ORB_EVENT } from '../Sidebar';
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -1631,6 +1631,18 @@ _${done.notes.join(' · ')}_` : said,
     pushToast('ok', 'Picture attached. It needs a vision model (llava, gemma3, qwen2.5-vl, GPT-4o...).');
   };
 
+  // The rail's orb is the same mic: its click lands here, and the state goes
+  // back out so the orb can breathe while listening.
+  const dictateRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const onOrb = () => dictateRef.current();
+    window.addEventListener(ORB_EVENT, onOrb);
+    return () => window.removeEventListener(ORB_EVENT, onOrb);
+  }, []);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(DICTATION_EVENT, { detail: { state: dictation } }));
+  }, [dictation]);
+
   // The mic: first press records, second press sends the audio to Whisper and
   // types the words into the box (after whatever is already there).
   const dictate = async () => {
@@ -1663,6 +1675,7 @@ _${done.notes.join(' · ')}_` : said,
       pushToast('error', `Microphone: ${((e as Error).message || String(e)).split('\n')[0]}`);
     }
   };
+  dictateRef.current = dictate;
   useEffect(() => () => recording.current?.cancel(), []);
 
   const screenshot = async () => {

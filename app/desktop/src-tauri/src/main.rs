@@ -20,6 +20,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod byok;
@@ -58,6 +59,35 @@ static QUITTING: AtomicBool = AtomicBool::new(false);
 static TRAY_OK: AtomicBool = AtomicBool::new(false);
 /// The argument the autostart entry launches with: start into the tray.
 const HIDDEN_ARG: &str = "--hidden";
+
+/// The page's side of the crash log: a render error or an unhandled rejection
+/// lands in the same file the shell writes, so one report tells the whole
+/// story. Two lines at most per call, no secrets (the page redacts before
+/// sending, and the log is the person's own file).
+#[tauri::command]
+fn log_client_event(scope: String, message: String) {
+    let scope: String = scope.chars().take(40).collect();
+    let message: String = message.chars().take(2000).collect();
+    crash::log(&format!("page/{}: {}", scope, message.replace('\n', " | ")));
+}
+
+/// Open the folder the crash log lives in, in the file manager: the one place
+/// this app ever hands a path to `xdg-open`, and it is its own folder.
+#[tauri::command(async)]
+fn crash_log_reveal() -> Result<(), String> {
+    let dir = crash::path().parent().map(|p| p.to_path_buf()).ok_or("no log folder")?;
+    if !dir.is_dir() {
+        return Err(format!("{} does not exist yet", dir.display()));
+    }
+    #[cfg(target_os = "linux")]
+    let mut cmd = std::process::Command::new("xdg-open");
+    #[cfg(windows)]
+    let mut cmd = std::process::Command::new("explorer");
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg(&dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.spawn().map(|_| ()).map_err(|e| format!("could not open {}: {}", dir.display(), e))
+}
 
 /// Restart through Tauri's own path (the shutdown runs, window state is
 /// saved): the crash screen's way out of a broken page.
@@ -248,6 +278,8 @@ fn main() {
         .invoke_handler(generate_handler![
             window_has_mica,
             app_relaunch,
+            log_client_event,
+            crash_log_reveal,
             save::save_file_dialog,
             net::remote_get,
             net::update_manifest,

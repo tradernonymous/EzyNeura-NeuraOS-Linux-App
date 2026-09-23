@@ -28,6 +28,7 @@
     { id: 'tool-cards', keys: 'Ctrl+T', label: 'Open or fold every tool card', when: 'app' },
     { id: 'history', keys: 'Ctrl+H', label: 'History panel', when: 'app' },
     { id: 'terminal', keys: 'Ctrl+`', label: 'Terminal dock', when: 'app' },
+    { id: 'settings', keys: 'Ctrl+,', label: 'Settings', when: 'app' },
   ];
 
   var MODIFIERS = ['Ctrl', 'Alt', 'Shift'];

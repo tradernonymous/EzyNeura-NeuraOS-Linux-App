@@ -231,6 +231,25 @@ export default function BuildScreen() {
     }
   };
 
+  // The APK's swipe right / left, on a keyboard: A / R, or Ctrl+Enter /
+  // Ctrl+Backspace, while a change waits and nothing is being typed.
+  useEffect(() => {
+    if (!active?.pending) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      const key = e.key.toLowerCase();
+      const approve = (!typing && key === 'a' && !e.ctrlKey && !e.altKey && !e.metaKey) || (e.ctrlKey && key === 'enter');
+      const reject = (!typing && key === 'r' && !e.ctrlKey && !e.altKey && !e.metaKey) || (e.ctrlKey && key === 'backspace');
+      if (!approve && !reject) return;
+      e.preventDefault();
+      void decide(approve ? 'approve' : 'reject');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.pending?.requestId, answer]);
+
   const decide = async (decision: 'approve' | 'reject') => {
     if (!active?.pending) return;
     try {

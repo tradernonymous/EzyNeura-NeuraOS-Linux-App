@@ -10,7 +10,7 @@ not merely once its code is green in CI.
 | :-- | :-- | :-- |
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
-| L2 | The APK's look on the desktop | In progress — Neural Violet is now the default accent (below); the five-space nav, the orb, and "calm until it thinks" motion are still open |
+| L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); Offline mode (Ollama/llama-server direct, no engine) not started |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — a prebuilt llama.cpp release now actually starts on Linux, and every local server is found where Linux installs put it (below); a Mint hardware run of llama-server (Vulkan) and Ollama still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
@@ -261,7 +261,39 @@ Sentry (secrets-never-travel; the crash log stays local), a bundled
 whisper sidecar (whisper.cpp ships no Linux binaries; a source build stays
 the L4 answer).
 
-## L2: the APK's look, so far
+## L2: the five spaces, the orb and the Activity space
+
+- **Five spaces** (`Sidebar.tsx` `NAV_ITEMS`): Chat (Chat · Builds), Code
+  (Agent · Local · Files · Parallel), Create (Design · Images), Agents
+  (Library · Agents · Recipes), Activity (Activity · Evals) on Alt+1..5.
+  Settings left the spaces: it is the account row at the foot of the rail
+  and `Ctrl+,` (added to `shared/keymap.js`). Every earlier view still
+  exists as a tab, nothing was removed.
+- **The orb** (`.orb`, rail): click = dictate (the Chat screen's mic, via
+  `ORB_EVENT`), hold = new chat. It pulses while any chat streams or a tool
+  runs (`threads.ACTIVITY_EVENT`) and breathes while listening
+  (`DICTATION_EVENT`); both stop under Reduce motion. "Calm until it thinks".
+- **Activity** (`screens/ActivityScreen.tsx`): the recipe approval queue
+  first (answerable in place, badge on the rail), then what runs on this
+  machine (streaming chats, the local model server, the local engine), then
+  the schedules with their next run. Reads the modules that already own
+  those facts; no new store.
+- **Follow the system theme** (Settings → Appearance): `prefers-color-scheme`
+  from Mint's Themes panel drives dark/light while it is on.
+- **The APK's gestures on a keyboard** (`BuildScreen.tsx`): A / R, or
+  Ctrl+Enter / Ctrl+Backspace, approve or reject the waiting change.
+- From the survey: the page now writes into the shell's crash log
+  (`log_client_event`: render errors, window errors, unhandled rejections)
+  and Diagnostics has "Open the logs folder" (`crash_log_reveal`,
+  `xdg-open` on the app's own log directory only). The palette already
+  matched by words and Shortcuts already captured combos, so neither needed
+  the survey's version; a mic-device picker is deferred to Voice Type (L5).
+
+Verified with a headless screenshot of the debug build: the rail shows the
+five spaces, the orb and the Settings row. Not verified: the orb's pulse
+and breath on a streaming chat (needs an engine), and A/R on a real build.
+
+## L2: the APK's look, so far (accent)
 
 The `.exe`'s accent system is already a single-hue OKLCH design (one
 `--accent-h` variable derives every accent token at a fixed, WCAG-AA-safe
