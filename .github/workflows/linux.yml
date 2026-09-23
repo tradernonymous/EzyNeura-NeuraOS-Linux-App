@@ -46,8 +46,8 @@ jobs:
         working-directory: app/desktop
         run: npx tsc --noEmit
 
-      - name: Frontend tests (theme, accent hue, contrast sweep)
-        run: node --test app/test/
+      - name: Frontend tests (theme, accent hue, contrast sweep, local-fs lockstep)
+        run: node --test 'app/test/*.test.js'
 
       - name: Build the frontend (generate_context! embeds it)
         working-directory: app/desktop

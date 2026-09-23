@@ -28,7 +28,7 @@ not merely once its code is green in CI.
 | W3 | `bundle.targets` split into `tauri.windows.conf.json` (nsis, msi) and `tauri.linux.conf.json` (deb, appimage + deb `depends`) | `tauri.*.conf.json` |
 | W4 | Shell commands and MCP servers spawn in their own process group (`process_group(0)`); `kill_tree` sends `SIGTERM` then `SIGKILL` to the negative pid on Unix | `local.rs`, `mcp.rs` |
 | W5 | `shell_command` runs through `$SHELL -lc` (falling back to `bash`), so `~/.local/bin`, nvm and pyenv are on PATH | `local.rs` |
-| W6 | Linux destructive-command entries (`sudo`, `pkexec`, `dd if=`, `mkfs`, `wipefs`, `chmod -R 777`, `chown -R`, `rm -rf ~`/`/`, `systemctl`, `apt purge/remove`, piped `wget`, a fork bomb) added to both `RISKY` lists | `local.rs`, `src/local-fs.js` |
+| W6 | Linux destructive-command entries (`sudo`, `pkexec`, `dd if=`, `mkfs`, `wipefs`, `chmod -R 777`, `chown -R`, `rm -rf ~`/`/`, `systemctl`, `apt purge/remove`, piped `wget`, a generic `\| sh`/`\| bash` net, a fork bomb) added to both `RISKY` lists, with real test coverage (below) | `local.rs`, `src/local-fs.js` |
 | W7 | XDG-aware crash-log and model-search paths | `crash.rs`, `models.rs`, `linux.rs` |
 | W8 | Keyring uses `sync-secret-service` + `crypto-rust` (Secret Service over D-Bus), not `linux-native` (keyutils, which does not survive a reboot) | `Cargo.toml` |
 | W9 | The selection hotkey reads the X11/Wayland PRIMARY selection via `arboard`, rather than simulating Ctrl+C | `selection.rs` |
@@ -76,6 +76,30 @@ for this container specifically (no session D-Bus daemon at all, so the
 tray icon warns about `dbus-launch`; no real GPU, so EGL/DRI3 warns) —
 neither applies to a normal Mint desktop session, where a session bus and
 a real GPU are always present.
+
+## L1 hardening: real test coverage for the destructive-command list
+
+The W6 additions had no test coverage at all until now -- exactly the kind
+of gap that matters most in a safety-critical list. Writing the tests
+found two real bugs before either shipped further:
+
+- `wget <url> | sh` (a URL between `wget` and the pipe) didn't match the
+  narrow `"wget | sh"` entry -- the same literal-adjacency limitation
+  upstream's own `"curl | sh"` has. Fixed by adding a generic `"| sh"` /
+  `"| bash"` net (after the curl/wget-specific rows, so those still give
+  their friendlier reason first) that catches anything piped into a
+  shell, not just curl and wget by name.
+- The test itself first claimed `rm -rf ./node_modules` should pass
+  clean -- wrong: the plain, pre-existing `"rm -rf"` rule (no target
+  qualifier) already catches it, same as it always has. My new `"rm -rf
+  ~"` / `"rm -rf /"` rows are redundant with it (kept anyway, for the more
+  specific reason text when they're the one that fires).
+
+`app/test/desktop-local.test.js` (upstream's Rust/JS lockstep test,
+ported) and two new `local.rs` unit tests
+(`linux_destructive_commands_need_a_yes`,
+`everyday_linux_commands_are_not_flagged`) cover this now. 104/104 Rust
+tests and 39/39 `app/test/*.test.js` pass.
 
 ## L2: the APK's look, so far
 

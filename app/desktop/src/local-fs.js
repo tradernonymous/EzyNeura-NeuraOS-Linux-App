@@ -74,6 +74,12 @@
     ['wget | bash', 'pipes a download into a shell'],
     ['wget -o- ', 'pipes a download into a shell'],
     ['wget -qo- ', 'pipes a download into a shell'],
+    // A substring match cannot see "wget <url> | sh" as one thing (the curl
+    // and wget rows above only catch the no-flags-in-between form), so this
+    // catches anything at all piped into a shell -- the general case the
+    // specific rows above already give a friendlier reason for.
+    ['| sh', 'pipes something into a shell'],
+    ['| bash', 'pipes something into a shell'],
     [':(){ :', 'a fork bomb'],
   ];
 
