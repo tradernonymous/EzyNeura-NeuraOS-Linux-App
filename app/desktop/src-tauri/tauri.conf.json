@@ -7,6 +7,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": {
+      "engine": "engine"
+    },
     "icon": [
       "icons/icon.png",
       "icons/icon.ico"
