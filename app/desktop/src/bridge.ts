@@ -1029,3 +1029,20 @@ export async function whisperTranscribe(args: { audioWavBase64: string; modelPat
     language: args.language || null,
   });
 }
+
+// ---- Start at login (tauri-plugin-autostart) --------------------------------
+// The plugin's own commands, invoked directly so the frontend needs no npm
+// package for three calls. On Linux this is an ~/.config/autostart .desktop
+// entry that launches the app with --hidden (into the tray).
+export async function autostartIsEnabled(): Promise<boolean> {
+  return call<boolean>('plugin:autostart|is_enabled');
+}
+
+export async function autostartSet(on: boolean): Promise<void> {
+  await call(on ? 'plugin:autostart|enable' : 'plugin:autostart|disable');
+}
+
+/** Restart the app cleanly (the crash screen's way out). */
+export async function appRelaunch(): Promise<void> {
+  await call('app_relaunch');
+}

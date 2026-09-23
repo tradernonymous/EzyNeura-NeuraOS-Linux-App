@@ -16,6 +16,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import QuickAsk from './screens/QuickAsk';
+import CrashScreen from './components/CrashScreen';
 import { isQuickWindow, windowHasMica } from './bridge';
 import { applyMaterial, paintAppearance, readMaterial } from './theme';
 // Bundled, not borrowed from the machine: the app should look the same on every
@@ -86,7 +87,9 @@ if (!container) {
       <React.StrictMode>
         {/* The Quick window (Alt+Space) is this same bundle in a window
             labelled "quick": one small surface instead of the whole app. */}
-        {isQuickWindow() ? <QuickAsk /> : <App />}
+        {/* A render error after boot used to unmount everything into a blank
+            window; the boundary keeps a way out (Relaunch) on screen. */}
+        <CrashScreen>{isQuickWindow() ? <QuickAsk /> : <App />}</CrashScreen>
       </React.StrictMode>
     );
   } catch (error) {
