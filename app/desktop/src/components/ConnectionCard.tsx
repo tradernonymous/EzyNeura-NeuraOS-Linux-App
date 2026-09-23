@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, getServer, setServer, normalizeServer, DEFAULT_SERVER } from '../api';
-import { hasShell, engineFindNode, engineStart, engineStatus, type EngineNode, type EngineStatus } from '../bridge';
+import { hasShell, engineFindNode, engineStart, engineStatus, setPreferLocalEngine, type EngineNode, type EngineStatus } from '../bridge';
 import '../connection.js';
 
 const connection: typeof import('../connection.js') = (globalThis as any).FreeAI4UConnection;
@@ -68,6 +68,9 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
       if (res.ok && data?.ok) {
         setServer(clean);
         setAddress(clean);
+        // An explicit address (Cloud or otherwise) wins over a remembered
+        // "start it on this machine" choice from a previous session.
+        setPreferLocalEngine(false);
         setMessage(`Connected to FreeAI4U ${data.version || ''} @ ${String(data.commit || '').slice(0, 7)}. Saved.`);
         onServerChanged?.();
         await probe();
@@ -92,6 +95,7 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
       if (status.url) {
         setAddress(status.url);
         setServer(status.url);
+        setPreferLocalEngine(true);
         setMessage(status.already_running
           ? `Already running on this machine: ${status.url}. Saved.`
           : `Started on this machine: ${status.url}. Saved.`);

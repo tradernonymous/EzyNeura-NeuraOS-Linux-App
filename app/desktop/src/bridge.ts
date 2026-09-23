@@ -318,6 +318,28 @@ export async function engineStatus(): Promise<EngineStatus> {
   return call<EngineStatus>('engine_status');
 }
 
+const ENGINE_MODE_KEY = 'freeai4u.engine_mode';
+
+/** Whether the person last connected by running the engine on this
+ * machine, so App.tsx can start it again at boot instead of waiting for
+ * another click every launch. Set by ConnectionCard: true on a successful
+ * "Run the engine on this machine", false on a manual "Test + save" of any
+ * address (an explicit choice of Cloud wins over a remembered Local one). */
+export function preferLocalEngine(): boolean {
+  try {
+    return localStorage.getItem(ENGINE_MODE_KEY) === 'local';
+  } catch {
+    return false;
+  }
+}
+
+export function setPreferLocalEngine(local: boolean): void {
+  try {
+    if (local) localStorage.setItem(ENGINE_MODE_KEY, 'local');
+    else localStorage.removeItem(ENGINE_MODE_KEY);
+  } catch { /* the preference just won't be remembered this session */ }
+}
+
 export async function onLocalRun(handler: (chunk: LocalRunChunk) => void): Promise<() => void> {
   return subscribe<LocalRunChunk>('local-run', handler);
 }
