@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { api } from './api';
+import { api, setServer } from './api';
 import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
 import TitleBar from './TitleBar';
 import { isLinux } from './platform';
@@ -16,7 +16,7 @@ import LocalTerminal from './components/LocalTerminal';
 import SessionManager from './components/SessionManager';
 import Workbench from './components/Workbench';
 import './workbench.js';
-import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet } from './bridge';
+import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine } from './bridge';
 import { QUICK_HANDOFF_KEY } from './screens/QuickAsk';
 import { QUICK_HOTKEY_KEY, SELECTION_HOTKEY_KEY } from './components/ShortcutsCard';
 import { PENDING_MODEL_EVENT, PENDING_MODEL_KEY } from './components/LocalModelsCard';
@@ -297,7 +297,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    checkAuth();
+    // A previous session's "Run the engine on this machine" (ConnectionCard)
+    // is remembered, so this one does not wait for another click: start it
+    // first, THEN probe, so the first health check already hits the engine
+    // meant to answer this launch rather than a stale Cloud address. A
+    // failure here (Node gone, or the app moved) is not fatal -- it falls
+    // through to checkAuth() with whatever address was last saved, same as
+    // any other unreachable-engine case.
+    const boot = async () => {
+      if (hasShell() && preferLocalEngine()) {
+        try {
+          const status = await engineStart();
+          if (status.url) setServer(status.url);
+        } catch { /* checkAuth() below reports it the normal way */ }
+      }
+      checkAuth();
+    };
+    boot();
     // A 401 anywhere in the app means the session went away: re-probe rather
     // than trusting a stale "signed in".
     const onAuth = () => checkAuth();

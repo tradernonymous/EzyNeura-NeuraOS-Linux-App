@@ -151,14 +151,29 @@ binary under the screenshot-smoke-test setup and used `xdotool` to
 correctness, shell-quoting, free-port allocation), 39/39 JS tests, clean
 `tsc`.
 
+**Local mode now remembers itself.** A person who ran the engine once
+does not need to click it again: `bridge.ts` stores the choice
+(`freeai4u.engine_mode`), and `App.tsx`'s boot effect starts the engine
+before the first health probe if it was set, so the very first check
+already hits the right address. An explicit "Test + save" of any address
+in Settings clears the preference again -- Cloud wins when it's chosen on
+purpose.
+
+Verified with two full app launches sharing one profile, not just
+reasoned about: launch 1, click "Run the engine on this machine",
+confirm connected; kill it; launch 2 with **zero clicks** -- a fresh
+`node server.js` came up on its own (a different port than launch 1,
+proving it wasn't a leftover process) and the app landed straight in the
+Chat screen, "connected · 127.0.0.1:<port> · signed in".
+
 **Open for L3:** Cloud mode already existed (unchanged) and Local mode is
-now real; **Offline mode** (talk to Ollama/llama-server directly with no
-engine in between) isn't built. Bundling a portable Node runtime, so
-Local mode needs nothing installed at all, is the more ambitious version
-of this phase and is still open -- this ships real value now without
-waiting for that. A `systemd --user` service so the bundled engine can
-keep running for the phone APK to reach over LAN, per the master plan, is
-also still open.
+now real, remembered across launches; **Offline mode** (talk to
+Ollama/llama-server directly with no engine in between) isn't built.
+Bundling a portable Node runtime, so Local mode needs nothing installed
+at all, is the more ambitious version of this phase and is still open --
+this ships real value now without waiting for that. A `systemd --user`
+service so the bundled engine can keep running for the phone APK to
+reach over LAN, per the master plan, is also still open.
 
 ## L4: local models on Linux, so far
 
