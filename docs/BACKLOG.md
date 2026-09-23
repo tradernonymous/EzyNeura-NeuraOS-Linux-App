@@ -9,7 +9,7 @@ not merely once its code is green in CI.
 | Phase | What | Status |
 | :-- | :-- | :-- |
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
-| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — W1–W12 applied (see below); `.deb`/AppImage build being verified; the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine |
+| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
 | L2 | The APK's look on the desktop | Not started |
 | L3 | Engine on your machine (Cloud/Local/Offline) | Not started |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | Not started |
@@ -60,6 +60,22 @@ real Mint hardware):
   Linux bundler doesn't wire that up the way it does on Windows. Left open;
   not a blocker for L1, worth a small follow-up (a custom `desktopTemplate`
   or a packaged `.xml` MIME definition) before L1 is called fully done.
+
+GitHub Actions confirmed the same result independently on a clean
+`ubuntu-22.04` runner: [run 35921303802](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/actions/runs/35921303802),
+**success**.
+
+A headless smoke test (`Xvfb` + the real `.deb`'s binary, no display, no
+GPU, no session D-Bus) went further than a compile check: the process
+starts, survives past its boot path, and spawns real `WebKitNetworkProcess`
+and `WebKitWebProcess` children with a populated cache/storage directory
+(`hsts-storage.sqlite`, `WebKitCache`, `CacheStorage`) — meaning the window
+was created and the page actually loaded, not just "the binary didn't
+crash." No crash-log entry was written. The only warnings were expected
+for this container specifically (no session D-Bus daemon at all, so the
+tray icon warns about `dbus-launch`; no real GPU, so EGL/DRI3 warns) —
+neither applies to a normal Mint desktop session, where a session bus and
+a real GPU are always present.
 
 Not yet verified anywhere (needs real Mint hardware): the 10-step checklist
 in `docs/MASTER_PLAN.md` section 7 — installing the `.deb` with `apt`,
