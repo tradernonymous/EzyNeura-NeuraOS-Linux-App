@@ -67,6 +67,7 @@ keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 # send-Ctrl-C-then-read-clipboard trick to port, so this reads it directly
 # instead, and never touches the CLIPBOARD selection.
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+notify-rust = "4"
 
 [features]
 default = ["custom-protocol"]

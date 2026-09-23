@@ -4,7 +4,8 @@ import SelectPill from './SelectPill';
 import { hasShell, openUrl, whisperFind, whisperPickBinary, type WhisperFacts } from '../bridge';
 import { ENGINE_KEY, LANGUAGE_KEY, MODEL_KEY, normalizeEngine, pickModel, type EngineSetting } from '../dictate';
 import { HubDownloader } from './LocalImagesCard';
-import { builtInDictationHint, whisperBinaryName } from '../platform';
+import { builtInDictationHint, isLinux, whisperBinaryName } from '../platform';
+import * as voiceType from '../voiceType';
 
 // Dictation, in Settings: which Whisper the mic uses. Local = the user's own
 // whisper.cpp build (whisper-cli) and a ggml model, run on this PC by the
@@ -66,6 +67,22 @@ export default function DictationCard() {
 
   const models = facts?.models || [];
   const active = pickModel(model, models);
+
+  const [vtOn, setVtOn] = useState<boolean>(voiceType.readEnabled);
+  const [vtKey, setVtKey] = useState<string>(voiceType.readHotkey);
+  const [vtMessage, setVtMessage] = useState('');
+  const applyVoice = async (on: boolean, key: string) => {
+    const chord = key.trim() || voiceType.DEFAULT_VOICE_HOTKEY;
+    setVtOn(on);
+    setVtKey(chord);
+    try {
+      const taken = await voiceType.apply(on, chord);
+      setVtMessage(on ? `Hold ${taken || chord} to talk.` : 'Voice Type is off.');
+    } catch (e) {
+      setVtOn(false);
+      setVtMessage((e as Error).message || String(e));
+    }
+  };
   const open = (url: string) => { openUrl(url).catch(() => window.open(url, '_blank', 'noopener')); };
 
   return (
@@ -138,6 +155,33 @@ export default function DictationCard() {
               <span>Language</span>
               <input value={language} placeholder="auto (or en, de, fr…)" onChange={(e) => chooseLanguage(e.target.value)} />
             </label>
+          </>
+        )}
+
+        {shell && isLinux() && (
+          <>
+            <h3 className="local-heading">Voice Type — speak into any app</h3>
+            <p className="settings-hint">
+              Hold the chord anywhere on the desktop, speak, let go: the words are typed into the app that has focus
+              (VS Code, a terminal, the browser). Uses the dictation engine above. Needs <span className="mono">xdotool</span> on X11
+              or <span className="mono">wtype</span> on Wayland.
+            </p>
+            <div className="dictation-row">
+              <label className="toggle">
+                <input type="checkbox" checked={vtOn} onChange={(e) => applyVoice(e.target.checked, vtKey)} />
+                On
+              </label>
+              <input
+                className="mono"
+                value={vtKey}
+                onChange={(e) => setVtKey(e.target.value)}
+                onBlur={() => applyVoice(vtOn, vtKey)}
+                placeholder={voiceType.DEFAULT_VOICE_HOTKEY}
+                aria-label="Voice Type chord"
+                title="A chord like ctrl+alt+v. Hold it to talk."
+              />
+              {vtMessage && <span className="settings-hint">{vtMessage}</span>}
+            </div>
           </>
         )}
 

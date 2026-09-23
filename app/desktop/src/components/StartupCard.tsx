@@ -5,17 +5,30 @@
 // file on Linux, the Run key on Windows) and reads it back, so the toggle
 // shows what the OS actually has, not what was last clicked.
 import { useEffect, useState } from 'react';
-import { autostartIsEnabled, autostartSet, hasShell } from '../bridge';
+import { autostartIsEnabled, autostartSet, hasShell, nemoActionsSet, nemoActionsStatus, type NemoStatus } from '../bridge';
 import { pushToast } from './Toasts';
 
 export default function StartupCard() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [nemo, setNemo] = useState<NemoStatus | null>(null);
 
   useEffect(() => {
     if (!hasShell()) return;
     autostartIsEnabled().then(setEnabled).catch(() => setEnabled(null));
+    nemoActionsStatus().then(setNemo).catch(() => setNemo(null));
   }, []);
+
+  const flipNemo = async (on: boolean) => {
+    setBusy(true);
+    try {
+      setNemo(await nemoActionsSet(on));
+    } catch (err) {
+      pushToast('error', 'Could not change the Nemo actions: ' + (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!hasShell()) return null;
 
@@ -33,7 +46,7 @@ export default function StartupCard() {
 
   return (
     <section className="settings-section">
-      <h2>Startup</h2>
+      <h2>Startup and desktop</h2>
       <div className="settings-card">
         <label className="toggle">
           <input
@@ -49,6 +62,23 @@ export default function StartupCard() {
             ? 'The startup entry could not be read on this system.'
             : 'The window stays hidden until you click the tray icon or open NeuraOS from the menu. Turn it off here or in Startup Applications.'}
         </p>
+        {nemo?.available && (
+          <>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={!!nemo.installed}
+                disabled={busy}
+                onChange={(e) => flipNemo(e.target.checked)}
+              />
+              Right-click actions in Nemo (Open folder in NeuraOS Code · Ask NeuraOS about this file · Inspect model)
+            </label>
+            <p className="settings-hint">
+              {nemo.nemo ? 'Three .nemo_action files in ' : 'Nemo was not found on this machine; the files go to '}
+              <span className="mono">{nemo.dir}</span>. Nemo picks them up on its next start.
+            </p>
+          </>
+        )}
       </div>
     </section>
   );

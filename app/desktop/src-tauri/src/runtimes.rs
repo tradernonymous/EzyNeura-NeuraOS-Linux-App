@@ -72,13 +72,6 @@ pub fn pick_llama_asset<'a>(names: &'a [String], vulkan: bool) -> Option<&'a Str
     names.iter().find(|n| n.contains(want) && n.ends_with(".zip") && !n.contains("cuda"))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect()
-}
-
 // ---- download with progress ----------------------------------------------
 
 #[derive(serde::Serialize, Clone)]
@@ -329,11 +322,5 @@ mod tests {
         assert_eq!(pick_llama_asset(&names, true).unwrap(), "llama-b7000-bin-ubuntu-vulkan-x64.zip");
         assert_eq!(pick_llama_asset(&names, false).unwrap(), "llama-b7000-bin-ubuntu-x64.zip");
         assert!(pick_llama_asset(&[], true).is_none());
-    }
-
-    #[test]
-    fn sha256_hex_is_lowercase_and_64_wide() {
-        let hex = sha256_hex(b"abc");
-        assert_eq!(hex, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     }
 }

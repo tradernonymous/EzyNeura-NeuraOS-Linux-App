@@ -3,6 +3,7 @@ import { api, setServer } from './api';
 import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
 import TitleBar from './TitleBar';
 import { isLinux } from './platform';
+import * as voiceType from './voiceType';
 import ChatScreen, { OPEN_CHAT_EVENT, NEW_CHAT_EVENT, MODEL_PICK_EVENT, TOOL_CARDS_EVENT, PENDING_COMMAND_KEY, RUN_COMMAND_EVENT } from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ConnectScreen from './screens/ConnectScreen';
@@ -160,6 +161,9 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Voice Type (Linux): the saved hold-to-talk chord, registered once.
+  useEffect(() => voiceType.init(() => hfAuth.accessToken()?.access_token || ''), []);
 
   // Settings → Appearance → "Follow the system": Mint's dark/light choice
   // drives the theme while it is on, and a flip in Mint's Themes panel

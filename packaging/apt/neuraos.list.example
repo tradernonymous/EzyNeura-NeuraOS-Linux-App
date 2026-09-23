@@ -1,0 +1,4 @@
+# /etc/apt/sources.list.d/neuraos.list
+# The NeuraOS apt repository for Linux Mint 21.x, 22.x and 23 (amd64).
+# The key at /etc/apt/keyrings/neuraos.gpg is the one packaging/apt/build-repo.sh exports.
+deb [signed-by=/etc/apt/keyrings/neuraos.gpg] https://<host> stable main

@@ -13,10 +13,10 @@ not merely once its code is green in CI.
 | L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
-| L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
+| L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | Not started |
-| L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Not started |
-| L8 | Hardening and Mint 23 / Wayland | Not started |
+| L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Tooling for the apt repo (`packaging/apt/`, proven with a throwaway key); publishing needs the maintainer's GPG key and a Pages host; AppImage updater feed and Flatpak not started |
+| L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); Wayland portals, WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | Not started |
 
 ## L1: the W1–W12 audit, applied
@@ -219,6 +219,51 @@ Still open for L4: whisper.cpp publishes no Linux binaries, so Voice
 Type on Mint needs a source build (`cmake -B build && cmake --build build`)
 until this app ships or packages one; a real Vulkan run on Mint hardware;
 the Offline mode of L3.
+
+## L5: Linux-native features
+
+All in `desktop.rs` (commands exist on every platform; off Linux they say
+so), `quick.rs` (the chord) and the cards that own each setting:
+
+- **Voice Type** (`voiceType.ts`, Settings → Dictation): a hold-to-talk
+  chord (default `ctrl+alt+v`) registered through the global-shortcut
+  plugin's press/release; press starts the composer's own mic, release
+  transcribes with the same Whisper engine choice and `voice_type_text`
+  types it into the focused app with `xdotool type --clearmodifiers`
+  (X11) or `wtype` (Wayland). `xdotool` is a `.deb` Recommends.
+- **Approve / Reject on the notification** (`notify_with_actions`,
+  notify-rust over D-Bus, Linux only): Chat's tool approvals and Recipes'
+  paused runs put buttons on the notification; the pressed one comes back
+  as a `notification-action` event and answers the waiting card. Elsewhere
+  the plain notification stands and the result says `actions: false`.
+- **Nemo actions** (Settings → Startup and desktop): three `.nemo_action`
+  files in `~/.local/share/nemo/actions/` (open folder in Code, ask about
+  a file, inspect a GGUF), launching this binary or the AppImage.
+- **Tray states** (`tray_state_set`, driven from the rail): the app icon
+  with a cyan dot while any chat streams, an amber dot while an approval
+  waits; drawn in Rust over the icon's own pixels, no extra assets.
+- **bubblewrap** beside Docker/Podman in `docker-sandbox.js`: the host
+  read-only, the project read-write at `/work`, no network, no daemon and
+  no image; `app/test/desktop-sandbox.test.js` pins the line.
+
+Verified: cargo test 125/125, node --test 42/42, tsc, build, and the debug
+binary still starts under Xvfb with no panic. Not verified: any of it on a
+real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
+picking the actions up, the tray dot in the XApp applet).
+
+## L7/L8: the apt repository tooling and the CI smoke gate
+
+- `packaging/apt/build-repo.sh` builds `pool/`, `Packages(.gz)`, `Release`,
+  `Release.gpg`, `InRelease` and exports `neuraos.gpg`. Proven in the
+  container with a throwaway key and a placeholder `.deb`: `apt-get update`
+  from the folder accepted the signed `InRelease` and `apt-cache policy`
+  resolved `neuraos-desktop`. Publishing needs the maintainer's own key
+  (`docs/MASTER_PLAN.md` section 10, item 6) and a Pages host; the README
+  there has the steps and the user-side `neuraos.list`.
+- `.github/workflows/linux.yml` now runs `scripts/screenshot-smoke-test.sh`
+  on the release binary under Xvfb after the bundle step: a process that
+  dies within 12 s, or a PANIC/FATAL line in the app's log, fails the job,
+  and the screenshot is uploaded as an artifact next to the bundles.
 
 ## L3/L4: one-click runtimes and the hardware card
 

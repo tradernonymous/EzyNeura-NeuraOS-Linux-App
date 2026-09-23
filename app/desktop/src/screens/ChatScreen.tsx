@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense, type ComponentType } from 'react';
 import { api, imageUrlFrom, streamChat, streamLocalChat, type StreamFrame } from '../api';
-import { byokStream, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile } from '../bridge';
+import { byokStream, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile, notifyWithActions, onNotificationAction } from '../bridge';
 import { renderMarkdown } from '../markdown';
 import { renderMermaid } from '../diagram';
 import { localSetup, startRecording, transcribeAuto, type Recording } from '../dictate';
@@ -663,7 +663,10 @@ export default function ChatScreen() {
   // Stopping the turn is a Deny for whatever was waiting.
   const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean>((resolve) => {
     approvals.current[event.id] = resolve;
-    notifyUser('NeuraOS needs your OK', event.summary || event.name);
+    // Approve / Reject on the notification itself (Linux), so the answer
+    // never needs the window in front; the plain notification elsewhere.
+    notifyWithActions(event.id, 'NeuraOS needs your OK', event.summary || event.name, [['approve', 'Approve'], ['reject', 'Reject']])
+      .then((r) => { if (!r.shown) notifyUser('NeuraOS needs your OK', event.summary || event.name); });
     signal.addEventListener('abort', () => { delete approvals.current[event.id]; resolve(false); }, { once: true });
   });
 
@@ -1630,6 +1633,18 @@ _${done.notes.join(' · ')}_` : said,
     });
     pushToast('ok', 'Picture attached. It needs a vision model (llava, gemma3, qwen2.5-vl, GPT-4o...).');
   };
+
+  // A button pressed on the approval notification answers the waiting card.
+  useEffect(() => {
+    let off = () => {};
+    onNotificationAction((id, action) => {
+      const resolve = approvals.current[id];
+      if (!resolve || (action !== 'approve' && action !== 'reject')) return;
+      delete approvals.current[id];
+      resolve(action === 'approve');
+    }).then((fn) => { off = fn; });
+    return () => off();
+  }, []);
 
   // The rail's orb is the same mic: its click lands here, and the state goes
   // back out so the orb can breathe while listening.
