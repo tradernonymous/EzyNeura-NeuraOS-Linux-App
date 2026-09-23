@@ -710,8 +710,10 @@ fn shell_command(command: &str) -> std::process::Command {
 // 2). `$SHELL -lc` runs the command through a login shell instead, which
 // sources the profile that puts those directories on PATH; `$SHELL` unset or
 // missing falls back to `bash -lc`, then plain `sh -c`.
+// pub(crate): engine.rs reuses this to find a version-managed `node` the
+// same way (nvm, fnm, ...) rather than duplicating the login-shell trick.
 #[cfg(not(windows))]
-fn login_shell() -> std::path::PathBuf {
+pub(crate) fn login_shell() -> std::path::PathBuf {
     std::env::var_os("SHELL")
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_file())

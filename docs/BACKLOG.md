@@ -11,7 +11,7 @@ not merely once its code is green in CI.
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | In progress — code + CI green (below); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine, first `.deb` sent to the user for that |
 | L2 | The APK's look on the desktop | In progress — Neural Violet is now the default accent (below); the five-space nav, the orb, and "calm until it thinks" motion are still open |
-| L3 | Engine on your machine (Cloud/Local/Offline) | Not started |
+| L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); Offline mode (Ollama/llama-server direct, no engine) not started |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | Not started |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | Not started |
@@ -100,6 +100,65 @@ ported) and two new `local.rs` unit tests
 (`linux_destructive_commands_need_a_yes`,
 `everyday_linux_commands_are_not_flagged`) cover this now. 104/104 Rust
 tests and 39/39 `app/test/*.test.js` pass.
+
+## L3: Local mode, working end to end
+
+`server.js` has **zero npm runtime dependencies** -- only Node's own
+built-ins -- so the whole thing this needed was its files (676KB:
+`server.js`, `auth.js`, `chatlib.js`, `github.js`, `agent-sessions.js`,
+`fcm-push.js`, `tool-call-text.js`, `package.json` -- see
+`app/desktop/src-tauri/engine/README.md` for exactly what's bundled and
+why) plus a `node` on the machine to run them with. No portable Node
+runtime is bundled yet (open work, below); this uses whichever `node`
+the machine already has.
+
+**What shipped:**
+- `app/desktop/src-tauri/engine/`: the files above, bundled as a Tauri
+  resource (`tauri.conf.json` → `bundle.resources`).
+- `engine.rs`: finds a Node ≥24 three ways in order -- the plain PATH,
+  then a login shell (`$SHELL -lc`, reusing the same trick as W5's
+  `local.rs::login_shell`), then nvm's own `~/.nvm/versions/node/*`
+  layout directly -- because a GUI-launched process's PATH usually has
+  none of nvm's/fnm's per-shell PATH lines on it at all, the same problem
+  W5 already solved for the terminal. Starts `node server.js` on a free
+  loopback port, polls until it's actually listening (or reports exactly
+  why it isn't), and stops it (including on Quit, alongside the model and
+  image servers).
+- `ConnectionCard.tsx`: a "Run the engine on this machine" button that
+  appears once a usable Node is found, and the exact reason when one
+  isn't (not found at all, or too old).
+- `scripts/sync-upstream.sh` re-copies the engine's files from upstream
+  too now.
+
+**Verified for real, not just compiled:** built the actual `.deb`,
+extracted it, confirmed all 8 files land at
+`/usr/lib/NeuraOS Desktop/engine/`, then ran the real installed-layout
+binary under the screenshot-smoke-test setup and used `xdotool` to
+**click the actual button**. Screenshot evidence:
+
+1. With only Node 22 on this container (real, not simulated): the button
+   is replaced by "Node 22 is on PATH, but the engine needs 24+." --
+   exactly the intended message, and Neural Violet renders correctly in
+   the same shot.
+2. With the version gate temporarily lowered to prove the happy path
+   (reverted before commit, `git diff` clean): clicking "Run the engine
+   on this machine" produced a **real `node server.js` child process**
+   (confirmed in `ps aux`), and the app's own screen moved past "Connect
+   to an engine" into the actual Chat UI, status bar reading
+   **"● connected · 127.0.0.1:\<port\> · ✓ signed in"**.
+
+109/109 Rust tests (5 new: Node-version parsing, nvm version-sort
+correctness, shell-quoting, free-port allocation), 39/39 JS tests, clean
+`tsc`.
+
+**Open for L3:** Cloud mode already existed (unchanged) and Local mode is
+now real; **Offline mode** (talk to Ollama/llama-server directly with no
+engine in between) isn't built. Bundling a portable Node runtime, so
+Local mode needs nothing installed at all, is the more ambitious version
+of this phase and is still open -- this ships real value now without
+waiting for that. A `systemd --user` service so the bundled engine can
+keep running for the phone APK to reach over LAN, per the master plan, is
+also still open.
 
 ## L2: the APK's look, so far
 

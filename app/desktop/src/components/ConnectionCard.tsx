@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, getServer, setServer, normalizeServer, DEFAULT_SERVER } from '../api';
+import { hasShell, engineFindNode, engineStart, engineStatus, type EngineNode, type EngineStatus } from '../bridge';
 import '../connection.js';
 
 const connection: typeof import('../connection.js') = (globalThis as any).FreeAI4UConnection;
@@ -24,6 +25,16 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
   const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  const [node, setNode] = useState<EngineNode | null>(null);
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [engineBusy, setEngineBusy] = useState(false);
+  const [engineMessage, setEngineMessage] = useState('');
+
+  useEffect(() => {
+    if (!hasShell()) return;
+    engineFindNode().then(setNode).catch(() => setNode(null));
+    engineStatus().then(setEngine).catch(() => setEngine(null));
+  }, []);
 
   const probe = useCallback(async () => {
     try {
@@ -72,6 +83,28 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
     }
   };
 
+  const startEngine = async () => {
+    setEngineBusy(true);
+    setEngineMessage('');
+    try {
+      const status = await engineStart();
+      setEngine(status);
+      if (status.url) {
+        setAddress(status.url);
+        setServer(status.url);
+        setMessage(status.already_running
+          ? `Already running on this machine: ${status.url}. Saved.`
+          : `Started on this machine: ${status.url}. Saved.`);
+        onServerChanged?.();
+        await probe();
+      }
+    } catch (err) {
+      setEngineMessage((err as Error).message || String(err));
+    } finally {
+      setEngineBusy(false);
+    }
+  };
+
   const signIn = async () => {
     setMessage('');
     try {
@@ -117,6 +150,27 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
           <button onClick={() => setAddress(DEFAULT_SERVER)}>Default</button>
         )}
       </div>
+      {hasShell() && (
+        <div className="setting-row engine-local-row">
+          {engine?.running ? (
+            <span className="setting-value ok">
+              Running on this machine · {engine.url}
+            </span>
+          ) : node?.ok ? (
+            <>
+              <button onClick={startEngine} disabled={engineBusy}>
+                {engineBusy ? 'Starting…' : 'Run the engine on this machine'}
+              </button>
+              <span className="settings-hint">Node {node.major} found on PATH.</span>
+            </>
+          ) : (
+            <span className="settings-hint">
+              {node?.reason || 'Checking for Node…'}
+            </span>
+          )}
+        </div>
+      )}
+      {engineMessage && <p className="settings-hint connection-message">{engineMessage}</p>}
       {health?.ok && (
         <div className="setting-row">
           <span className="setting-label">Status</span>

@@ -26,6 +26,7 @@ mod byok;
 mod chat_store;
 mod crash;
 mod diag;
+mod engine;
 mod gguf;
 mod hf_oauth;
 mod local;
@@ -240,6 +241,10 @@ fn main() {
             hf_oauth::hf_oauth_exchange,
             hf_oauth::hf_oauth_refresh,
             diag::diagnostics,
+            engine::engine_find_node,
+            engine::engine_start,
+            engine::engine_stop,
+            engine::engine_status,
             local::local_pick_folder,
             local::local_list_dir,
             local::local_read_file,
@@ -408,6 +413,8 @@ fn main() {
                         // NEURA-059: the image server is a child like the model
                         // server, and Quit owes it the same end.
                         sd::shutdown();
+                        // The bundled engine (Local mode) is a child too.
+                        engine::shutdown();
                         // The same for local MCP servers (mcp.rs).
                         mcp::shutdown();
                         // Ask the page to flush its chats (NEURA-021), then

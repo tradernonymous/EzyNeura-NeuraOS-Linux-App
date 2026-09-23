@@ -281,6 +281,43 @@ export async function localModelStop(): Promise<{ stopped: boolean }> {
   return call('local_model_stop');
 }
 
+// ---- the bundled engine (Local mode, docs/MASTER_PLAN.md section 5) ------
+
+export interface EngineNode {
+  found: boolean;
+  ok: boolean;
+  path?: string;
+  major?: number;
+  reason?: string;
+}
+
+export interface EngineStatus {
+  running: boolean;
+  port?: number;
+  url?: string;
+  already_running?: boolean;
+}
+
+/** Whether this machine has a Node new enough to run the bundled engine. */
+export async function engineFindNode(): Promise<EngineNode> {
+  return call<EngineNode>('engine_find_node');
+}
+
+/** Starts the bundled engine (or reports the one already running) and
+ * waits for it to come up before resolving. Throws with a message fit to
+ * show directly, same as every other local-server start in this app. */
+export async function engineStart(): Promise<EngineStatus> {
+  return call<EngineStatus>('engine_start');
+}
+
+export async function engineStop(): Promise<EngineStatus> {
+  return call<EngineStatus>('engine_stop');
+}
+
+export async function engineStatus(): Promise<EngineStatus> {
+  return call<EngineStatus>('engine_status');
+}
+
 export async function onLocalRun(handler: (chunk: LocalRunChunk) => void): Promise<() => void> {
   return subscribe<LocalRunChunk>('local-run', handler);
 }
