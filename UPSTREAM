@@ -1,0 +1,7 @@
+# The commit of tradernonymous/freeopenai this Linux port is synced from.
+# scripts/sync-upstream.sh re-copies desktop/, shared/, design/ and
+# assets/branding/ from this commit into app/. Bump it deliberately, then
+# re-apply the Linux delta (see app/desktop/src-tauri/src/linux/ and
+# docs/MASTER_PLAN.md section 2) and re-run the checklist for the phase
+# you are on.
+8bbfffa35c655a5fe5a51ac942ce6862a27ff2bf

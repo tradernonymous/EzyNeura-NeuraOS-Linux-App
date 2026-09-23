@@ -1,0 +1,71 @@
+name: Linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # 22.04 so the glibc and WebKitGTK 4.1 baseline covers Mint 21.x, 22.x
+    # and 23 (docs/MASTER_PLAN.md section 8) -- building on a newer distro
+    # would raise the minimum glibc these bundles need.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/desktop/src-tauri
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libdbus-1-dev patchelf file xdg-utils
+
+      - name: Frontend dependencies
+        working-directory: app/desktop
+        run: npm ci
+
+      - name: Type-check
+        working-directory: app/desktop
+        run: npx tsc --noEmit
+
+      - name: Build the frontend (generate_context! embeds it)
+        working-directory: app/desktop
+        run: npm run build
+
+      - name: Rust tests
+        run: cargo test --manifest-path app/desktop/src-tauri/Cargo.toml
+
+      - name: Rust lints
+        run: cargo clippy --manifest-path app/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+        continue-on-error: true # not yet a gate: see docs/BACKLOG.md
+
+      - name: Build the .deb and AppImage
+        working-directory: app/desktop
+        run: npx tauri build --bundles deb,appimage
+
+      - name: Upload the bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraos-linux-${{ github.sha }}
+          path: |
+            app/desktop/src-tauri/target/release/bundle/deb/*.deb
+            app/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error

@@ -1,0 +1,72 @@
+[package]
+name = "freeai4u-desktop"
+version = "2.11.0"
+description = "NeuraOS Desktop — chat, images, local models and approval-gated builds on the FreeAI4U engine"
+authors = ["printezy247"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.75"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-store = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+# Phase 5: the Quick window hotkey and system notifications.
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+base64 = "0.22"
+rfd = "0.15"
+# The network edge: rustls so the Windows build needs no OpenSSL, and no
+# default features we do not use.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+sha2 = "0.10"
+# Update manifests signed with `tauri signer` (minisign), checked against a key
+# compiled in at build time (net.rs update_manifest). Pure Rust, no deps.
+minisign-verify = "0.2"
+# Chat history (chat_store.rs): SQLite compiled in, so no system library.
+rusqlite = { version = "0.31", features = ["bundled"] }
+# NEURA-058: the real terminal (pty.rs). ConPTY on Windows 10 1809+ and
+# openpty elsewhere. No default features -- the only ones are serde support we
+# do not use -- and no system library to find, so the terminal ships in the
+# same one-file build as everything else.
+portable-pty = { version = "0.9.0", default-features = false }
+
+# The OS credential store (secrets.rs) for BYOK keys, the HF token and the
+# chat-store key, so none of them ever sits in localStorage as plain text.
+# Per platform, not one shared feature list (Linux W1/W8, docs/MASTER_PLAN.md
+# section 2): each target only pulls in its own backend.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+# The Windows-only Registry reads: Mica support (main.rs) and the WebView2
+# runtime version (webview2.rs).
+winreg = "0.52"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Secret Service (GNOME Keyring / KWallet over D-Bus) rather than the
+# `linux-native` (keyutils) backend: keyutils' session keyring does not
+# survive a reboot or logout, which would silently drop BYOK keys and the
+# chat-store key (W8). Secret Service is what Cinnamon on Mint unlocks at
+# login. `crypto-rust` keeps this dependency-free of OpenSSL, matching
+# reqwest's rustls choice above. Needs libdbus-1-dev to build.
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+# Reads the PRIMARY selection for "ask about the selection" (selection.rs,
+# W9) -- X11 and Wayland both support it; there is no Win32-style
+# send-Ctrl-C-then-read-clipboard trick to port, so this reads it directly
+# instead, and never touches the CLIPBOARD selection.
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

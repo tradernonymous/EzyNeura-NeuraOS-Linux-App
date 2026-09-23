@@ -1,0 +1,70 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "longDescription": "NeuraOS Desktop — chat, images, local models and approval-gated builds, in one window.",
+    "shortDescription": "NeuraOS Desktop",
+    "category": "productivity",
+    "fileAssociations": [
+      {
+        "ext": ["gguf"],
+        "name": "GGUF model",
+        "description": "Local AI model weights",
+        "role": "Viewer"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      },
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "productName": "NeuraOS Desktop",
+  "version": "2.11.0",
+  "identifier": "com.freeai4u.desktop",
+  "app": {
+    "windows": [
+      {
+        "title": "NeuraOS",
+        "width": 1360,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 800,
+        "minHeight": 600,
+        "windowEffects": {
+          "effects": [
+            "mica"
+          ]
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.puter.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* wss://*.puter.com; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "neuraos"
+        ]
+      }
+    }
+  }
+}
