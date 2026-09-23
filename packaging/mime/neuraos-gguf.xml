@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The GGUF model format, so Nemo knows what a .gguf is and "Open with
+     NeuraOS" (the .desktop file's MimeType) applies to it. Installed by the
+     .deb to /usr/share/mime/packages; the shared-mime-info trigger rebuilds
+     the database on install. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-gguf">
+    <comment>GGUF model weights</comment>
+    <glob pattern="*.gguf"/>
+    <magic priority="60"><match type="string" offset="0" value="GGUF"/></magic>
+  </mime-type>
+</mime-info>
