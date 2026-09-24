@@ -1,10 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { api, setServer } from './api';
-import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
+import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, usePendingApprovals, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
+import TopNav from './components/TopNav';
+import ProjectPicker from './components/ProjectPicker';
 import TitleBar from './TitleBar';
 import { isLinux } from './platform';
 import * as voiceType from './voiceType';
-import ChatScreen, { OPEN_CHAT_EVENT, NEW_CHAT_EVENT, MODEL_PICK_EVENT, TOOL_CARDS_EVENT, PENDING_COMMAND_KEY, RUN_COMMAND_EVENT } from './screens/ChatScreen';
+import ChatScreen, { OPEN_CHAT_EVENT, NEW_CHAT_EVENT, ACTIVE_CHAT_EVENT, MODEL_PICK_EVENT, TOOL_CARDS_EVENT, PENDING_COMMAND_KEY, RUN_COMMAND_EVENT } from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ConnectScreen from './screens/ConnectScreen';
 import LocalScreen from './screens/LocalScreen';
@@ -14,10 +16,8 @@ import CodeScreen from './screens/CodeScreen';
 import { useRecipeScheduler, useEvalScheduler } from './schedulers';
 import LocalTree from './components/LocalTree';
 import LocalTerminal from './components/LocalTerminal';
-import SessionManager from './components/SessionManager';
-import Workbench from './components/Workbench';
-import './workbench.js';
-import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
+import './shell.js';
+import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, projectHome, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
 import { askAboutScreen, readScreenHotkey } from './desktopControl';
 import { readEnabled as voiceTypeEnabled, readHotkey as voiceTypeHotkey } from './voiceType';
 import { QUICK_HANDOFF_KEY } from './screens/QuickAsk';
@@ -30,7 +30,7 @@ import './saved-models.js';
 const hfAuth: typeof import('./hf-auth.js') = (globalThis as any).FreeAI4UHfAuth;
 const localModels: typeof import('./local-models.js') = (globalThis as any).FreeAI4ULocalModels;
 import CommandPalette, { type PaletteEntry } from './components/CommandPalette';
-import StatusBar from './components/StatusBar';
+import StatusBar, { TONE } from './components/StatusBar';
 import Icon from './components/Icon';
 import Toasts, { pushToast } from './components/Toasts';
 import './index.css';
@@ -51,10 +51,10 @@ const onboarding: typeof import('./onboarding.js') = (globalThis as any).FreeAI4
 const chatCommands: typeof import('./commands.js') = (globalThis as any).FreeAI4UCommands;
 const keymap: typeof import('../../shared/keymap.js') = (globalThis as any).FreeAI4UKeymap;
 const diagnostics: typeof import('./diagnostics.js') = (globalThis as any).FreeAI4UDiagnostics;
-// The rails' memory: which of the two is pinned, and which tool the right one
-// is showing. The rules are in workbench.js so the damaged-storage cases are
-// tested without a DOM; this file only holds the answers in state.
-const rails: typeof import('./workbench.js') = (globalThis as any).FreeAI4UWorkbench;
+// The frame's memory (is the sidebar hidden, which folders were picked) and
+// the grouping of history by folder: shell.js, so the damaged-storage cases
+// are tested without a DOM; this file only holds the answers in state.
+const shellLib: typeof import('./shell.js') = (globalThis as any).FreeAI4UShell;
 
 // Chat is the default view and stays in the first bundle. The heavy screens
 // are fetched the first time they are opened, so the window paints sooner.
@@ -82,8 +82,7 @@ function ScreenSkeleton() {
 }
 
 type View = ViewId;
-type RightPanel = 'builds' | 'knowledge' | 'none';
-type PanelKey = 'folder' | 'terminal' | 'sessions' | 'builds' | 'knowledge';
+type PanelKey = 'folder' | 'terminal';
 
 // The folder the local surfaces work in. One owner (this state), one key: the
 // terminal dock and the Local screen both read it from here rather than each
@@ -117,13 +116,15 @@ export default function App() {
   } = useUpdateCheck();
   const [showFolder, setShowFolder] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [showSessions, setShowSessions] = useState(false);
-  const [rightPanel, setRightPanel] = useState<RightPanel>('none');
-  // Both rails peek open on hover; a pin keeps one open and takes it out of
-  // overlay, which is a decision about the workspace and so survives a restart.
-  const [leftPinned, setLeftPinned] = useState(() => rails.readPinned(rails.LEFT_KEY));
-  const [rightPinned, setRightPinned] = useState(() => rails.readPinned(rails.RIGHT_KEY));
-  const [tool, setTool] = useState(() => rails.readTool());
+  // The sidebar is a column, not a hover rail: shown unless the person hid it
+  // (Ctrl+B), a decision about the workspace that survives a restart.
+  const [sidebarHidden, setSidebarHidden] = useState(() => shellLib.readHidden());
+  // Every chat lives in a folder. `home` is `~/NeuraOS` (the shell makes it);
+  // `recent` is the folders picked lately; the picker asks before a new chat.
+  const [home, setHome] = useState('');
+  const [recent, setRecent] = useState<string[]>(() => shellLib.readRecent());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [activeChat, setActiveChat] = useState('');
   const [localRoot, setLocalRoot] = useState<string>(readLocalRoot);
   const [localCwd, setLocalCwd] = useState('');
   // What the engine said, and how the shell should react to it. The decision
@@ -164,6 +165,29 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!hasShell()) return;
+    projectHome().then(setHome).catch(() => { /* a browser build files every chat under home */ });
+  }, []);
+
+  // The chat on screen decides the working folder: its project, when it has
+  // one, is where the terminal, the tree and the local tools work.
+  useEffect(() => {
+    const onActive = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      setActiveChat(String(d.id || ''));
+      const project = shellLib.cleanProject(d.project);
+      if (!project) return;
+      setLocalRoot((prev) => {
+        if (prev === project) return prev;
+        try { localStorage.setItem(LOCAL_ROOT_KEY, project); } catch { /* the session still has it */ }
+        return project;
+      });
+    };
+    window.addEventListener(ACTIVE_CHAT_EVENT, onActive);
+    return () => window.removeEventListener(ACTIVE_CHAT_EVENT, onActive);
+  }, []);
 
   // Voice Type (Linux): the saved hold-to-talk chord, registered once.
   useEffect(() => voiceType.init(() => hfAuth.accessToken()?.access_token || ''), []);
@@ -384,48 +408,56 @@ export default function App() {
     const onNav = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       if (detail.view) setView(detail.view as View);
-      if (detail.panel === 'sessions') setShowSessions((v) => !v);
+      if (detail.panel === 'sessions') toggleSidebar();
     };
     window.addEventListener(NAVIGATE_EVENT, onNav);
     return () => window.removeEventListener(NAVIGATE_EVENT, onNav);
   }, []);
 
   const toggle = () => setTheme((t) => toggleTheme(t));
-  const toggleRightPanel = (panel: RightPanel) => setRightPanel((prev) => (prev === panel ? 'none' : panel));
 
   const panels: Record<PanelKey, boolean> = {
     folder: showFolder,
     terminal: showTerminal,
-    sessions: showSessions,
-    builds: rightPanel === 'builds',
-    knowledge: rightPanel === 'knowledge',
   };
 
   const togglePanel = (key: PanelKey) => {
     if (key === 'folder') setShowFolder((v) => !v);
-    else if (key === 'terminal') setShowTerminal((v) => !v);
-    else if (key === 'sessions') setShowSessions((v) => !v);
-    else toggleRightPanel(key);
+    else setShowTerminal((v) => !v);
   };
 
-  const toggleLeftRail = useCallback(() => {
-    setLeftPinned((on) => {
-      rails.writePinned(rails.LEFT_KEY, !on);
-      return !on;
+  const toggleSidebar = useCallback(() => {
+    setSidebarHidden((hidden) => {
+      shellLib.writeHidden(!hidden);
+      return !hidden;
     });
   }, []);
 
-  const toggleRightRail = useCallback(() => {
-    setRightPinned((on) => {
-      rails.writePinned(rails.RIGHT_KEY, !on);
-      return !on;
-    });
+  // A new chat starts in a folder. With one named (a group's "+", the orb's
+  // long press in a project) it starts at once; otherwise the picker asks.
+  // A browser build has no folders, so every chat there is a home chat.
+  const startChat = useCallback((project: string) => {
+    const clean = shellLib.cleanProject(project);
+    setPickerOpen(false);
+    if (clean) {
+      setRecent((list) => { const next = shellLib.remember(list, clean); shellLib.writeRecent(next); return next; });
+      try { localStorage.setItem(LOCAL_ROOT_KEY, clean); } catch { /* the session still has it */ }
+      setLocalRoot(clean);
+    }
+    setView('chat');
+    window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { project: clean } }));
   }, []);
-
-  const pickTool = useCallback((id: import('./workbench.js').ToolId) => {
-    rails.writeTool(id);
-    setTool(id);
-  }, []);
+  const requestNewChat = useCallback((project?: string) => {
+    if (typeof project === 'string') { startChat(project); return; }
+    if (!hasShell()) { startChat(''); return; }
+    setPickerOpen(true);
+  }, [startChat]);
+  const browseForChat = useCallback(() => {
+    pickFolder()
+      .then((chosen) => { if (chosen) startChat(chosen); })
+      .catch((e: unknown) => pushToast('warn', (e as Error).message || String(e)));
+  }, [startChat]);
+  const approvals = usePendingApprovals();
 
   // Choosing a folder is a native dialog through the shell; a browser build has
   // no picker, so it says so instead of failing quietly.
@@ -482,8 +514,7 @@ export default function App() {
     if (entry.skill) { setView('library'); return; }
     switch (entry.id) {
       case 'new-chat':
-        setView('chat');
-        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT));
+        requestNewChat();
         break;
       case 'toggle-zen':
         setZen((on) => !on);
@@ -496,16 +527,10 @@ export default function App() {
         break;
       case 'toggle-folder-panel':
       case 'toggle-terminal':
+        togglePanel(entry.id === 'toggle-terminal' ? 'terminal' : 'folder');
+        break;
       case 'toggle-history':
-      case 'toggle-approvals':
-      case 'toggle-skills':
-        togglePanel(
-          entry.id === 'toggle-history' ? 'sessions'
-            : entry.id === 'toggle-terminal' ? 'terminal'
-              : entry.id === 'toggle-approvals' ? 'builds'
-                : entry.id === 'toggle-skills' ? 'knowledge'
-                  : 'folder',
-        );
+        toggleSidebar();
         break;
       case 'export-chats':
         exportChats();
@@ -549,16 +574,14 @@ export default function App() {
         case 'palette': setPaletteOpen((open) => !open); break;
         case 'zen': setZen((on) => !on); break;
         case 'settings': setView('settings'); break;
-        case 'new-chat':
-          setView('chat');
-          window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT));
-          break;
+        case 'new-chat': requestNewChat(); break;
         case 'model':
           setView('chat');
           window.dispatchEvent(new CustomEvent(MODEL_PICK_EVENT));
           break;
         case 'tool-cards': window.dispatchEvent(new CustomEvent(TOOL_CARDS_EVENT)); break;
-        case 'history': setShowSessions((v) => !v); break;
+        case 'history':
+        case 'sidebar': toggleSidebar(); break;
         case 'terminal': setShowTerminal((v) => !v); break;
         case 'nav': if (hit.to) navigate(hit.to as ViewId); break;
         default: break;
@@ -566,7 +589,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [navigate]);
+  }, [navigate, requestNewChat, toggleSidebar]);
 
   // The shell's screen decision: show the way in when the user can act on it,
   // otherwise the app. Settings stays reachable from the connect surface, since
@@ -616,19 +639,38 @@ export default function App() {
           second, in-app one was 32px of dead space). The theme toggle it
           carried lives in the sidebar's footer there. */}
       {!isLinux() && <TitleBar onToggleTheme={toggle} theme={theme} />}
+      <TopNav
+        active={view}
+        onNavigate={navigate}
+        onOpenPalette={openPalette}
+        onOpenSettings={() => setView('settings')}
+        sidebarHidden={sidebarHidden}
+        onToggleSidebar={toggleSidebar}
+        engineState={(TONE[shell.reason === 'signed-out' ? 'signed-out' : (outcome ? outcome.kind : 'checking')] || TONE.checking).className}
+        engineLabel={`Engine ${(TONE[shell.reason === 'signed-out' ? 'signed-out' : (outcome ? outcome.kind : 'checking')] || TONE.checking).label} — ${api.getServer()}`}
+        approvals={approvals}
+        theme={theme}
+        onToggleTheme={toggle}
+      />
       <div className="app-body">
-        <Sidebar
-          theme={theme}
-          onToggleTheme={toggle}
-          onNewChat={() => { setView('chat'); window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT)); }}
-          active={view}
-          onNavigate={navigate}
-          onOpenPalette={openPalette}
-          onTogglePanel={togglePanel}
-          panels={panels}
-          pinned={leftPinned}
-          onTogglePin={toggleLeftRail}
-        />
+        {!sidebarHidden && (
+          <Sidebar
+            theme={theme}
+            onToggleTheme={toggle}
+            onNewChat={requestNewChat}
+            onHide={toggleSidebar}
+            active={view}
+            activeChat={activeChat}
+            onNavigate={navigate}
+            onOpenPalette={openPalette}
+            onTogglePanel={togglePanel}
+            panels={panels}
+            home={home}
+            onExport={exportChats}
+            onImport={importChats}
+            importMsg={importMsg}
+          />
+        )}
         <main className="main">
           {updateInfo && (
             <div className="update-banner">
@@ -688,23 +730,6 @@ export default function App() {
           )}
           <div className="main-content">
             <div className="primary-pane">
-              {/* A destination with more than one view shows them as tabs --
-                  the screens that used to be separate rail rows. */}
-              {!showConnect && tabsOf(destinationOf(view)).length > 1 && (
-                <div className="sub-nav" role="tablist" aria-label="Views">
-                  {tabsOf(destinationOf(view)).map((tab) => (
-                    <button
-                      key={tab.id}
-                      role="tab"
-                      aria-selected={view === tab.id}
-                      className={`sub-nav-tab ${view === tab.id ? 'active' : ''}`}
-                      onClick={() => setView(tab.id)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
               {showConnect ? (
                 <ConnectScreen
                   reason={shell.reason}
@@ -744,45 +769,8 @@ export default function App() {
                 </Suspense>
               )}
             </div>
-            {rightPanel !== 'none' && (
-              <aside className="right-panel">
-                <div className="right-panel-header">
-                  <h3>{rightPanel === 'builds' ? 'Builds' : 'Knowledge'}</h3>
-                  <button onClick={() => setRightPanel('none')} aria-label="Close panel">
-                    <Icon name="close" size={14} />
-                  </button>
-                </div>
-                <div className="right-panel-body">
-                  {rightPanel === 'builds' && (
-                    <div className="empty">
-                      Live build approvals dock here. Open <strong>Builds</strong> in the sidebar for the full view —
-                      starting a build from Chat mode lands its approvals here too.
-                    </div>
-                  )}
-                  {rightPanel === 'knowledge' && (
-                    <div className="empty">
-                      Skills and memory. Open <strong>Library</strong> for the full catalogue.
-                    </div>
-                  )}
-                </div>
-              </aside>
-            )}
           </div>
         </main>
-        {/* The right rail is a sibling of the floor, not a child of it: unpinned
-            it overlays, and the stylesheet gives the floor a rail's margin so
-            nothing ends up underneath. It is mounted whatever the centre column
-            is showing, so the floor never changes width under the pointer. */}
-        <Workbench
-          tool={tool}
-          onPickTool={pickTool}
-          pinned={rightPinned}
-          onTogglePin={toggleRightRail}
-          localRoot={localRoot}
-          onOpenFolder={openFolder}
-          onOpenFile={() => setView('local')}
-          onOpenScreen={navigate}
-        />
         {/* The docks are mounted whether or not they are shown: a terminal that
             forgets its scrollback the moment you look at Chat is not a dock.
             The folder tree is cheap to re-read, so it is not kept. */}
@@ -797,13 +785,6 @@ export default function App() {
             onOpenFolder={openFolder}
           />
         </div>
-        {showSessions && (
-          <SessionManager
-            onExport={exportChats}
-            onImport={importChats}
-            importMsg={importMsg}
-          />
-        )}
       </div>
       <StatusBar
         engine={api.getServer()}
@@ -822,6 +803,14 @@ export default function App() {
         installError={installError}
         installNotice={installNotice}
         onOpenPalette={openPalette}
+      />
+      <ProjectPicker
+        open={pickerOpen}
+        home={home}
+        known={shellLib.knownProjects(chats.readStore(), recent, home)}
+        onPick={startChat}
+        onBrowse={browseForChat}
+        onClose={() => setPickerOpen(false)}
       />
       <CommandPalette
         open={paletteOpen}

@@ -595,78 +595,6 @@ html, body, #root {
 }
 
 /* Sidebar */
-/* The rail.
-
-   Twelve labelled buttons is a menu; the app wants a rail that shows what each
-   row IS and says what it is called when you go there. Collapsed it is icons
-   only, on hover it widens and the labels fade in -- the navigation is still
-   exactly the same keyboard order, and nothing moves under the pointer because
-   it grows to the right, over the content it is not covering yet. */
-.sidebar {
-  width: var(--rail);
-  background: var(--bg-1);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-  transition: width 150ms ease;
-  z-index: 20;
-}
-
-.sidebar:hover,
-.sidebar:focus-within {
-  width: var(--rail-open);
-}
-
-.sidebar-title,
-.sidebar-label,
-.sidebar-keys,
-.sidebar-search > span,
-.sidebar-search > kbd,
-.sidebar-group-label-text,
-.sidebar-version {
-  opacity: 0;
-  transition: opacity 120ms ease;
-  white-space: nowrap;
-}
-
-.sidebar:hover .sidebar-title,
-.sidebar:hover .sidebar-label,
-.sidebar:hover .sidebar-keys,
-.sidebar:hover .sidebar-search > span,
-.sidebar:hover .sidebar-search > kbd,
-.sidebar:hover .sidebar-group-label-text,
-.sidebar:hover .sidebar-version,
-.sidebar:focus-within .sidebar-title,
-.sidebar:focus-within .sidebar-label,
-.sidebar:focus-within .sidebar-keys,
-.sidebar:focus-within .sidebar-group-label-text,
-.sidebar:focus-within .sidebar-version {
-  opacity: 1;
-}
-
-/* Children hold their OPEN width while the rail animates, so a row's icon never
-   slides sideways under the pointer -- the label is simply clipped. */
-.sidebar-brand,
-.sidebar-search,
-.sidebar-nav,
-.sidebar-group-label,
-.sidebar-footer {
-  width: var(--rail-open);
-  flex-shrink: 0;
-}
-
-.sidebar-btn {
-  width: calc(var(--rail-open) - 16px);
-  justify-content: flex-start;
-}
-
-.sidebar-btn.active {
-  background: var(--accent-dim);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
 .sidebar-brand,
 .sidebar-search {
   justify-content: flex-start;
@@ -5535,36 +5463,9 @@ button:hover,
   box-shadow: var(--riser-edge);
 }
 
-/* ---- rails: hover to peek, click to pin --------------------------------
-   The rails float ABOVE the floor instead of pushing it, so the centre column
-   never moves when a rail opens and the line you are reading stays where your
-   eye left it. That is the whole reason for the overlay: panes that shove the
-   conversation sideways every time a panel appears cost more attention than
-   they save. */
-
-.sidebar,
-.workbench {
-  background: var(--riser);
-  box-shadow: var(--riser-edge), var(--occlude);
-  z-index: 40;
-}
-
+/* The rails are gone (phase 1 of the UI plan): the top bar says where you
+   are, and the sidebar is a column that hides with Ctrl+B. */
 .app-body { position: relative; }
-
-.sidebar[data-pinned="false"],
-.workbench[data-pinned="false"] {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-}
-
-.sidebar[data-pinned="false"] { left: 0; }
-.workbench[data-pinned="false"] { right: 0; }
-
-/* The floor keeps a rail's width of margin on each side, so nothing is ever
-   hidden underneath a collapsed rail. */
-.app-body:has(.sidebar[data-pinned="false"]) > .main { margin-left: var(--rail); }
-.app-body:has(.workbench[data-pinned="false"]) > .main { margin-right: var(--rail); }
 
 /* ---- the workspace ------------------------------------------------------ */
 
@@ -5573,96 +5474,6 @@ button:hover,
   margin-inline: auto;
   width: 100%;
 }
-
-/* ---- the right rail: Design, Build, Files, Changes ---------------------- */
-
-.workbench {
-  width: var(--rail);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-left: 1px solid var(--edge);
-  transition: width 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-.workbench:hover,
-.workbench:focus-within,
-.workbench[data-pinned="true"] { width: var(--workbench-open); }
-
-/* Pinning is a promise: the rail stays open when the pointer leaves. The left
-   rail already widens on hover through its own rule; this is the half that
-   makes the pin mean anything. */
-.sidebar[data-pinned="true"] { width: var(--rail-open); }
-
-.workbench-tabs {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px var(--rail-tile-pad);
-}
-
-.workbench-tab {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 6px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-2);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.workbench-tab:hover { color: var(--text-1); background: var(--hover); }
-
-/* The one gold moment: the tool that owns the workspace right now. The inset
-   left edge is the tell at 40px wide, when the label is still clipped away. */
-.workbench-tab[aria-selected="true"] {
-  color: var(--text-1);
-  background: var(--gilt-dim);
-  border-color: var(--gilt-line);
-  box-shadow: inset 2px 0 0 var(--gilt), inset 0 1px 0 var(--chrome-top-strong);
-}
-
-.workbench-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--edge);
-}
-
-.workbench-pin,
-.sidebar-pin {
-  align-self: flex-end;
-  margin: 4px 6px 6px;
-  padding: 3px 7px;
-  border: 1px solid var(--edge);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.workbench-pin[aria-pressed="true"],
-.sidebar-pin[aria-pressed="true"] {
-  color: var(--gilt);
-  border-color: var(--gilt-line);
-}
-
-/* A rail is labelled only once it is wide enough to hold a label. */
-.workbench[data-pinned="false"]:not(:hover):not(:focus-within) .workbench-tab-label,
-.workbench[data-pinned="false"]:not(:hover):not(:focus-within) .workbench-body,
-.workbench[data-pinned="false"]:not(:hover):not(:focus-within) .workbench-pin { display: none; }
-
-/* The left rail's pin is icon-only, so it survives the 40px width -- but it
-   still has no business being the widest thing on a collapsed rail. */
-.sidebar[data-pinned="false"]:not(:hover):not(:focus-within) .sidebar-pin { align-self: center; margin-inline: 0; }
 
 /* ---- composer: the tool toggles, and the most dangerous menu in the app -- */
 
@@ -5736,13 +5547,11 @@ button:hover,
 /* ---- motion: one moment, on the thing you are pointing at --------------- */
 
 @media (prefers-reduced-motion: no-preference) {
-  .workbench-tab,
   .tool-chip { transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease; }
 
   /* The specular sweep: one pass of room light across the gold edge as a tool
      becomes active. It runs once, on change -- not on a loop, which would
      turn a status signal into decoration. */
-  .workbench-tab[aria-selected="true"]::after,
   .tool-chip[aria-pressed="true"]::after {
     content: "";
     position: absolute;
@@ -6128,3 +5937,361 @@ input, textarea, select { border-radius: 8px; }
   --gilt-line: var(--accent-mid);
 }
 .tool-chip { border-radius: 999px; }
+
+/* =========================================================================
+   The app frame (UI plan, phase 1): a top bar with hover menus, a project
+   sidebar that hides with Ctrl+B, and no right rail. Raised buttons and the
+   deck (a hovering card) are the building blocks every later phase reuses.
+   ========================================================================= */
+
+:root {
+  --sidebar: 248px;
+  --topnav: 44px;
+}
+
+/* ---- raised buttons and decks ------------------------------------------ */
+
+/* A small raised button: a thin top highlight and a soft shadow, pressed in
+   when clicked. No other animation. */
+.raised {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--riser);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--chrome-top), var(--shadow-1);
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+.raised:hover { color: var(--text-1); background: var(--bg-3); }
+.raised:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35); }
+.raised.active, .raised[aria-pressed="true"] { color: var(--accent); border-color: var(--accent-mid); background: var(--accent-dim); }
+.raised:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.raised.icon-btn { position: relative; width: 30px; height: 30px; padding: 0; }
+.raised.icon-btn .sidebar-badge { top: -4px; left: auto; right: -4px; }
+
+/* A deck: a card that hovers over the page (menus, pickers, task lists). */
+.deck {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-light), var(--occlude);
+}
+
+/* ---- the top bar ------------------------------------------------------- */
+
+.topnav {
+  position: relative;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--topnav);
+  padding: 0 10px 0 6px;
+  background: var(--riser);
+  border-bottom: 1px solid var(--edge);
+  box-shadow: var(--riser-edge);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.topnav-burger {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.topnav-burger span { display: block; height: 2px; border-radius: 2px; background: var(--text-2); }
+.topnav-burger:hover { background: var(--hover); }
+.topnav-burger:hover span, .topnav-burger[aria-pressed="true"] span { background: var(--text-1); }
+
+.topnav-brand { display: flex; align-items: center; gap: 8px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--edge); }
+.topnav-title { font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
+
+.topnav-items { display: flex; align-items: stretch; gap: 2px; margin: 0; padding: 0; list-style: none; height: 100%; }
+.topnav-item { position: relative; display: flex; align-items: center; }
+.topnav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+}
+.topnav-btn:hover, .topnav-item.open > .topnav-btn { color: var(--text-1); background: var(--hover); }
+.topnav-item.current > .topnav-btn { color: var(--text-1); }
+/* The one gold moment: where you are. */
+.topnav-item.current > .topnav-btn::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gilt);
+}
+.topnav-suffix { color: var(--text-3); font-weight: 500; }
+.topnav-caret { font-size: 10px; color: var(--text-3); margin-left: -2px; }
+.topnav-btn .sidebar-badge { position: static; margin-left: 2px; }
+
+.topnav-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 240px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 60;
+  animation: deck-in 120ms ease;
+}
+@keyframes deck-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+:root[data-motion='reduced'] .topnav-menu { animation: none; }
+
+.topnav-menu-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.topnav-menu-row:hover, .topnav-menu-row:focus-visible { background: var(--hover); outline: none; }
+.topnav-menu-row.active { background: var(--accent-dim); border-color: var(--accent-mid); }
+.topnav-menu-label { font-size: 13px; font-weight: 600; }
+.topnav-menu-hint { font-size: 11px; color: var(--text-3); }
+
+.topnav-end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.topnav-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.topnav-search:hover { color: var(--text-1); border-color: var(--accent-mid); }
+.topnav-search kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-3); }
+.topnav-engine { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); margin: 0 4px; box-shadow: 0 0 0 2px var(--riser); }
+.topnav-engine.engine-ok { background: var(--ok); }
+.topnav-engine.engine-warn { background: var(--warn); }
+.topnav-engine.engine-error { background: var(--err); }
+.topnav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.topnav-icon:hover { color: var(--text-1); background: var(--hover); }
+.topnav-icon.active { color: var(--accent); background: var(--accent-dim); border-color: var(--accent-mid); }
+
+/* ---- the project sidebar ----------------------------------------------- */
+
+.sidebar {
+  width: var(--sidebar);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--riser);
+  border-right: 1px solid var(--edge);
+  box-shadow: var(--riser-edge);
+  z-index: 20;
+}
+
+.sidebar-top { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 8px; border-bottom: 1px solid var(--edge); }
+.sidebar-new { width: 100%; justify-content: flex-start; padding: 8px 10px; font-weight: 600; color: var(--text-1); }
+.sidebar-new kbd { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
+.sidebar-tools { display: flex; gap: 6px; }
+.sidebar-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+}
+.sidebar-filters { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-2); }
+.sidebar-filter {
+  flex: 1;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sidebar-filter:hover { color: var(--text-1); }
+.sidebar-filter.active { color: var(--text-1); background: var(--riser); box-shadow: inset 0 1px 0 var(--chrome-top), var(--shadow-1); }
+
+.sidebar-groups { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 6px; }
+.project-group + .project-group { margin-top: 8px; }
+.project-head { display: flex; align-items: center; gap: 2px; }
+.project-fold {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+.project-fold:hover { color: var(--text-1); background: var(--hover); }
+.project-chevron { width: 10px; font-size: 10px; color: var(--text-3); }
+.project-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-count { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.project-group[data-running="true"] .project-title { color: var(--accent); }
+.project-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+}
+.project-head:hover .project-new, .project-new:focus-visible { opacity: 1; }
+.project-new:hover { color: var(--text-1); background: var(--hover); }
+.project-more {
+  width: 100%;
+  padding: 4px 8px 4px 26px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.project-more:hover { color: var(--accent); }
+
+.sidebar .thread-item { margin-bottom: 1px; }
+.sidebar .thread-open {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 7px;
+  color: var(--text-2);
+}
+.sidebar .thread-open:hover { background: var(--hover); color: var(--text-1); }
+.sidebar .thread-item.active .thread-open { background: var(--accent-dim); color: var(--text-1); box-shadow: inset 2px 0 0 var(--accent); }
+.sidebar .session-title { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+.thread-when { font-size: 10.5px; color: var(--text-3); flex-shrink: 0; }
+.thread-dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; flex-shrink: 0; }
+.thread-dot-running { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.thread-dot-needs-you { background: var(--warn); }
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion='reduced']) .thread-dot-running { animation: thread-pulse 1.4s ease-in-out infinite; }
+}
+@keyframes thread-pulse { 50% { box-shadow: 0 0 0 5px transparent; } }
+.sidebar .thread-actions { top: 4px; right: 4px; }
+.sidebar .thread-preview { right: auto; left: 100%; margin-right: 0; margin-left: 8px; }
+.sidebar-empty { padding: 20px 12px; font-size: 12px; line-height: 1.5; }
+
+.sidebar-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 10px 6px; border-top: 1px solid var(--edge); }
+.orb-small { margin: 0; }
+.sidebar-foot-actions { display: flex; gap: 6px; }
+.sidebar-foot-actions label.raised { cursor: pointer; }
+.sidebar .sidebar-version { padding: 0; opacity: 1; }
+.sidebar .sidebar-hint { margin: 0 10px 8px; }
+
+/* ---- the project picker ------------------------------------------------- */
+
+.project-picker {
+  width: min(520px, 92vw);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-picker h3 { margin: 0 0 2px; font-size: 15px; }
+.project-picker-hint { margin: 0 0 10px; font-size: 12px; color: var(--text-3); }
+.project-row {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-row > .icon { grid-row: span 2; }
+.project-row:hover, .project-row:focus-visible { background: var(--hover); outline: none; border-color: var(--edge); }
+.project-row-name { font-size: 13px; font-weight: 600; }
+.project-row-path { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-row-browse { margin-top: 6px; border-top: 1px solid var(--edge); border-radius: 0 0 8px 8px; }
+
+/* Under reduced transparency the deck is opaque, like the palette. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .deck { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-2); }
+}

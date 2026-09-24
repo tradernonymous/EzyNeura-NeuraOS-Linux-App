@@ -19,6 +19,44 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 1: the app frame
+
+The approved UI/UX plan (six phases, one PR each). Phase 1 is the frame every
+later phase sits in:
+
+- **A top bar instead of two rails.** `components/TopNav.tsx`: Chat, Code,
+  Create, Agents (`Alt+1`–`Alt+4`); pointing at one for 150 ms, clicking it
+  a second time, or pressing ↓ opens a deck of its pages with a one-line
+  hint each. The open page's name follows the label ("Code · Files"), so
+  the strip of sub-tabs is gone. The right end: Search (`Ctrl+K`), the
+  engine dot (the status bar's own tones), Settings, theme.
+- **The right rail is gone** (`Workbench.tsx`, `workbench.js`, the docked
+  Builds/Knowledge panel). Design and Builds are pages; Files is Code ▾
+  Files; the folder tree and the terminal are toggles in the sidebar's
+  tool row. Changes comes back inside Chat in phase 2.
+- **A project sidebar** (`Sidebar.tsx`, `Ctrl+B` hides it) in place of the
+  icon rail and the History drawer: "+ New chat", a row of small raised
+  buttons (search, commands, folder tree, terminal, runs), All / Running /
+  Pinned, then history **grouped by folder** with a status dot per chat,
+  "Show N more" per group, and the orb, export/import, theme and Settings
+  at the foot. Activity is a tab under Agents ("Runs").
+- **Every chat lives in a folder** (the Claude Code flow). `New chat` opens
+  `components/ProjectPicker.tsx`: NeuraOS home (`~/NeuraOS`, made by
+  `local_project_home`), recent folders, or any folder. The chat saves it
+  (`ChatSession.project`), the sidebar groups by it, and the chat on screen
+  sets the working folder (`ACTIVE_CHAT_EVENT` → `localRoot`), so the
+  terminal, the tree and the local tools follow the chat. Existing chats
+  land in the home group; nothing moves on disk.
+- The grouping, the filters and the storage cases are `shell.js`, pinned by
+  `test/desktop-shell.test.js` together with the frame's shape.
+
+Verified here: `tsc --noEmit`, `vite build`, `node --test` (62), `cargo test
+local::`, and a headless Chromium screenshot of the built bundle (the frame
+renders; the connect screen is what a browser build without an engine
+shows). Not verified: the Tauri window on Mint hardware; "Clone a
+repository…" in the picker is not built (no git clone command in the
+shell yet) — Open a folder covers a cloned repo.
+
 ## L4: FLUX.2 on this PC (make and change a picture)
 
 The Images space's "This PC" row runs the user's own `sd-server`

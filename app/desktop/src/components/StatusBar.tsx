@@ -146,7 +146,7 @@ function hostOf(url: string): string {
   return match ? match[1] : (url || 'no engine');
 }
 
-const TONE: Record<string, { className: string; label: string }> = {
+export const TONE: Record<string, { className: string; label: string }> = {
   ok: { className: 'ok', label: 'connected' },
   'signed-out': { className: 'warn', label: 'sign-in required' },
   unreachable: { className: 'error', label: 'unreachable' },

@@ -26,7 +26,8 @@
     { id: 'new-chat', keys: 'Ctrl+N', label: 'New chat', when: 'app' },
     { id: 'model', keys: 'Ctrl+M', label: 'Pick the model', when: 'app' },
     { id: 'tool-cards', keys: 'Ctrl+T', label: 'Open or fold every tool card', when: 'app' },
-    { id: 'history', keys: 'Ctrl+H', label: 'History panel', when: 'app' },
+    { id: 'history', keys: 'Ctrl+H', label: 'History (the sidebar)', when: 'app' },
+    { id: 'sidebar', keys: 'Ctrl+B', label: 'Show or hide the sidebar', when: 'app' },
     { id: 'terminal', keys: 'Ctrl+`', label: 'Terminal dock', when: 'app' },
     { id: 'settings', keys: 'Ctrl+,', label: 'Settings', when: 'app' },
   ];

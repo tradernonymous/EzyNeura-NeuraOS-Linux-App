@@ -1,76 +1,67 @@
-// The sidebar. It used to be twelve flat buttons whose icons were emoji
-// (💬 🖼 🛠 …), which render differently on every Windows build, cannot be
-// aligned or sized, and made the app look unfinished at a glance. Now every row
-// is the same 24x24 stroke icon at the same weight as its label.
+// The destinations (one list: the top bar, Alt+N, the palette and the docs
+// all read it) and the project sidebar.
 //
-// The four-second hint that used to appear down here is gone: feedback belongs
-// in the toast queue (src/toasts.js), where it can be read, dismissed and
-// announced.
-//
-// The panels used to advertise the ENGINE's workspace and terminal, two things
-// that mostly refuse to work (they need WORKSPACE_RUN=1 and a login on the
-// server). Folder and Terminal are now the local ones -- real files on this
-// machine, which is what a desktop app should answer for -- and the engine's
-// two live under Settings → Advanced, labelled for what they are.
-import { useEffect, useRef, useState } from 'react';
+// The sidebar used to be a rail of icons that peeked open on hover; the
+// right-hand rail is gone with it. Now the top bar says WHERE you are, and this
+// column, hideable with Ctrl+B, is the history: every chat belongs to a folder
+// (the Claude Code flow), and the chats are read by folder. Chats about
+// nothing in particular live in the home folder, `~/NeuraOS`.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon, { type IconName } from './components/Icon';
 import './threads.js';
+import './shell.js';
+import './chats.js';
 import { trayStateSet } from './bridge';
+import { OPEN_CHAT_EVENT } from './screens/ChatScreen';
+import type { ChatSession } from './screens/ChatScreen';
 
 const threadsLib: typeof import('./threads.js') = (globalThis as any).FreeAI4UThreads;
+const shell: typeof import('./shell.js') = (globalThis as any).FreeAI4UShell;
+const chats: typeof import('./chats.js') = (globalThis as any).FreeAI4UChats;
 import { APP_VERSION } from './version';
 import { isLinux } from './platform';
-import emblem from '../../assets/branding/neuraos-emblem.svg';
 // Paused background recipe runs waiting for an answer (NEURA-036): a badge on
-// Library, whose Recipes tab holds the approval cards.
+// Agents, whose Recipes tab holds the approval cards.
 import './recipes.js';
 
 const recipesLib: typeof import('./recipes.js') = (globalThis as any).FreeAI4URecipes;
 
-function usePendingApprovals(): number {
+export function usePendingApprovals(): number {
   const [count, setCount] = useState(() => recipesLib.approvals.pending().length);
   useEffect(() => recipesLib.approvals.subscribe((rows) => setCount(rows.length)), []);
   return count;
 }
 
 // The ONE list of destinations and their keys. App.tsx resolves Alt+N from it,
-// the command palette shows its keys, and test/desktop-shortcuts.test.js holds
-// README.md and docs/desktop.md to it -- three places used to disagree.
+// the command palette shows its keys, and the README names them.
 //
-// Five, not nine: the screens that overlapped now live inside a destination as
-// its tabs (SUB_VIEWS). Chat holds Builds; Code holds the local folder and the
-// Files generator; Library holds Images. Nothing was removed -- every view is
-// still one Ctrl+K away and keeps its own screen.
-//
-// The five spaces of docs/MASTER_PLAN.md section 4 (the APK's four plus Code):
-// Chat, Code, Create, Agents, Activity. Settings is not a space: it opens from
-// the account row at the foot of the rail, or Ctrl+, (shared/keymap.js).
+// Four, not five: Activity is a tab under Agents now. Settings is not a space:
+// it opens from the gear in the top bar, or Ctrl+, (shared/keymap.js).
 // `view` is the tab a space opens on when it has no remembered one.
 export const NAV_ITEMS: Array<{ id: NavId; label: string; icon: IconName; keys: string; view: ViewId }> = [
   { id: 'chat', label: 'Chat', icon: 'chat', keys: 'Alt+1', view: 'chat' },
   { id: 'code', label: 'Code', icon: 'terminal', keys: 'Alt+2', view: 'code' },
   { id: 'create', label: 'Create', icon: 'design', keys: 'Alt+3', view: 'design' },
   { id: 'agents', label: 'Agents', icon: 'library', keys: 'Alt+4', view: 'library' },
-  { id: 'activity', label: 'Activity', icon: 'activity', keys: 'Alt+5', view: 'activity' },
 ];
 
-/** Every view, and the destination whose tab strip it sits in. */
-export const SUB_VIEWS: Array<{ id: ViewId; label: string; parent: NavId }> = [
-  { id: 'chat', label: 'Chat', parent: 'chat' },
-  { id: 'build', label: 'Builds', parent: 'chat' },
-  { id: 'code', label: 'Agent', parent: 'code' },
-  { id: 'local', label: 'Local', parent: 'code' },
-  { id: 'files', label: 'Files', parent: 'code' },
-  { id: 'parallel', label: 'Parallel', parent: 'code' },
-  { id: 'acp', label: 'Agents (ACP)', parent: 'code' },
-  { id: 'design', label: 'Design', parent: 'create' },
-  { id: 'images', label: 'Images', parent: 'create' },
-  { id: 'library', label: 'Library', parent: 'agents' },
-  { id: 'agents', label: 'Agents', parent: 'agents' },
-  { id: 'recipes', label: 'Recipes', parent: 'agents' },
-  { id: 'activity', label: 'Activity', parent: 'activity' },
-  { id: 'evals', label: 'Evals', parent: 'activity' },
-  { id: 'settings', label: 'Settings', parent: 'settings' },
+/** Every view, the destination whose menu it sits in, and one line on what it is for. */
+export const SUB_VIEWS: Array<{ id: ViewId; label: string; parent: NavId; hint: string }> = [
+  { id: 'chat', label: 'Chat', parent: 'chat', hint: 'Talk to a model, with tools' },
+  { id: 'build', label: 'Builds', parent: 'chat', hint: 'Long builds and the approvals they stop for' },
+  { id: 'code', label: 'Agent', parent: 'code', hint: 'The coding agent in the open folder' },
+  { id: 'local', label: 'Local folder', parent: 'code', hint: 'Tree, viewer and terminal' },
+  { id: 'files', label: 'Files', parent: 'code', hint: 'Extract and generate documents' },
+  { id: 'parallel', label: 'Worktrees', parent: 'code', hint: 'Several agents at once, each in its own git worktree' },
+  { id: 'acp', label: 'External agents', parent: 'code', hint: 'Claude Code, Gemini CLI, Codex over ACP' },
+  { id: 'design', label: 'Design', parent: 'create', hint: 'Pages, decks and posts' },
+  { id: 'images', label: 'Images', parent: 'create', hint: 'Draw and change pictures' },
+  { id: 'library', label: 'Library', parent: 'agents', hint: 'Skills and memory' },
+  { id: 'agents', label: 'Agents', parent: 'agents', hint: 'Sub-agents chat can run or delegate to' },
+  { id: 'recipes', label: 'Recipes', parent: 'agents', hint: 'Saved prompts, servers and schedules' },
+  { id: 'activity', label: 'Runs', parent: 'agents', hint: 'What ran, and what is waiting on you' },
+  { id: 'evals', label: 'Evals', parent: 'agents', hint: 'Score several models on the same tasks' },
+  { id: 'settings', label: 'Settings', parent: 'settings', hint: 'Engine, providers, appearance' },
 ];
 
 /** The tab a space opens on: its own default, so Alt+3 lands on Design. */
@@ -84,7 +75,7 @@ export const ORB_EVENT = 'neuraos:orb';
 export const DICTATION_EVENT = 'neuraos:dictation';
 
 /** True while any chat is streaming or a tool runs (threads.ACTIVITY_EVENT). */
-function useBusy(): boolean {
+export function useBusyChats(): Set<string> {
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const onActivity = (e: Event) => {
@@ -98,10 +89,10 @@ function useBusy(): boolean {
     window.addEventListener(threadsLib.ACTIVITY_EVENT, onActivity);
     return () => window.removeEventListener(threadsLib.ACTIVITY_EVENT, onActivity);
   }, []);
-  return busy.size > 0;
+  return busy;
 }
 
-function useListening(): 'idle' | 'recording' | 'working' {
+export function useListening(): 'idle' | 'recording' | 'working' {
   const [state, setState] = useState<'idle' | 'recording' | 'working'>('idle');
   useEffect(() => {
     const on = (e: Event) => setState(((e as CustomEvent).detail || {}).state || 'idle');
@@ -119,18 +110,10 @@ export function destinationOf(view: ViewId): NavId {
   return SUB_VIEWS.find((v) => v.id === view)?.parent || 'chat';
 }
 
-/** The tabs a destination shows; one tab means no strip. */
-export function tabsOf(destination: NavId): Array<{ id: ViewId; label: string }> {
+/** The tabs a destination shows; one tab means no menu. */
+export function tabsOf(destination: NavId): Array<{ id: ViewId; label: string; hint: string }> {
   return SUB_VIEWS.filter((v) => v.parent === destination);
 }
-
-const PANEL_ITEMS: Array<{ key: 'folder' | 'terminal' | 'sessions' | 'builds' | 'knowledge'; label: string; icon: IconName; title: string }> = [
-  { key: 'folder', label: 'Folder', icon: 'folder', title: 'Files in the folder you opened' },
-  { key: 'terminal', label: 'Terminal', icon: 'terminal', title: 'Commands on this machine' },
-  { key: 'sessions', label: 'History', icon: 'history', title: 'Saved chats' },
-  { key: 'builds', label: 'Approvals', icon: 'check', title: 'Pending build approvals' },
-  { key: 'knowledge', label: 'Skills', icon: 'skills', title: 'Skills and memory' },
-];
 
 /** The {view: 'Alt+N'} map the palette is handed. */
 export function navKeys(): Record<string, string> {
@@ -139,64 +122,124 @@ export function navKeys(): Record<string, string> {
   return out;
 }
 
-/** The destination a key press names, or null. `Alt+5` -> 'settings'. */
+/** The destination a key press names, or null. `Alt+2` -> 'code'. */
 export function navForKey(key: string): NavId | null {
   const wanted = `Alt+${String(key || '').toUpperCase()}`;
   const hit = NAV_ITEMS.find((item) => item.keys.toUpperCase() === wanted);
   return hit ? hit.id : null;
 }
 
-export type NavId = 'chat' | 'code' | 'create' | 'agents' | 'activity' | 'settings';
+export type NavId = 'chat' | 'code' | 'create' | 'agents' | 'settings';
 /** A view: a destination's own tab, or one of the tabs inside one. */
 export type ViewId = 'chat' | 'code' | 'settings' | 'activity' | 'design' | 'library' | 'build' | 'local' | 'files' | 'images' | 'evals' | 'agents' | 'recipes' | 'parallel' | 'acp';
 
 export interface PanelKeyMap {
   folder: boolean;
   terminal: boolean;
-  sessions: boolean;
-  builds: boolean;
-  knowledge: boolean;
 }
 
 export type PanelId = keyof PanelKeyMap;
 
 interface SidebarProps {
   active: ViewId;
+  /** The chat on screen, so its row reads as current. */
+  activeChat: string;
   onNavigate: (id: ViewId) => void;
   onOpenPalette: () => void;
   onTogglePanel: (key: PanelId) => void;
   panels: Partial<PanelKeyMap>;
-  /** Pinned: the rail stands beside the floor. Unpinned it floats over it and
-      the floor keeps a rail's width of margin, so nothing hides underneath. */
-  pinned: boolean;
-  onTogglePin: () => void;
+  /** "+ New chat": App opens the folder picker. `project` starts one in a known folder. */
+  onNewChat: (project?: string) => void;
+  onHide: () => void;
+  /** The home folder (`~/NeuraOS`); '' in a browser build. */
+  home: string;
+  onExport: () => void;
+  onImport: (file: File) => void;
+  importMsg: string;
   /** The theme toggle sits here on Linux, where there is no in-app titlebar. */
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
-  /** The orb's long press: a new chat (the APK's orb long-press). */
-  onNewChat?: () => void;
+}
+
+const FILTERS: Array<{ id: import('./shell.js').SidebarFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'running', label: 'Running' },
+  { id: 'pinned', label: 'Pinned' },
+];
+
+function relative(at: number): string {
+  const d = Date.now() - (at || 0);
+  const m = Math.round(d / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h`;
+  const days = Math.round(h / 24);
+  return days < 30 ? `${days}d` : new Date(at).toLocaleDateString();
 }
 
 // The name is the product's, not the engine's: this is NeuraOS, and the engine
-// it talks to is still the FreeAI4U server. The crate, the binary, the bundle
-// identifier and the localStorage keys all keep their freeai4u-* spelling, so
-// an existing install updates in place and existing chats and settings survive
-// the rename.
-export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePanel, panels, pinned, onTogglePin, theme, onToggleTheme, onNewChat }: SidebarProps) {
+// it talks to is still the FreeAI4U server. The localStorage keys keep their
+// freeai4u-* spelling, so an existing install updates in place.
+export default function Sidebar({ active, activeChat, onNavigate, onOpenPalette, onTogglePanel, panels, onNewChat, onHide, home, onExport, onImport, importMsg, theme, onToggleTheme }: SidebarProps) {
   const approvals = usePendingApprovals();
-  const busy = useBusy();
+  const busy = useBusyChats();
   const listening = useListening();
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [meta, setMeta] = useState(() => threadsLib.readMeta());
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [filter, setFilter] = useState<import('./shell.js').SidebarFilter>('all');
+  const [folded, setFolded] = useState<string[]>(() => shell.readFolded());
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const load = () => setSessions(chats.readStore() as ChatSession[]);
+    const spin = () => setTick((t) => t + 1);
+    load();
+    window.addEventListener(threadsLib.CHANGED_EVENT, load);
+    window.addEventListener(threadsLib.ACTIVITY_EVENT, spin);
+    return () => {
+      window.removeEventListener(threadsLib.CHANGED_EVENT, load);
+      window.removeEventListener(threadsLib.ACTIVITY_EVENT, spin);
+    };
+  }, []);
+
+  const busyAny = busy.size > 0;
+  const orbState = listening === 'recording' ? 'listening' : listening === 'working' || busyAny ? 'thinking' : 'idle';
+  // The tray shows the same three states: a person needed beats working.
+  useEffect(() => {
+    void trayStateSet(approvals > 0 ? 'approval' : busyAny ? 'thinking' : 'idle');
+  }, [approvals, busyAny]);
+
+  const groups = useMemo(
+    () => shell.groups(sessions, { query, filter, busy, pinned: meta.pinned, home }),
+    [sessions, query, filter, busy, meta, home],
+  );
+
+  const pin = (id: string) => {
+    const next = threadsLib.togglePin(meta, id);
+    threadsLib.writeMeta(next);
+    setMeta(next);
+  };
+  const fold = (key: string) => {
+    const next = shell.toggleFolded(folded, key);
+    shell.writeFolded(next);
+    setFolded(next);
+  };
+  const open = (id: string) => {
+    onNavigate('chat');
+    window.dispatchEvent(new CustomEvent(OPEN_CHAT_EVENT, { detail: id }));
+  };
+
   // The orb: a click is voice (Chat starts dictation), a long press is a new
-  // chat. It breathes while listening and pulses while any agent works --
-  // "calm until it thinks" -- and both stop under Reduce motion (index.css).
+  // chat. It breathes while listening and pulses while any agent works.
   const pressTimer = useRef<number | null>(null);
   const longPressed = useRef(false);
   const orbDown = () => {
     longPressed.current = false;
-    pressTimer.current = window.setTimeout(() => {
-      longPressed.current = true;
-      onNewChat?.();
-    }, 550);
+    pressTimer.current = window.setTimeout(() => { longPressed.current = true; onNewChat(); }, 550);
   };
   const orbUp = () => {
     if (pressTimer.current) window.clearTimeout(pressTimer.current);
@@ -207,134 +250,126 @@ export default function Sidebar({ active, onNavigate, onOpenPalette, onTogglePan
     onNavigate('chat');
     window.dispatchEvent(new CustomEvent(ORB_EVENT));
   };
-  const orbState = listening === 'recording' ? 'listening' : listening === 'working' || busy ? 'thinking' : 'idle';
-  // The tray shows the same three states: a person needed beats working.
-  useEffect(() => {
-    void trayStateSet(approvals > 0 ? 'approval' : busy ? 'thinking' : 'idle');
-  }, [approvals, busy]);
-  // A peeking rail is held open by the pointer and by focus, so Escape closes
-  // it by letting the focus go; there is no "open" flag to clear. A pinned rail
-  // is where the person put it, and stays. Escape is not swallowed -- the
-  // palette and the composer listen for it too.
-  const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
-    if (e.key !== 'Escape' || pinned) return;
-    const focused = document.activeElement;
-    if (focused instanceof HTMLElement && e.currentTarget.contains(focused)) focused.blur();
-  };
+
   return (
-    <aside className="sidebar" data-pinned={pinned ? 'true' : 'false'} onKeyDown={onKeyDown}>
-      <div className="sidebar-brand">
-        {/* The real emblem (app/assets/branding), not a letter in a box: the
-            same mark as the Android app's icon and the tray. */}
-        <img className="sidebar-logo sidebar-emblem" src={emblem} alt="" width={24} height={24} draggable={false} />
-        <span className="sidebar-title">NeuraOS</span>
-      </div>
-
-      <button className="sidebar-search" type="button" onClick={onOpenPalette}>
-        <Icon name="search" size={14} />
-        <span>Search or run a command</span>
-        <kbd>Ctrl+K</kbd>
-      </button>
-
-      <nav className="sidebar-nav" aria-label="Screens">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className={`sidebar-btn ${destinationOf(active) === item.id ? 'active' : ''}`}
-            onClick={() => onNavigate(defaultViewOf(item.id))}
-            title={item.id === 'activity' && approvals
-              ? `${item.label} — ${approvals} approval${approvals > 1 ? 's' : ''} waiting`
-              : `${item.label} — ${item.keys}`}
-            aria-current={destinationOf(active) === item.id ? 'page' : undefined}
-          >
-            <Icon name={item.icon} />
-            <span className="sidebar-label">{item.label}</span>
-            {item.id === 'activity' && approvals > 0 && (
-              <span className="sidebar-badge" aria-label={`${approvals} waiting for approval`}>{approvals}</span>
-            )}
-            <span className="sidebar-keys">{item.keys}</span>
+    <aside className="sidebar" aria-label="Projects and history">
+      <div className="sidebar-top">
+        <button className="sidebar-new raised" type="button" onClick={() => onNewChat()} title="New chat — Ctrl+N">
+          <Icon name="plus" size={14} />
+          <span>New chat</span>
+          <kbd>Ctrl+N</kbd>
+        </button>
+        {/* Small raised buttons: the chat's own functions, one icon each, the
+            words on hover (the Freebuff row, the Claude Code sidebar). */}
+        <div className="sidebar-tools" role="toolbar" aria-label="Chat tools">
+          <button type="button" className={`raised icon-btn ${searching ? 'active' : ''}`} aria-pressed={searching} onClick={() => { setSearching((v) => !v); if (searching) setQuery(''); }} title="Search chats"><Icon name="search" size={14} /></button>
+          <button type="button" className="raised icon-btn" onClick={onOpenPalette} title="Commands — Ctrl+K"><Icon name="compass" size={14} /></button>
+          <button type="button" className={`raised icon-btn ${panels.folder ? 'active' : ''}`} aria-pressed={!!panels.folder} onClick={() => onTogglePanel('folder')} title="Folder tree"><Icon name="folder" size={14} /></button>
+          <button type="button" className={`raised icon-btn ${panels.terminal ? 'active' : ''}`} aria-pressed={!!panels.terminal} onClick={() => onTogglePanel('terminal')} title="Terminal — Ctrl+`"><Icon name="terminal" size={14} /></button>
+          <button type="button" className={`raised icon-btn ${active === 'activity' ? 'active' : ''}`} onClick={() => onNavigate('activity')} title={approvals ? `Runs — ${approvals} waiting for you` : 'Runs'}>
+            <Icon name="activity" size={14} />
+            {approvals > 0 && <span className="sidebar-badge" aria-label={`${approvals} waiting for approval`}>{approvals}</span>}
           </button>
-        ))}
-      </nav>
-
-      <div className="sidebar-divider" />
-      {/* The docks are toggles, not places: a quiet row of icons, each also on
-          the keyboard (Ctrl+H history, Ctrl+` terminal) and in Ctrl+K. */}
-      <nav className="sidebar-nav sidebar-panels" aria-label="Panels">
-        {PANEL_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            className={`sidebar-btn sidebar-panel-btn ${panels[item.key] ? 'active' : ''}`}
-            onClick={() => onTogglePanel(item.key)}
-            title={`${item.label} — ${item.title}`}
-            aria-label={item.label}
-            aria-pressed={!!panels[item.key]}
-          >
-            <Icon name={item.icon} />
-            <span className="sidebar-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
-
-      {/* The orb (docs/MASTER_PLAN.md section 4): click for voice, hold for a
-          new chat. Its ring is the app's one "thinking" signal. */}
-      <button
-        type="button"
-        className="orb"
-        data-state={orbState}
-        onPointerDown={orbDown}
-        onPointerUp={orbUp}
-        onPointerLeave={orbUp}
-        onClick={orbClick}
-        aria-label={orbState === 'listening' ? 'Stop listening' : 'Talk to NeuraOS (hold for a new chat)'}
-        title={orbState === 'listening' ? 'Listening — click to stop and type what you said'
-          : orbState === 'thinking' ? 'Working… (click to dictate, hold for a new chat)'
-          : 'Dictate — hold for a new chat (Ctrl+N)'}
-      >
-        <span className="orb-core" />
-      </button>
-
-      {/* The account row: where Settings lives now that it is not a space. */}
-      <button
-        type="button"
-        className={`sidebar-btn sidebar-account ${active === 'settings' ? 'active' : ''}`}
-        onClick={() => onNavigate('settings')}
-        title="Settings — Ctrl+,"
-        aria-current={active === 'settings' ? 'page' : undefined}
-      >
-        <Icon name="settings" />
-        <span className="sidebar-label">Settings</span>
-        <span className="sidebar-keys">Ctrl+,</span>
-      </button>
-
-      {/* Icon only, with no label span: the pin sits at the rail's right edge,
-          so a label would be the part clipped away at 40px and the icon the
-          part hidden. The title and the aria-label carry the words instead. */}
-      <button
-        className="sidebar-pin"
-        type="button"
-        aria-pressed={pinned}
-        aria-label={pinned ? 'Unpin the sidebar' : 'Keep the sidebar open'}
-        title={pinned ? 'Let this rail close again when you move away' : 'Keep this rail open'}
-        onClick={onTogglePin}
-      >
-        <Icon name="paperclip" size={12} />
-      </button>
-
-      <div className="sidebar-footer">
-        {isLinux() && onToggleTheme && (
-          <button
-            className="sidebar-theme"
-            type="button"
-            onClick={onToggleTheme}
-            aria-label="Toggle theme"
-            title={`${theme === 'dark' ? 'Light' : 'Dark'} theme`}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
+        </div>
+        {searching && (
+          <input className="sidebar-search-input" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search chats…" aria-label="Search chats" onKeyDown={(e) => { if (e.key === 'Escape') { setQuery(''); setSearching(false); } }} />
         )}
-        <span className="sidebar-version" title="FreeAI4U Desktop">v{APP_VERSION}</span>
+        <div className="sidebar-filters" role="tablist" aria-label="Show">
+          {FILTERS.map((f) => (
+            <button key={f.id} type="button" role="tab" aria-selected={filter === f.id} className={`sidebar-filter ${filter === f.id ? 'active' : ''}`} onClick={() => setFilter(f.id)}>{f.label}</button>
+          ))}
+        </div>
       </div>
+
+      <div className="sidebar-groups">
+        {groups.map((group) => {
+          const shut = folded.includes(group.key);
+          const limit = shown[group.key] || shell.PAGE;
+          const rows = shut ? [] : group.items.slice(0, limit);
+          return (
+            <section key={group.key} className="project-group" data-running={group.running ? 'true' : 'false'}>
+              <div className="project-head">
+                <button type="button" className="project-fold" aria-expanded={!shut} onClick={() => fold(group.key)} title={group.path || (group.path === '' ? home : '')}>
+                  <span className="project-chevron" aria-hidden="true">{shut ? '▸' : '▾'}</span>
+                  <Icon name={group.path === null ? 'check' : 'folder'} size={12} />
+                  <span className="project-title">{group.title}</span>
+                  <span className="project-count">{group.items.length}</span>
+                </button>
+                {group.path !== null && (
+                  <button type="button" className="project-new" onClick={() => onNewChat(group.path || home)} title={`New chat in ${group.title}`} aria-label={`New chat in ${group.title}`}>
+                    <Icon name="plus" size={12} />
+                  </button>
+                )}
+              </div>
+              {rows.map((s) => {
+                const pinned = meta.pinned.includes(s.id);
+                const status = shell.statusOf(s, busy);
+                return (
+                  <div key={s.id} className={`thread-item ${s.id === activeChat ? 'active' : ''}`}>
+                    <button className="thread-open" onClick={() => open(s.id)} aria-current={s.id === activeChat ? 'true' : undefined} aria-describedby={`thread-preview-${s.id}`}>
+                      <span className={`thread-dot thread-dot-${status}`} aria-label={status === 'running' ? 'Answering' : undefined} />
+                      <span className="session-title">{s.title || 'Untitled'}</span>
+                      <span className="thread-when">{relative(s.updatedAt)}</span>
+                    </button>
+                    <div className="thread-preview" id={`thread-preview-${s.id}`} role="tooltip">{threadsLib.preview(s)}</div>
+                    <div className="thread-actions">
+                      <button onClick={() => pin(s.id)} title={pinned ? 'Unpin' : 'Pin to the top'} aria-pressed={pinned} aria-label={pinned ? 'Unpin' : 'Pin'}>
+                        <Icon name={pinned ? 'check' : 'paperclip'} size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!shut && group.items.length > limit && (
+                <button type="button" className="project-more" onClick={() => setShown({ ...shown, [group.key]: limit + shell.PAGE })}>
+                  Show {Math.min(shell.PAGE, group.items.length - limit)} more
+                </button>
+              )}
+            </section>
+          );
+        })}
+        {groups.length === 0 && (
+          <div className="empty sidebar-empty">
+            {sessions.length ? 'No chats match.' : 'No chats yet. Start one — it lives in a folder, and history is read by folder.'}
+          </div>
+        )}
+      </div>
+
+      <div className="sidebar-foot">
+        {/* The orb (docs/MASTER_PLAN.md section 4): click for voice, hold for a
+            new chat. Its ring is the app's one "thinking" signal. */}
+        <button
+          type="button"
+          className="orb orb-small"
+          data-state={orbState}
+          onPointerDown={orbDown}
+          onPointerUp={orbUp}
+          onPointerLeave={orbUp}
+          onClick={orbClick}
+          aria-label={orbState === 'listening' ? 'Stop listening' : 'Talk to NeuraOS (hold for a new chat)'}
+          title={orbState === 'listening' ? 'Listening — click to stop and type what you said'
+            : orbState === 'thinking' ? 'Working… (click to dictate, hold for a new chat)'
+            : 'Dictate — hold for a new chat (Ctrl+N)'}
+        >
+          <span className="orb-core" />
+        </button>
+        <div className="sidebar-foot-actions">
+          <button type="button" className="raised icon-btn" onClick={onExport} title="Export chats to a file"><Icon name="download" size={13} /></button>
+          <label className="raised icon-btn" title="Import chats from a file">
+            <Icon name="copy" size={13} />
+            <input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); }} />
+          </label>
+          {isLinux() && onToggleTheme && (
+            <button type="button" className="raised icon-btn" onClick={onToggleTheme} aria-label="Toggle theme" title={`${theme === 'dark' ? 'Light' : 'Dark'} theme`}>
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />
+            </button>
+          )}
+          <button type="button" className={`raised icon-btn ${active === 'settings' ? 'active' : ''}`} onClick={() => onNavigate('settings')} title="Settings — Ctrl+,"><Icon name="settings" size={13} /></button>
+          <button type="button" className="raised icon-btn" onClick={onHide} title="Hide the sidebar — Ctrl+B" aria-label="Hide the sidebar"><Icon name="close" size={13} /></button>
+        </div>
+        <span className="sidebar-version" title="NeuraOS for Linux">v{APP_VERSION}</span>
+      </div>
+      {importMsg && <div className="sidebar-hint">{importMsg}</div>}
     </aside>
   );
 }

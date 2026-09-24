@@ -194,6 +194,8 @@ export interface ChatSession {
   reasoning?: 'off' | 'low' | 'medium' | 'high';
   draft: string;
   updatedAt: number;
+  /** The folder this chat lives in (the project sidebar groups by it); '' or absent = the home folder. */
+  project?: string;
 }
 
 // The chat store lives in ../chats.js -- key, cap, validation, merge, export.
@@ -230,7 +232,7 @@ function saveSessions(sessions: ChatSession[]) {
   }
 }
 
-export function newSession(provider = '', model = ''): ChatSession {
+export function newSession(provider = '', model = '', project = ''): ChatSession {
   return {
     id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     title: 'New chat',
@@ -240,6 +242,7 @@ export function newSession(provider = '', model = ''): ChatSession {
     mode: 'chat',
     draft: '',
     updatedAt: Date.now(),
+    project,
   };
 }
 
@@ -249,6 +252,8 @@ export const OPEN_CHAT_EVENT = 'freeai4u:open-chat';
 // session" does -- as an event -- so the shell never has to know how a chat is
 // created.
 export const NEW_CHAT_EVENT = 'freeai4u:new-chat';
+/** Fired with detail {id, project} when the chat on screen changes, so the shell can work in its folder. */
+export const ACTIVE_CHAT_EVENT = 'freeai4u:active-chat';
 /** Ctrl+M: open the model chip. */
 export const MODEL_PICK_EVENT = 'freeai4u:pick-model';
 /** Ctrl+T: open or fold every tool card. */
@@ -429,6 +434,13 @@ export default function ChatScreen() {
   const stickToBottom = useRef(true);
 
   const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
+  // The shell works in the chat's folder: the terminal, the folder tree and the
+  // local tools follow the chat on screen, the way a Claude Code session does.
+  const activeProject = active ? (active.project || '') : '';
+  useEffect(() => {
+    if (!active) return;
+    window.dispatchEvent(new CustomEvent(ACTIVE_CHAT_EVENT, { detail: { id: active.id, project: activeProject } }));
+  }, [active?.id, activeProject]);
 
   // A session id can outlive its session (pruned on save, or displaced by an
   // import), which left the screen on a fallback chat while activeId pointed at
@@ -578,7 +590,7 @@ export default function ChatScreen() {
     return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen);
   }, []);
 
-  const startNewRef = useRef<() => void>(() => {});
+  const startNewRef = useRef<(project?: string) => void>(() => {});
 
   const scrollToBottom = useCallback((smooth = true) => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
@@ -604,18 +616,22 @@ export default function ChatScreen() {
     return () => window.removeEventListener('freeai4u-attach', onAttach);
   }, []);
 
-  const startNew = () => {
-    const s = newSession(providerRows[0]?.id || '', '');
+  const startNew = (project = '') => {
+    const s = newSession(providerRows[0]?.id || '', '', project);
     persist([s, ...sessions].slice(0, MAX_SESSIONS));
     setActiveId(s.id);
     inputRef.current?.focus();
   };
 
   // The listener is registered once, so it reads the current startNew through a
-  // ref rather than re-subscribing on every render.
+  // ref rather than re-subscribing on every render. The event's detail names
+  // the folder the chat lives in (App asked, through the project picker).
   startNewRef.current = startNew;
   useEffect(() => {
-    const onNew = () => startNewRef.current();
+    const onNew = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      startNewRef.current(detail && typeof detail.project === 'string' ? detail.project : '');
+    };
     window.addEventListener(NEW_CHAT_EVENT, onNew);
     return () => window.removeEventListener(NEW_CHAT_EVENT, onNew);
   }, []);
@@ -2114,7 +2130,7 @@ _${done.notes.join(' · ')}_` : said,
           <div className="empty-icon"><Icon name="chat" size={28} /></div>
           <h2>No chats yet</h2>
           <p>Starting one now…</p>
-          <button className="primary" onClick={startNew}>New chat</button>
+          <button className="primary" onClick={() => startNew()}>New chat</button>
         </div>
       </div>
     );

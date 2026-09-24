@@ -101,19 +101,18 @@ The zip holds `deb/` and `appimage/`, and the file names contain a space. The ru
 
 <sub>Captured on the build under a virtual display (`scripts/screenshot-tour.sh`), no model connected — so the screens are honest empty states, not a demo. The same in daylight: <a href="docs/assets/screens/chat-light.png">light theme</a>.</sub>
 
-## Five spaces, one orb
+## Four spaces, one orb
 
-`Alt+1` to `Alt+5`, or the rail on the left.
+`Alt+1` to `Alt+4`, or the bar across the top: point at a space and its pages drop down. The column on the left is your projects and history (`Ctrl+B` hides it): every chat lives in a folder, and chats are listed by folder.
 
 | Space | What lives there |
 | :-- | :-- |
 | 💬 **Chat** | Talk to a model. Plan drafts a plan; Build runs a real build session with approvals. `/screenshot`, `/recipe`, `@model`, `@file` |
 | 🧑‍💻 **Code** | The local coding agent on a folder you open, files, a real terminal, parallel worktrees, and **Agents (ACP)**: Gemini CLI, Claude Code, Codex or any [Agent Client Protocol](https://agentclientprotocol.com) agent, inside NeuraOS's approvals |
 | 🎨 **Create** | Design pages with tweaks, tokens, components and mockups; generate and edit pictures with a cloud model or stable-diffusion.cpp on your GPU |
-| 🧩 **Agents** | Your library (skills, personas, prompts), saved agents, recipes and their schedules |
-| 📡 **Activity** | Everything waiting for you or running: approvals, builds, agents, downloads |
+| 🧩 **Agents** | Your library (skills, personas, prompts), saved agents, recipes and their schedules, and **Runs**: everything waiting for you or running |
 
-The **orb** at the foot of the rail: click to dictate, hold for a new chat. It pulses while any agent works; the tray icon shows a cyan dot for the same, amber when something needs your OK. **Settings** is the account row or `Ctrl+,`. **`Ctrl+K`** reaches everything.
+The **orb** at the foot of the sidebar: click to dictate, hold for a new chat. It pulses while any agent works; the tray icon shows a cyan dot for the same, amber when something needs your OK. **Settings** is the gear in the top bar or `Ctrl+,`. **`Ctrl+K`** reaches everything.
 
 ## What Linux Mint gets
 
