@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isLinux } from '../platform';
 import {
   applyAccentHue,
   applyMaterial,
@@ -95,6 +96,9 @@ export default function AppearanceCard() {
           : 'On: the app switches with the desktop. Off: the theme you picked stays.'}
       </p>
 
+      {/* Mica is a Windows 11 material: on Linux the row would only say
+          "not here", so it is not shown at all. */}
+      {!isLinux() && (<>
       <label className="toggle">
         <input
           type="checkbox"
@@ -113,6 +117,7 @@ export default function AppearanceCard() {
           ? 'The sidebar, title bar and status bar sit on the Windows 11 material, so your wallpaper shows through them. Chat and cards stay solid.'
           : 'This machine does not offer Mica -- it needs Windows 11 with Transparency effects turned on -- so the window stays solid.'}
       </p>
+      </>)}
 
       <label className="toggle">
         <input

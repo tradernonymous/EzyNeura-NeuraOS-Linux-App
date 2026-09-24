@@ -6628,3 +6628,45 @@ input, textarea, select { border-radius: 8px; }
 .select-row-dot.dot-ok { background: var(--ok); }
 .select-row-dot.dot-warn { background: var(--warn); }
 .images-toolbar h1 { display: none; }
+
+/* =========================================================================
+   Settings (UI plan, phase 5): four groups, a card grid, shortcut category
+   cards, and the Ctrl+/ cheat sheet.
+   ========================================================================= */
+
+.settings-nav { width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.settings-nav-btn { display: flex; flex-direction: column; gap: 1px; border: 1px solid transparent; border-radius: 8px; }
+.settings-nav-hint { font-size: 10.5px; color: var(--text-3); font-weight: 400; }
+.settings-nav-btn.active .settings-nav-hint { color: var(--text-2); }
+.settings-cheat { margin-top: auto; justify-content: space-between; }
+.settings-cheat kbd { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
+
+.settings-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; align-content: start; padding: 16px 18px; }
+.settings-main > .settings-section { margin: 0; min-width: 0; }
+.settings-main > .settings-section.is-wide { grid-column: 1 / -1; }
+.settings-main > .settings-section > .settings-card { height: 100%; }
+.settings-main > .settings-section.is-hit > .settings-card,
+.settings-main > .settings-section.is-hit > h2 + * { box-shadow: 0 0 0 1px var(--accent-mid), var(--shadow-1); }
+.settings-main > .settings-section .settings-card { border-radius: 12px; background: var(--riser); box-shadow: inset 0 1px 0 var(--chrome-top), var(--shadow-1); }
+
+.shortcuts-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 10px; }
+.shortcuts-head .toggle { margin: 0; }
+.shortcuts-head kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; }
+.shortcut-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.shortcut-card { padding: 10px 12px; border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-2); }
+.shortcut-card h4 { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
+.shortcut-card h4 span { margin-left: 6px; font-weight: 400; color: var(--text-3); }
+.shortcut-card .shortcut-table { margin: 0; }
+.shortcut-card .shortcut-row:last-child { border-bottom: 0; }
+.shortcut-more { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11.5px; }
+.flip-y { transform: rotate(180deg); }
+
+.cheat-sheet { width: min(960px, 94vw); max-height: 84vh; overflow: auto; padding: 16px 18px; }
+.cheat-sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.cheat-sheet-head h3 { margin: 0; font-size: 15px; }
+.cheat-sheet-head .chat-output-close { margin: 0; }
+.cheat-sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.cheat-sheet-col h4 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.cheat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--edge); font-size: 12.5px; color: var(--text-2); }
+.cheat-row:last-child { border-bottom: 0; }
+.cheat-row kbd { font-family: var(--font-mono); font-size: 11px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-2); white-space: nowrap; }

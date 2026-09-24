@@ -19,6 +19,32 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 5: Settings in four groups
+
+- **Four groups instead of thirteen rows** (`settings-groups.js`): General
+  (Appearance, Startup and desktop, Shortcuts), AI & Models (Engine,
+  Providers, Local models, Limits, Memory), Tools (Connectors, Dictation,
+  Desktop control), System (Diagnostics, Advanced). The nav lists the
+  groups with a hint each; a card added later lands in System. There is
+  no Account group: the app has no account of its own (the engine sign-in
+  is in Engine, Hugging Face in Library).
+- **A grid of cards** for the open group; list-shaped sections (Local
+  models, Connectors, Diagnostics, Shortcuts, Providers, Advanced, Engine)
+  span the row. Search jumps to the group holding the first hit and
+  outlines every hit.
+- **Shortcuts as category cards:** Navigation, Chat, Global (from any
+  app), Tools, and In the box. A card shows its top three; "All N ·
+  change" unfolds it with the Change and Reset buttons.
+- **A cheat sheet on any screen** (`components/CheatSheet.tsx`, `Ctrl+/`,
+  also in the palette and a button under the nav): every shortcut by
+  category, read from the same table Settings edits.
+- **The Mica row is gone on Linux** (it is a Windows 11 material).
+- Not built: pop-over editing of a single value (the cards' own controls
+  stay in the card, which reads well at 340px and up).
+
+Verified here: `tsc`, `vite build`, `node --test` (81), and headless
+Chromium screenshots of General with a card unfolded and of the sheet.
+
 ## UI plan, phase 4: Create, one screen
 
 - **One Create screen** (`screens/CreateScreen.tsx`, `create.js`): a mode

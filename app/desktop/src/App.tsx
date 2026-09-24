@@ -3,6 +3,7 @@ import { api, setServer } from './api';
 import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, usePendingApprovals, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
 import TopNav from './components/TopNav';
 import ProjectPicker from './components/ProjectPicker';
+import CheatSheet from './components/CheatSheet';
 import TitleBar from './TitleBar';
 import { isLinux } from './platform';
 import * as voiceType from './voiceType';
@@ -123,6 +124,12 @@ export default function App() {
   const [home, setHome] = useState('');
   const [recent, setRecent] = useState<string[]>(() => shellLib.readRecent());
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [cheatOpen, setCheatOpen] = useState(false);
+  useEffect(() => {
+    const on = () => setCheatOpen(true);
+    window.addEventListener('freeai4u:cheat-sheet', on);
+    return () => window.removeEventListener('freeai4u:cheat-sheet', on);
+  }, []);
   const [activeChat, setActiveChat] = useState('');
   const [localRoot, setLocalRoot] = useState<string>(readLocalRoot);
   const [localCwd, setLocalCwd] = useState('');
@@ -532,6 +539,9 @@ export default function App() {
       case 'toggle-zen':
         setZen((on) => !on);
         break;
+      case 'cheat-sheet':
+        setCheatOpen(true);
+        break;
       case 'toggle-theme':
         toggle();
         break;
@@ -586,6 +596,7 @@ export default function App() {
       switch (hit.action) {
         case 'palette': setPaletteOpen((open) => !open); break;
         case 'zen': setZen((on) => !on); break;
+        case 'cheatsheet': setCheatOpen((open) => !open); break;
         case 'settings': setView('settings'); break;
         case 'new-chat': requestNewChat(); break;
         case 'model':
@@ -816,6 +827,7 @@ export default function App() {
         installNotice={installNotice}
         onOpenPalette={openPalette}
       />
+      <CheatSheet open={cheatOpen} onClose={() => setCheatOpen(false)} />
       <ProjectPicker
         open={pickerOpen}
         home={home}
