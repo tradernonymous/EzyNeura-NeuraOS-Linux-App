@@ -170,6 +170,19 @@ Approved after the "next three" merged (PR #15); not started.
 4. **A Hugging Face token test** next to the paste field that reports
    which Inference Providers the token can reach, so an empty Model
    column never looks like a bug.
+5. **Qwen-Image on this PC.** `sd.rs` already resolves a Qwen-Image set
+   (the Qwen2.5-VL 7B encoder and its vision projector as `--llm` and
+   `--llm_vision`; a model named "edit" edits by reference), and
+   stable-diffusion.cpp documents Qwen-Image, Qwen-Image-Edit, Edit-2509
+   and Edit-2511 with that layout. Left to do: suggestion rows next to the
+   FLUX.2 ones (Comfy-Org split repos, QuantStack GGUF quants for 12 to
+   16 GB cards); a `family_of` entry with Qwen's numbers (cfg 2.5, euler,
+   flow shift 3, `--model-args qwen_image_zero_cond_t=true` for
+   Edit-2511); the stepper's "FLUX.2 model" step becoming "Image model"
+   with a FLUX.2 / Qwen-Image choice; a size warning before the download
+   (the 7B encoder alone is about 8 GB at fp8; the 20B model needs
+   roughly 12 GB at Q4). File names and sizes to be read from the repo
+   listings at build time.
 
 ## The next three: FLUX.2 steps, commit from Changes, recent projects
 
