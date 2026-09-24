@@ -15,16 +15,77 @@ pub mod dmabuf {
     /// This has to run before the first webview is created (main() calls it
     /// first thing, ahead of tauri::Builder), because WebKitGTK only reads
     /// the variable once, at its own startup.
+    ///
+    /// The renderer mode (Settings → Diagnostics, kept in a small file so it
+    /// can be read before Tauri exists):
+    ///   * "safe"  -- the default: the DMA-BUF renderer off. It was on by
+    ///     default at first, guarded only on NVIDIA, and the first real Mint
+    ///     machine (Intel graphics, X11) drew the window as bands and
+    ///     smeared text; shared-memory compositing costs a little CPU and
+    ///     draws right everywhere WebKitGTK runs.
+    ///   * "gpu"   -- the DMA-BUF renderer on, except on the NVIDIA
+    ///     proprietary driver where it never works.
+    ///   * "basic" -- DMA-BUF off and compositing off: the plainest path,
+    ///     for a machine where "safe" still misdraws.
     pub fn apply_guard_if_needed() {
         // An explicit value already in the environment -- including "0",
         // set by someone testing whether their machine still needs this --
         // is never overridden.
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some() {
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some()
+            || std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some()
+        {
             return;
         }
-        if nvidia_present() {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        for (name, value) in env_for(&read_mode(), nvidia_present()) {
+            std::env::set_var(name, value);
         }
+    }
+
+    pub const MODES: &[&str] = &["safe", "gpu", "basic"];
+    pub const DEFAULT_MODE: &str = "safe";
+    const MODE_FILE: &str = "renderer-mode";
+
+    /// The WebKitGTK variables a mode sets. Pure, tested.
+    pub fn env_for(mode: &str, nvidia: bool) -> Vec<(&'static str, &'static str)> {
+        match mode {
+            "gpu" if !nvidia => Vec::new(),
+            "gpu" => vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")],
+            "basic" => vec![
+                ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
+                ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
+            ],
+            _ => vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")],
+        }
+    }
+
+    /// `$XDG_CONFIG_HOME/com.freeai4u.desktop/renderer-mode` -- the same
+    /// folder Tauri's app_config_dir resolves to, computed here because this
+    /// runs before Tauri does.
+    pub fn mode_file() -> Option<std::path::PathBuf> {
+        let base = std::env::var_os("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+        Some(base.join("com.freeai4u.desktop").join(MODE_FILE))
+    }
+
+    pub fn read_mode() -> String {
+        let text = mode_file().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+        let mode = text.trim();
+        if MODES.contains(&mode) { mode.to_string() } else { DEFAULT_MODE.to_string() }
+    }
+
+    /// Remember `mode` for the next start (the variables are read once, at
+    /// WebKitGTK's own startup, so this needs a restart to take effect).
+    pub fn write_mode(mode: &str) -> Result<(), String> {
+        if !MODES.contains(&mode) {
+            return Err(format!("{} is not a renderer mode (safe, gpu, basic)", mode));
+        }
+        let path = mode_file().ok_or("no HOME to keep the setting in")?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+        }
+        std::fs::write(&path, format!("{}\n", mode)).map_err(|e| format!("cannot write {}: {}", path.display(), e))
     }
 
     /// Whether the NVIDIA proprietary driver is loaded. The kernel module
@@ -511,5 +572,33 @@ pub mod paths {
             assert_eq!(names, vec!["libggml.so.0", "libllama.so"]);
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+}
+
+#[cfg(test)]
+mod renderer_tests {
+    use super::dmabuf::{env_for, DEFAULT_MODE, MODES};
+
+    #[test]
+    fn the_default_mode_turns_the_dmabuf_renderer_off_everywhere() {
+        assert_eq!(DEFAULT_MODE, "safe");
+        assert_eq!(env_for("safe", false), vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")]);
+        assert_eq!(env_for("safe", true), vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")]);
+        // An unknown word is the default, never "no guard".
+        assert_eq!(env_for("", false), env_for("safe", false));
+    }
+
+    #[test]
+    fn gpu_mode_keeps_the_renderer_except_on_nvidia() {
+        assert!(env_for("gpu", false).is_empty());
+        assert_eq!(env_for("gpu", true), vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")]);
+    }
+
+    #[test]
+    fn basic_mode_also_turns_compositing_off() {
+        let env = env_for("basic", false);
+        assert!(env.contains(&("WEBKIT_DISABLE_COMPOSITING_MODE", "1")));
+        assert!(env.contains(&("WEBKIT_DISABLE_DMABUF_RENDERER", "1")));
+        assert!(MODES.contains(&"basic"));
     }
 }

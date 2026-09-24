@@ -280,3 +280,39 @@ mod tests {
         assert!(dot_for("idle").is_none());
     }
 }
+
+// ---- Renderer mode (Settings → Diagnostics) ---------------------------------
+
+/// The WebKitGTK renderer mode this copy starts with (linux.rs dmabuf):
+/// {"mode", "modes", "nvidia"}. Off Linux there is nothing to choose.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn renderer_mode_get() -> serde_json::Value {
+    serde_json::json!({
+        "available": true,
+        "mode": crate::linux::dmabuf::read_mode(),
+        "modes": crate::linux::dmabuf::MODES,
+        "nvidia": crate::linux::dmabuf::nvidia_present(),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn renderer_mode_get() -> serde_json::Value {
+    serde_json::json!({ "available": false, "mode": "", "modes": [], "nvidia": false })
+}
+
+/// Remember a renderer mode; it applies at the next start (app_relaunch).
+#[tauri::command]
+pub fn renderer_mode_set(mode: String) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::dmabuf::write_mode(mode.trim())?;
+        return Ok(renderer_mode_get());
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = mode;
+        Err("the renderer mode is a Linux setting".to_string())
+    }
+}

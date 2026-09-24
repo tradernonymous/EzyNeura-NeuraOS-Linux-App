@@ -65,11 +65,11 @@ export async function runInstaller(path: string): Promise<void> {
  * same installer type. Outside the shell, or when the shell cannot say, the
  * answer is 'portable': the one kind whose update never runs anything.
  */
-export async function installKind(): Promise<'nsis' | 'msi' | 'portable'> {
+export async function installKind(): Promise<'nsis' | 'msi' | 'portable' | 'deb' | 'appimage'> {
   if (!hasShell()) return 'portable';
   try {
     const kind = await call<string>('install_kind');
-    return kind === 'nsis' || kind === 'msi' ? kind : 'portable';
+    return kind === 'nsis' || kind === 'msi' || kind === 'deb' || kind === 'appimage' ? kind : 'portable';
   } catch {
     return 'portable';
   }
@@ -1057,6 +1057,22 @@ export async function logClientEvent(scope: string, message: string): Promise<vo
 /** Open the folder the crash log lives in, in the file manager. */
 export async function crashLogReveal(): Promise<void> {
   await call('crash_log_reveal');
+}
+
+/** The WebKitGTK renderer mode (Linux, desktop.rs): safe (default), gpu, basic. */
+export interface RendererMode {
+  available: boolean;
+  mode: string;
+  modes: string[];
+  nvidia: boolean;
+}
+
+export async function rendererModeGet(): Promise<RendererMode> {
+  return call<RendererMode>('renderer_mode_get');
+}
+
+export async function rendererModeSet(mode: string): Promise<RendererMode> {
+  return call<RendererMode>('renderer_mode_set', { mode });
 }
 
 // ---- One-click runtimes (runtimes.rs): Node 24 and llama.cpp ----------------
