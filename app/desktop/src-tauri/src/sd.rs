@@ -560,6 +560,93 @@ pub fn sd_pick_model(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+/// The folder a set of files becomes, named after its diffusion part with the
+/// format, quant and precision taken off: `flux-2-klein-4b-Q4_K_M.gguf` ->
+/// `flux-2-klein-4b`. Only what a folder name can safely be.
+pub fn set_folder_name(files: &[(PathBuf, u64)]) -> Option<String> {
+    let parts = set_roles(files)?;
+    let stem = parts
+        .diffusion
+        .file_stem()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let lower = stem.to_lowercase();
+    let mut cut = lower.len();
+    for tail in ["-q", "_q", "-iq", "_iq", "-bf16", "_bf16", "-f16", "_f16", "-fp8", "_fp8", "-fp16", "_fp16"] {
+        if let Some(at) = lower.rfind(tail) {
+            if at > 0 && at < cut {
+                cut = at;
+            }
+        }
+    }
+    let name: String = stem[..cut]
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let name = name.trim_matches('.').trim_matches('_').to_string();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+/// Move one file, across disks when `rename` cannot (a download on another
+/// drive): copy then remove, so a failed copy leaves the source where it was.
+fn move_file(from: &Path, to: &Path) -> Result<(), String> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to).map_err(|e| format!("Could not copy {} into place: {}", from.display(), e))?;
+    std::fs::remove_file(from).map_err(|e| format!("Copied, but could not remove {}: {}", from.display(), e))?;
+    Ok(())
+}
+
+/// Pick the files of a set (a diffusion model with its VAE and text encoder)
+/// and move them into one folder under sd-models, which becomes the model.
+/// The files are the user's own, chosen in the native picker; nothing is
+/// fetched, and a set that does not form one is refused before anything moves.
+#[tauri::command(async)]
+pub fn sd_import_set(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let picked = rfd::FileDialog::new()
+        .set_title("Choose the files of one model set (diffusion model, VAE, text encoder)")
+        .add_filter("Model files", &MODEL_EXTENSIONS[..])
+        .pick_files();
+    let Some(paths) = picked else {
+        return Ok(None);
+    };
+    let files: Vec<(PathBuf, u64)> = paths
+        .iter()
+        .filter(|p| p.is_file())
+        .map(|p| (p.clone(), std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)))
+        .collect();
+    let folder = set_folder_name(&files).ok_or_else(|| {
+        "Those files do not form a set: pick the diffusion model together with its VAE and text encoder (for FLUX.2: the model, flux2_ae.safetensors and qwen_3_4b.safetensors).".to_string()
+    })?;
+    let dir = models_dir(&app)?.join(&folder);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+    let mut moved = Vec::new();
+    for (from, _) in &files {
+        let name = from.file_name().ok_or_else(|| format!("{} has no name", from.display()))?;
+        let to = dir.join(name);
+        if to == *from {
+            continue;
+        }
+        if to.exists() {
+            return Err(format!("{} is already in {}.", name.to_string_lossy(), dir.display()));
+        }
+        move_file(from, &to)?;
+        moved.push(name.to_string_lossy().to_string());
+    }
+    if set_in(&dir).is_none() {
+        return Err(format!("{} does not form a set after the move.", dir.display()));
+    }
+    let file = model_file(&app)?;
+    std::fs::write(&file, dir.display().to_string())
+        .map_err(|e| format!("Could not save the path: {}", e))?;
+    Ok(Some(serde_json::json!({ "path": dir.display().to_string(), "folder": folder, "moved": moved })))
+}
+
 /// A port this app will bind sd-server to. Never a privileged one, never 0:
 /// the address is built here, so the port is the only part a page can steer
 /// and it is bounded.
@@ -1321,6 +1408,24 @@ mod tests {
         assert_eq!(role_of("ae.safetensors"), "vae");
         assert_eq!(role_of("qwen-image-2512-Q4_K_M.gguf"), "diffusion", "Qwen-Image is not a Qwen3 encoder");
         assert_eq!(role_of("Qwen3-8B-Q4_K_M.gguf"), "llm");
+    }
+
+    #[test]
+    fn an_imported_set_is_named_after_its_model_without_the_quant() {
+        let files = vec![
+            (PathBuf::from("/dl/flux-2-klein-4b-Q4_K_M.gguf"), 2_500_000_000),
+            (PathBuf::from("/dl/flux2_ae.safetensors"), 330_000_000),
+            (PathBuf::from("/dl/qwen_3_4b.safetensors"), 8_100_000_000),
+        ];
+        assert_eq!(set_folder_name(&files).as_deref(), Some("flux-2-klein-4b"));
+        let bf16 = vec![
+            (PathBuf::from("/dl/flux-2-klein-9b.safetensors"), 18_000_000_000),
+            (PathBuf::from("/dl/flux2-vae.safetensors"), 330_000_000),
+            (PathBuf::from("/dl/Qwen3-8B-Q8_0.gguf"), 8_700_000_000),
+        ];
+        assert_eq!(set_folder_name(&bf16).as_deref(), Some("flux-2-klein-9b"));
+        let alone = vec![(PathBuf::from("/dl/v1-5-pruned-emaonly.safetensors"), 4_000_000_000)];
+        assert_eq!(set_folder_name(&alone), None, "one file is not a set to import");
     }
 
     #[test]

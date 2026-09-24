@@ -333,6 +333,17 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
     await onRefresh();
   });
 
+  // The three files of a set, wherever they were downloaded to, moved into
+  // one folder under sd-models by the shell and chosen as the model. The
+  // picker is native and multi-select; the shell refuses files that do not
+  // form a set before it moves anything.
+  const importSet = () => guard('model', async () => {
+    const done = await call<{ path: string; folder: string; moved: string[] } | null>('sd_import_set');
+    if (!done) return;
+    pushToast('ok', `${done.moved.length} file${done.moved.length === 1 ? '' : 's'} moved into sd-models/${done.folder}. Local images will draw with the set.`);
+    await onRefresh();
+  });
+
   const chooseModel = (path: string) => guard('model', async () => {
     if (!path) return;
     await call('sd_use_model', { path });
@@ -407,6 +418,9 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
             onPick={chooseModel}
           />
           <button onClick={pickModel} disabled={!!busy || drawing}>Choose file…</button>
+          <button onClick={importSet} disabled={!!busy || drawing} title="Pick a diffusion model with its VAE and text encoder; the app moves them into one folder">
+            Add files as a set…
+          </button>
         </div>
         <p className="settings-hint">
           Put weights (.safetensors, .ckpt or .gguf) in{' '}

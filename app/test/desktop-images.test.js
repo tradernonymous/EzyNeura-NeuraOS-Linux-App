@@ -53,6 +53,10 @@ test('the shell reads a FLUX.2 set: the ae VAE and the Qwen3 encoder are parts, 
   // And a set folder is a model the card can choose (the downloader hands the folder back).
   assert.match(source, /if source\.is_dir\(\) \{\s*if set_in\(&source\)\.is_none\(\)/);
   assert.match(card(), /await call\('sd_use_model', \{ path: folder \}\)/);
+  // And files downloaded anywhere can be moved into a set folder by the shell.
+  assert.match(source, /pub fn sd_import_set\(app: tauri::AppHandle\)/);
+  assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_import_set,/);
+  assert.match(card(), /call<[^>]*>\('sd_import_set'\)/);
 });
 
 test('the Comfy-Org split layout is offered as one set, and FLUX.2 [klein] is one click away', () => {
