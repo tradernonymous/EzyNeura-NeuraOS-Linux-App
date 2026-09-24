@@ -294,6 +294,8 @@ fn main() {
             desktop::voice_type_text,
             desktop::tray_state_set,
             desktop::notify_with_actions,
+            desktop::renderer_mode_get,
+            desktop::renderer_mode_set,
             acp::acp_start,
             acp::acp_prompt,
             acp::acp_cancel,

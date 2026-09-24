@@ -36,13 +36,13 @@ fn runtime_facts() -> (String, String) {
 
 #[cfg(target_os = "linux")]
 fn runtime_facts() -> (String, String) {
-    let guard = if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some() {
-        "dmabuf guard: on"
-    } else {
-        "dmabuf guard: off"
-    };
+    let dmabuf = if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some() { "off" } else { "on" };
+    let compositing = if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some() { "off" } else { "on" };
     let version = crate::linux::webkit::version().unwrap_or_else(|| "WebKitGTK (version unknown)".to_string());
-    (format!("{} ({})", version, guard), crate::linux::dmabuf::session_type())
+    (
+        format!("{} (renderer mode: {}, dmabuf: {}, compositing: {})", version, crate::linux::dmabuf::read_mode(), dmabuf, compositing),
+        crate::linux::dmabuf::session_type(),
+    )
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]

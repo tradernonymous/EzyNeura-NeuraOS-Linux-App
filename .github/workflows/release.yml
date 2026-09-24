@@ -1,0 +1,231 @@
+name: Release
+
+# A version tag (v2.11.0) builds the .deb and the AppImage on the same
+# Ubuntu 22.04 base as the Linux workflow, smoke-tests the binary, stages
+# the files under stable names with a manifest the app's update check reads
+# (desktop-version.json, signed when the repository has a key), publishes a
+# GitHub Release, and rebuilds the apt repository on GitHub Pages.
+#
+# A manual run does everything except publish unless "publish" is ticked:
+# that is the dry run that proves the pipeline before a tag is pushed.
+#
+# Secrets and variables (packaging/release/README.md explains each):
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (secrets)
+#       sign desktop-version.json with minisign, as `tauri signer` does
+#   NEURAOS_UPDATER_PUBKEY                                        (variable)
+#       the matching public key, compiled into the app (net.rs)
+#   APT_GPG_PRIVATE_KEY                                           (secret)
+#       the armored GPG key that signs the apt repository
+# Without the signing pair the manifest is unsigned and the app checks
+# sha256 only; without the GPG key the apt job is skipped, not failed.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the Release and the apt repository (unticked: build, stage and sign only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    env:
+      # Compiled in by net.rs at build time; empty means "unsigned manifest".
+      NEURAOS_UPDATER_PUBKEY: ${{ vars.NEURAOS_UPDATER_PUBKEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/desktop/src-tauri
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libdbus-1-dev patchelf file xdg-utils
+
+      - name: The app version, which a tag must match
+        id: meta
+        run: |
+          version=$(node -p "require('./app/desktop/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              tag="${GITHUB_REF#refs/tags/v}"
+              if [ "$tag" != "$version" ]; then
+                echo "tag v$tag does not match the app version $version (package.json, tauri.conf.json, Cargo.toml)" >&2
+                exit 1
+              fi ;;
+          esac
+
+      - name: Frontend dependencies
+        working-directory: app/desktop
+        run: npm ci
+
+      - name: Type-check
+        working-directory: app/desktop
+        run: npx tsc --noEmit
+
+      - name: Frontend tests
+        run: node --test 'app/test/*.test.js'
+
+      - name: Build the frontend
+        working-directory: app/desktop
+        run: npm run build
+
+      - name: Rust tests
+        run: cargo test --manifest-path app/desktop/src-tauri/Cargo.toml
+
+      - name: Build the .deb and AppImage
+        working-directory: app/desktop
+        run: npx tauri build --bundles deb,appimage
+
+      - name: Headless smoke test (Xvfb) of the built binary
+        run: |
+          sudo apt-get install -y xvfb dbus-x11 scrot
+          bash scripts/screenshot-smoke-test.sh \
+            app/desktop/src-tauri/target/release/freeai4u-desktop \
+            "$RUNNER_TEMP/neuraos-smoke.png" 12
+          if grep -E 'PANIC|FATAL' /tmp/screenshot-smoke-test.log; then
+            echo "the app logged a panic or a fatal error" >&2
+            exit 1
+          fi
+
+      - name: Stage the release files (stable names, digests, manifest)
+        run: |
+          bash packaging/release/stage.sh \
+            app/desktop/src-tauri/target/release/bundle out/release \
+            "${{ steps.meta.outputs.version }}" "$GITHUB_SHA"
+
+      - name: Sign the manifest (skipped when the repository has no signing key)
+        working-directory: app/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "no TAURI_SIGNING_PRIVATE_KEY secret: the manifest is published unsigned (sha256 checks only)"
+            exit 0
+          fi
+          npx tauri signer sign ../../out/release/desktop-version.json
+          test -s ../../out/release/desktop-version.json.sig
+
+      - name: Upload the staged release
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraos-release-${{ steps.meta.outputs.version }}
+          path: out/release/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: neuraos-release-${{ needs.build.outputs.version }}
+          path: release
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          cat > notes.md <<NOTES
+          ## Install on Linux Mint
+
+          \`\`\`bash
+          sudo apt install ./neura-os-desktop_${VERSION}_amd64.deb
+          \`\`\`
+
+          Or run the portable build: \`chmod +x NeuraOS-${VERSION}-x86_64.AppImage && ./NeuraOS-${VERSION}-x86_64.AppImage\`.
+          The installed app updates itself from this page; \`SHA256SUMS\` lists the digests and \`desktop-version.json\` is the manifest the update check reads.
+          NOTES
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "NeuraOS $VERSION" \
+              --notes-file notes.md \
+              --generate-notes
+          fi
+
+  apt:
+    needs: [build, release]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: neuraos-release-${{ needs.build.outputs.version }}
+          path: release
+
+      - name: Is there a repository signing key?
+        id: key
+        env:
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "no APT_GPG_PRIVATE_KEY secret: the apt repository is not rebuilt"; fi
+
+      - name: Build the signed apt repository
+        if: steps.key.outputs.present == 'true'
+        env:
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          sudo apt-get install -y dpkg-dev apt-utils gnupg
+          printf '%s\n' "$KEY" | gpg --batch --import
+          keyid=$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^sec/ { print $5; exit }')
+          test -n "$keyid"
+          bash packaging/apt/build-repo.sh out/apt "$keyid" release/*.deb
+          cp packaging/apt/index.html out/apt/index.html
+          touch out/apt/.nojekyll
+
+      - uses: actions/configure-pages@v5
+        if: steps.key.outputs.present == 'true'
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.key.outputs.present == 'true'
+        with:
+          path: out/apt
+
+      - id: deploy
+        if: steps.key.outputs.present == 'true'
+        uses: actions/deploy-pages@v4

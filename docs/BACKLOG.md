@@ -9,13 +9,13 @@ not merely once its code is green in CI.
 | Phase | What | Status |
 | :-- | :-- | :-- |
 | L0 | Foundations: import structure, `UPSTREAM` pin, sync script, CI skeleton | Done — imported `app/desktop`, `app/shared`, `app/design`, `app/assets/branding` from `tradernonymous/freeopenai@8bbfffa`; `.github/workflows/linux.yml` added |
-| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | Code complete + CI green, including the `.gguf` MIME association (`tauri.linux.conf.json` + `packaging/mime/`); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine |
+| L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | Code complete + CI green; the DMA-BUF guard is now on by default with a renderer selector in Diagnostics (below, "First Mint machine"), including the `.gguf` MIME association (`tauri.linux.conf.json` + `packaging/mime/`); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine |
 | L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; NeuraOS as an MCP server and the Activity-board compare not started |
-| L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | Tooling for the apt repo (`packaging/apt/`, proven with a throwaway key); publishing needs the maintainer's GPG key and a Pages host; AppImage updater feed and Flatpak not started |
+| L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); Wayland portals, WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | Not started |
 
@@ -279,6 +279,60 @@ Verified: cargo test 125/125, node --test 42/42, tsc, build, and the debug
 binary still starts under Xvfb with no panic. Not verified: any of it on a
 real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
 picking the actions up, the tray dot in the XApp applet).
+
+## First Mint machine: the renderer guard becomes the default
+
+The first install on real Mint hardware (`neura-os-desktop_2.11.0_amd64.deb`
+from the CI artifact, Intel graphics, X11) started, ran the bundled engine
+and signed in -- and drew Settings as coloured bands with smeared text.
+That is WebKitGTK's DMA-BUF renderer, which the guard only turned off on the
+NVIDIA proprietary driver. Now (`linux.rs` dmabuf):
+
+- the default mode is **safe**: `WEBKIT_DISABLE_DMABUF_RENDERER=1` on every
+  machine (shared-memory compositing, a little CPU, draws right);
+- **gpu** keeps the renderer (still off on NVIDIA); **basic** also sets
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1` for a machine where safe misdraws;
+- the choice lives in `~/.config/com.freeai4u.desktop/renderer-mode`, read
+  before Tauri starts, chosen in Settings → Diagnostics → Renderer with a
+  "Restart NeuraOS now" button; an explicit `WEBKIT_*` variable in the
+  environment always wins. Diagnostics reports the mode and both variables.
+
+Verified here: `env_for` unit tests, the app starting under Xvfb with the
+default. Not verified: that safe (or basic) fixes the bands on that Intel
+machine -- the next real-hardware run is the check.
+
+## L7: the release pipeline and the in-app updater on Linux
+
+- `.github/workflows/release.yml`: a `v*` tag (or a manual run) builds on
+  Ubuntu 22.04, runs the same tests and the Xvfb smoke gate as `linux.yml`,
+  stages the bundles as `neura-os-desktop_<v>_amd64.deb` and
+  `NeuraOS-<v>-x86_64.AppImage` with `SHA256SUMS` and
+  `desktop-version.json` (`packaging/release/stage.sh`), signs the manifest
+  with `tauri signer` when the `TAURI_SIGNING_PRIVATE_KEY` secret exists,
+  publishes a Release with `gh` (built-in token, no third-party action),
+  then rebuilds the apt repository and deploys it to GitHub Pages
+  (`actions/deploy-pages`) when the `APT_GPG_PRIVATE_KEY` secret exists.
+  A manual run with *publish* unticked is the dry run. The tag must match
+  the app version.
+- The package name is `neura-os-desktop` (Tauri kebab-cases the product
+  name); the README, the apt docs and the Release notes now say so.
+- `packaging/release/make-keys.sh` creates both keys on the maintainer's
+  machine and hands the private halves to GitHub with `gh secret set`;
+  nothing is printed or committed ("secrets never travel").
+- In the app: `install_kind` on Linux answers `appimage` (APPIMAGE set),
+  `deb` (under /usr or /opt) or `portable`; `update.js` picks the matching
+  artifact and reads the Linux repo through `releases/latest/download/`;
+  `run_installer` swaps an AppImage in place (copy beside, chmod, atomic
+  rename, restart) and hands a `.deb` to `xdg-open` (Mint: the package
+  installer), telling the person to restart when it is done.
+
+Verified here: `cargo test` (the Linux kind rules, the AppImage swap on a
+temp file, and a real `tauri signer` signature accepted by
+`verify_manifest`), `node --test` (the manifest `stage.sh` writes, the
+URLs, the artifact choice), `tsc`, `npm run build`. Not verified: a real
+Release (needs the tag and the keys), the apt job on Pages, the update
+banner against a published manifest, `xdg-open` handing a `.deb` to gdebi
+on Mint.
 
 ## L7/L8: the apt repository tooling and the CI smoke gate
 

@@ -7,6 +7,9 @@
 // `navigator.platform` is what the embedded webview reports for its own
 // process, which is exactly what we want (which OS is this window drawn on),
 // not what a remote server might guess from a user agent string.
+/** Where the Linux port publishes its releases (the Windows app reads upstream's). */
+export const LINUX_RELEASES_REPO = 'tradernonymous/EzyNeura-NeuraOS-Linux-App';
+
 export function isLinux(): boolean {
   try {
     return /linux/i.test(navigator.platform || navigator.userAgent || '');
