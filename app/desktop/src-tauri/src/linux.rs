@@ -391,6 +391,17 @@ pub mod paths {
         resolve(std::env::var_os("XDG_STATE_HOME"), std::env::var_os("HOME"), ".local/state").join(app)
     }
 
+    /// The app's identifier (tauri.conf.json), the folder name Tauri's
+    /// app_data_dir uses under `$XDG_DATA_HOME`.
+    pub const APP_ID: &str = "com.freeai4u.desktop";
+
+    /// `$XDG_DATA_HOME/com.freeai4u.desktop` (`~/.local/share/...`): the same
+    /// folder Tauri's `app_data_dir()` resolves to, computed here for the
+    /// `--mcp` process, which has no Tauri app to ask.
+    pub fn app_data_dir() -> PathBuf {
+        resolve(std::env::var_os("XDG_DATA_HOME"), std::env::var_os("HOME"), ".local/share").join(APP_ID)
+    }
+
     /// Pure function behind both of the above, so it is unit-tested without
     /// touching the process environment -- `cargo test` runs tests from one
     /// process, and mutating `$HOME` in one would race every other test

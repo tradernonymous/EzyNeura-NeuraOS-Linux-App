@@ -41,6 +41,8 @@ mod launch;
 mod linux;
 #[cfg(target_os = "linux")]
 mod portal;
+#[cfg(target_os = "linux")]
+mod mcp_server;
 mod quick;
 mod runtimes;
 mod desktop;
@@ -218,6 +220,14 @@ fn main() {
         crash::log(&format!("PANIC: {}", info));
     }));
 
+    // `--mcp`: NeuraOS as an MCP server over stdio for another agent
+    // (mcp_server.rs). No window, no bus, no tray: serve and exit.
+    #[cfg(target_os = "linux")]
+    if std::env::args().any(|a| a == "--mcp") {
+        mcp_server::serve_stdio();
+        return;
+    }
+
     // The runtime check runs before the app window exists. This is the belt
     // that turns "double-click, nothing happens" into an explanation.
     #[cfg(windows)]
@@ -302,6 +312,7 @@ fn main() {
             desktop::desktop_screenshot,
             desktop::desktop_act,
             desktop::portal_shortcuts_bind,
+            desktop::mcp_server_command,
             quick::screen_hotkey_set,
             acp::acp_start,
             acp::acp_prompt,

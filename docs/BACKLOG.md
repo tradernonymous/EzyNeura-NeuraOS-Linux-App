@@ -14,7 +14,7 @@ not merely once its code is green in CI.
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
-| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; NeuraOS as an MCP server and the Activity-board compare not started |
+| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; **NeuraOS as an MCP server built** (below): `freeai4u-desktop --mcp` serves neuraos_status / neuraos_models / neuraos_chat / neuraos_image / neuraos_open over stdio, with copy-paste commands for Claude Code, Gemini CLI and a config JSON in Settings → Connectors; the Activity-board compare not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
@@ -279,6 +279,39 @@ Verified: cargo test 125/125, node --test 42/42, tsc, build, and the debug
 binary still starts under Xvfb with no panic. Not verified: any of it on a
 real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
 picking the actions up, the tray dot in the XApp applet).
+
+## L6: NeuraOS as an MCP server
+
+`freeai4u-desktop --mcp` (`mcp_server.rs`, Linux only) speaks MCP
+2025-06-18 over stdio with no window, bus or tray, so Claude Code, Gemini
+CLI, Codex or any MCP client can use what this machine has through
+NeuraOS:
+
+| Tool | What it does |
+| :-- | :-- |
+| `neuraos_status` | the llama-server the app started (if answering), Ollama's models, the image server, the GPU facts |
+| `neuraos_models` | GGUF files in NeuraOS's folder and the usual caches, Ollama's tags |
+| `neuraos_chat` | one prompt (optional system prompt, `max_tokens`) to the running llama-server, else Ollama (`model` picks one); free and private |
+| `neuraos_image` | `/v1/images/generations` on the running sd-server; answers the PNG's path |
+| `neuraos_open` | starts NeuraOS with a folder or a file (the single-instance plugin hands it to the running window) |
+
+It is a separate process, so the app writes `local-model.json` (port, its
+own per-run bearer token, model, pid; mode 0600) in its data folder when
+it starts llama-server and removes it on stop; `--mcp` reads it and
+checks `/health` before trusting it. The bundled engine is not exposed:
+its `/api/*` routes want a signed-in session cookie. Settings →
+Connectors → "Use NeuraOS from other agents" copies
+`claude mcp add neuraos -- <launcher> --mcp`, the Gemini CLI line, or an
+`mcpServers` JSON.
+
+Verified here: `cargo test` (initialize, tools/list, notifications,
+protocol vs tool errors, the state file), and the built debug binary
+driven over stdin with no DISPLAY and no session bus: initialize,
+tools/list, neuraos_status (GPU facts, nothing running), neuraos_chat
+("no model is running" as a tool error), neuraos_models, a non-JSON line
+(-32700, the loop goes on), neuraos_open on a missing path. Not verified:
+a real chat through llama-server or Ollama (neither runs here), an image,
+Claude Code's own `mcp add` end to end.
 
 ## L8/L9: the Wayland portals, and desktop control
 

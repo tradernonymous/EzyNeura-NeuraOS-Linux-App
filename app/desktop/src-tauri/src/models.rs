@@ -73,6 +73,42 @@ pub fn shutdown() {
     if let Some(mut run) = guard.take() {
         let _ = run.child.kill();
         let _ = run.child.wait();
+        #[cfg(target_os = "linux")]
+        if let Some(path) = state_file() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// Where `--mcp` (mcp_server.rs) reads what this app is running: the port
+/// and the per-run bearer token of the llama-server it started, in the
+/// app's own data folder, owner-readable only, gone when the server stops.
+/// The token is this app's own random loopback key, made fresh at every
+/// start, not a credential of the person's.
+#[cfg(target_os = "linux")]
+fn state_file() -> Option<PathBuf> {
+    Some(crate::linux::paths::app_data_dir().join(crate::mcp_server::STATE_FILE))
+}
+
+#[cfg(target_os = "linux")]
+fn write_state(run: &Run) {
+    use std::os::unix::fs::OpenOptionsExt;
+    let Some(path) = state_file() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let state = crate::mcp_server::LocalModelState {
+        port: run.port,
+        api_key: run.api_key.clone(),
+        file: run.file.clone(),
+        repo: run.repo.clone(),
+        quant: run.quant.clone(),
+        pid: run.child.id(),
+    };
+    if let Ok(mut file) = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&path) {
+        use std::io::Write;
+        let _ = serde_json::to_writer(&mut file, &state);
+        let _ = file.write_all(b"\n");
     }
 }
 
@@ -505,6 +541,10 @@ pub async fn local_model_start(
             api_key,
             started: Instant::now(),
         });
+        #[cfg(target_os = "linux")]
+        if let Some(run) = guard.as_ref() {
+            write_state(run);
+        }
     }
 
     // Wait for /health. A 4B model on a cold cache takes a while to load, but
