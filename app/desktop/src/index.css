@@ -3419,6 +3419,7 @@ button.linkish {
    canvas, and one pill fades in under the pointer so the way back is never a
    guess. It stays clickable at zero opacity -- it is hovered, not hunted. */
 .app.zen .titlebar,
+.app.zen .topnav,
 .app.zen .sidebar,
 .app.zen .status-bar {
   display: none;

@@ -116,6 +116,7 @@ test('the top bar has four destinations with menus, and the right rail is gone',
   assert.match(css, /\.raised\s*\{/);
   assert.match(css, /\.deck\s*\{/);
   assert.match(css, /\.topnav-menu\s*\{/);
+  assert.match(css, /\.app\.zen \.topnav,/, 'Zen hides the top bar with the rest of the chrome');
 });
 
 test('a new chat starts in a folder, and the chat on screen sets the working folder', () => {
