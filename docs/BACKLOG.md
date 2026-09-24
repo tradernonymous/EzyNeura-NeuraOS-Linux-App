@@ -19,6 +19,28 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 6: Agents, one space
+
+- **One space with a switch** (`components/SpaceSwitch.tsx`, the Create
+  strip's shape): Library · Agents · Recipes · Runs · Evals, with the
+  approvals badge on Runs. Activity is "Runs" now; Evals and Builds are
+  buttons on it.
+- **Cards with hover actions** on Agents and Recipes: Run, Edit,
+  Duplicate. A duplicated recipe starts with its schedule off, so a copy
+  never runs before it is looked at.
+- **Runs as a list or a board** (`runs.js`, remembered): Queued (scheduled
+  recipes, next run first) → Running (chats answering) → Needs review
+  (approvals, answered in place) → Done (the last twenty recipe runs, ok
+  or failed, newest first). Every card is fed by the module that already
+  owns the fact; a card opens its chat or its recipe.
+- Not built: dragging a card between columns (the columns are states the
+  app reports, not a to-do list the person orders) and evals rows on the
+  board (Evals has its own screen with history).
+
+Verified here: `tsc`, `vite build`, `node --test` (84), and headless
+Chromium screenshots of the board with seeded recipes and of the Recipes
+cards.
+
 ## UI plan, phase 5: Settings in four groups
 
 - **Four groups instead of thirteen rows** (`settings-groups.js`): General

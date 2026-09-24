@@ -4,6 +4,7 @@ import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, usePendingApprovals
 import TopNav from './components/TopNav';
 import ProjectPicker from './components/ProjectPicker';
 import CheatSheet from './components/CheatSheet';
+import SpaceSwitch from './components/SpaceSwitch';
 import TitleBar from './TitleBar';
 import { isLinux } from './platform';
 import * as voiceType from './voiceType';
@@ -754,6 +755,11 @@ export default function App() {
           )}
           <div className="main-content">
             <div className="primary-pane">
+              {/* Agents is one space with a switch: Library · Agents · Recipes ·
+                  Runs · Evals (Create carries its own switch inside). */}
+              {!showConnect && destinationOf(view) === 'agents' && (
+                <SpaceSwitch destination="agents" active={view} onNavigate={setView} badge={{ activity: approvals }} />
+              )}
               {showConnect ? (
                 <ConnectScreen
                   reason={shell.reason}

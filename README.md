@@ -95,7 +95,7 @@ The zip holds `deb/` and `appimage/`, and the file names contain a space. The ru
 </tr>
 <tr>
 <td><img src="docs/assets/screens/palette.png" alt="The command palette"><br><sub><b>Ctrl+K</b> · every screen, action, chat and skill, one box</sub></td>
-<td><img src="docs/assets/screens/activity.png" alt="Activity: everything waiting for you or running"><br><sub><b>Activity</b> · everything waiting for your OK, everything running, in one place</sub></td>
+<td><img src="docs/assets/screens/activity.png" alt="Runs: everything waiting for you or running, as a list or a board"><br><sub><b>Runs</b> (under Agents) · queued, running, waiting for your OK, done — as a list or a board</sub></td>
 </tr>
 </table>
 

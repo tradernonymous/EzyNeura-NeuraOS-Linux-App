@@ -10,6 +10,13 @@ import { engineStatus, hasShell, localModelStatus, type EngineStatus, type Local
 import type { ViewId } from '../Sidebar';
 import '../recipes.js';
 import '../threads.js';
+import '../chats.js';
+import '../runs.js';
+import { OPEN_CHAT_EVENT } from './ChatScreen';
+
+const runsLib: typeof import('../runs.js') = (globalThis as any).FreeAI4URuns;
+const chatsLib: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
+const LAYOUT_KEY = 'freeai4u.runs.layout';
 
 const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4URecipes;
 const threadsLib: typeof import('../threads.js') = (globalThis as any).FreeAI4UThreads;
@@ -54,16 +61,61 @@ export default function ActivityScreen({ onOpen }: Props) {
   const [recipes] = useState(() => recipesLib.list().filter((r) => r.schedule && r.schedule.enabled !== false));
   const runs = recipesLib.lastRuns();
   const now = Date.now();
+  // List or board (the vibe-kanban idea): the choice is remembered.
+  const [layout, setLayout] = useState<'list' | 'board'>(() => { try { return localStorage.getItem(LAYOUT_KEY) === 'board' ? 'board' : 'list'; } catch { return 'list'; } });
+  const pickLayout = (next: 'list' | 'board') => { setLayout(next); try { localStorage.setItem(LAYOUT_KEY, next); } catch { /* this session has it */ } };
+  const [allRecipes] = useState(() => recipesLib.list());
+  const columns = runsLib.board({
+    pending, busy, sessions: chatsLib.readStore(), recipes: allRecipes, runs,
+    nextRun: recipesLib.nextRun, scheduleLabel: recipesLib.scheduleLabel, now,
+  });
+  const openCard = (card: import('../runs.js').RunCard) => {
+    if (card.chatId) { onOpen('chat'); window.dispatchEvent(new CustomEvent(OPEN_CHAT_EVENT, { detail: card.chatId })); return; }
+    if (card.kind === 'approval') return;
+    onOpen('recipes');
+  };
 
   return (
     <div className="screen activity">
       <header className="screen-header">
-        <h1>Activity</h1>
+        <h1>Runs</h1>
         <div className="header-actions">
-          <button type="button" onClick={() => onOpen('evals')}>Evals</button>
-          <button type="button" onClick={() => onOpen('build')}>Builds</button>
+          <div className="sidebar-filters runs-layout" role="tablist" aria-label="Layout">
+            <button type="button" role="tab" aria-selected={layout === 'list'} className={`sidebar-filter ${layout === 'list' ? 'active' : ''}`} onClick={() => pickLayout('list')}>List</button>
+            <button type="button" role="tab" aria-selected={layout === 'board'} className={`sidebar-filter ${layout === 'board' ? 'active' : ''}`} onClick={() => pickLayout('board')}>Board</button>
+          </div>
+          <button type="button" className="raised" onClick={() => onOpen('evals')}>Evals</button>
+          <button type="button" className="raised" onClick={() => onOpen('build')}>Builds</button>
         </div>
       </header>
+
+      {layout === 'board' && (
+        <div className="runs-board" aria-label="Runs board">
+          {columns.map((col) => (
+            <section key={col.id} className={`runs-col runs-col-${col.id}`}>
+              <h3>{col.label} <span className="runs-count">{col.cards.length}</span></h3>
+              <p className="runs-hint">{col.hint}</p>
+              {col.cards.length === 0 && <div className="runs-empty">—</div>}
+              {col.cards.map((card) => (
+                <div key={card.id} className={`runs-card kind-${card.kind} ${card.kind === 'run' ? (card.ok ? 'is-ok' : 'is-failed') : ''}`}>
+                  <button type="button" className="runs-card-open" onClick={() => openCard(card)} title={card.meta}>
+                    <span className={`thread-dot ${col.id === 'running' ? 'thread-dot-running' : col.id === 'review' ? 'thread-dot-needs-you' : ''}`} aria-hidden="true" />
+                    <span className="runs-card-title">{card.title}</span>
+                    <span className="runs-card-meta">{card.meta}</span>
+                  </button>
+                  {card.kind === 'approval' && card.approvalId && (
+                    <div className="runs-card-actions">
+                      <button type="button" className="primary" onClick={() => recipesLib.approvals.answer(card.approvalId!, 'once')}>Allow</button>
+                      <button type="button" onClick={() => recipesLib.approvals.answer(card.approvalId!, 'deny')}>Deny</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      )}
+      {layout === 'list' && (<>
 
       <section className="activity-section">
         <h2>
@@ -131,6 +183,7 @@ export default function ActivityScreen({ onOpen }: Props) {
         )}
         <button type="button" className="link-button" onClick={() => onOpen('recipes')}>All recipes</button>
       </section>
+      </>)}
     </div>
   );
 }
