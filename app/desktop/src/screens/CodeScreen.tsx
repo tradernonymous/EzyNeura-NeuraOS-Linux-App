@@ -6,7 +6,7 @@ import SelectPill from '../components/SelectPill';
 import { isSavedProvider, streamSaved } from '../run-model';
 import type { EffectiveConfig, GlobalSettings } from '../project-config';
 import '../saved-models.js';
-import { hasShell, pickFolder, listLocalDir, readLocalFile, writeLocalFile, editLocalFile, runLocal } from '../bridge';
+import { hasShell, pickFolder, listLocalDir, readLocalFile, writeLocalFile, editLocalFile, runLocal, gitStatus } from '../bridge';
 // UMD modules: loaded for their side effect, read off globalThis.
 import '../coding-agent.js';
 import '../hf-auth.js';
@@ -116,6 +116,7 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
   // from .git/HEAD (readable, never written). The project's own tasks come
   // from .neuraos/commands/*.md, the Zed / Warp pattern.
   const [branch, setBranch] = useState('');
+  const [changed, setChanged] = useState(0);
   const [customTasks, setCustomTasks] = useState<import('../tasks.js').Task[]>([]);
   const requestRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashCursor, setSlashCursor] = useState(0);
@@ -133,9 +134,11 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
   }, [localRoot]);
   useEffect(() => {
     if (!localRoot || !hasShell()) { setBranch(''); setCustomTasks([]); return; }
-    readLocalFile(localRoot, '.git/HEAD')
-      .then((f) => { const m = /ref: refs\/heads\/(.+)/.exec(f.text || ''); setBranch(m ? m[1].trim() : (f.text || '').trim().slice(0, 7)); })
-      .catch(() => setBranch(''));
+    // git status is read-only; a folder outside git simply has no branch.
+    const readGit = () => gitStatus(localRoot)
+      .then((s) => { setBranch(s.repo ? s.branch : ''); setChanged(s.repo ? s.changes.length : 0); })
+      .catch(() => { setBranch(''); setChanged(0); });
+    readGit();
     loadCustom();
   }, [localRoot, loadCustom]);
   // A template lands in the box with its first {{blank}} selected, so typing
@@ -413,6 +416,11 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
     }
   };
 
+  // The count moves as the agent works: re-read when a run ends.
+  useEffect(() => {
+    if (!localRoot || !hasShell() || status === 'running' || status === 'planning') return;
+    gitStatus(localRoot).then((s) => { setBranch(s.repo ? s.branch : ''); setChanged(s.repo ? s.changes.length : 0); }).catch(() => {});
+  }, [status, localRoot]);
   const canRun = hasShell() && localRoot && status !== 'running' && status !== 'planning' && status !== 'awaiting';
 
   return (
@@ -422,10 +430,11 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
           long explanation lives in Settings → Advanced. */}
       <div className="code-toolbar">
         {localRoot ? (
-          <button type="button" className="raised code-project-chip" onClick={openAnother} title={`${localRoot}${branch ? ` · ${branch}` : ''} — click to open another folder`}>
+          <button type="button" className="raised code-project-chip" onClick={openAnother} title={`${localRoot}${branch ? ` · ${branch}` : ''}${changed ? ` · ${changed} changed file${changed === 1 ? '' : 's'}` : ''} — click to open another folder`}>
             <Icon name="folder" size={13} />
             <span className="code-project-name">{localRoot.split(/[/\\]/).pop()}</span>
             {branch && <span className="code-project-branch">{branch}</span>}
+            {changed > 0 && <span className="code-project-changed" title={`${changed} uncommitted file${changed === 1 ? '' : 's'}`}>{changed}</span>}
           </button>
         ) : (
           <button className="raised" onClick={openAnother}>

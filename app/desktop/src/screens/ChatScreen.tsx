@@ -2605,6 +2605,7 @@ _${done.notes.join(' · ')}_` : said,
       {(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && (
         <ChatOutput
           messages={active.messages}
+          root={openFolder()}
           tab={outputTab}
           onTab={setOutputTab}
           onClose={() => setOutputOpen((o) => ({ ...o, [active.id]: false }))}

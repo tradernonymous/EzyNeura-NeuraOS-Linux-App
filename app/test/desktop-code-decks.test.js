@@ -74,7 +74,8 @@ test('the Code screen wears the toolbar, the decks and the / menu', () => {
   assert.match(code, /<TaskDecks custom=\{customTasks\} onPick=\{fillRequest\}/);
   assert.match(code, /tasksLib\.slashRows\(request, customTasks\)/);
   assert.match(code, /box\.setSelectionRange\(at\.start, at\.end\)/, 'the first blank is selected on fill');
-  assert.match(code, /readLocalFile\(localRoot, '\.git\/HEAD'\)/, 'the branch comes from .git/HEAD');
+  assert.match(code, /gitStatus\(localRoot\)/, 'the branch and the changed count come from git status');
+  assert.match(code, /className="code-project-changed"/);
   assert.match(code, /tasksLib\.customFile\(label, template\)/);
   assert.match(code, /freeai4u:open-project/);
   const decks = read('desktop', 'src', 'components', 'TaskDecks.tsx');

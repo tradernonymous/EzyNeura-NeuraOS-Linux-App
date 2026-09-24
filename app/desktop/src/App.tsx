@@ -19,7 +19,7 @@ import { useRecipeScheduler, useEvalScheduler } from './schedulers';
 import LocalTree from './components/LocalTree';
 import LocalTerminal from './components/LocalTerminal';
 import './shell.js';
-import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, projectHome, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
+import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, projectHome, gitClone, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
 import { askAboutScreen, readScreenHotkey } from './desktopControl';
 import { readEnabled as voiceTypeEnabled, readHotkey as voiceTypeHotkey } from './voiceType';
 import { QUICK_HANDOFF_KEY } from './screens/QuickAsk';
@@ -840,6 +840,7 @@ export default function App() {
         known={shellLib.knownProjects(chats.readStore(), recent, home)}
         onPick={startChat}
         onBrowse={browseForChat}
+        onClone={hasShell() ? (url) => gitClone(url, home).then((folder) => { pushToast('ok', `Cloned into ${folder}`); return folder; }) : undefined}
         onClose={() => setPickerOpen(false)}
       />
       <CommandPalette
