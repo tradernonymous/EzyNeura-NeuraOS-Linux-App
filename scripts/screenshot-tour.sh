@@ -34,7 +34,9 @@ kill -0 "$APP_PID" 2>/dev/null || { echo "The app exited. Its log:" >&2; tail -n
 # With NEURAOS_ENGINE_URL set, point the app at that engine first (the
 # connect screen's field, then Test + save), so the spaces are reachable.
 if [ -n "${NEURAOS_ENGINE_URL:-}" ]; then
-  xdotool mousemove 600 418 click 1; sleep 0.4
+  # The address field of the connect card (the card is centred in the
+  # main column, to the right of the sidebar).
+  xdotool mousemove 700 438 click 1; sleep 0.4
   xdotool key --clearmodifiers ctrl+a; sleep 0.2
   xdotool type --delay 8 -- "$NEURAOS_ENGINE_URL"; sleep 0.3
   # Tab lands on "Test + save"; Return presses it.

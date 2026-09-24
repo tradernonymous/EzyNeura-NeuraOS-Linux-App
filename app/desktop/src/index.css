@@ -6251,7 +6251,10 @@ input, textarea, select { border-radius: 8px; }
 }
 @keyframes thread-pulse { 50% { box-shadow: 0 0 0 5px transparent; } }
 .sidebar .thread-actions { top: 4px; right: 4px; }
-.sidebar .thread-preview { right: auto; left: 100%; margin-right: 0; margin-left: 8px; }
+/* The hover card sits under its row, inside the column, so the list never
+   grows a sideways scrollbar for a card that is hidden anyway. */
+.sidebar .thread-preview { right: 8px; left: 8px; top: calc(100% + 2px); width: auto; margin: 0; }
+.sidebar-groups { overflow-x: hidden; }
 .sidebar-empty { padding: 20px 12px; font-size: 12px; line-height: 1.5; }
 
 .sidebar-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 10px 6px; border-top: 1px solid var(--edge); }
