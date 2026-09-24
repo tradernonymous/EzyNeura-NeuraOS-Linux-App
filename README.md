@@ -59,6 +59,8 @@ An installed copy checks the [latest release](https://github.com/tradernonymous/
 
 **The engine on your machine.** Settings → Engine downloads Node 24 (sha256-checked from nodejs.org) if Mint's is too old, runs the bundled engine on `127.0.0.1`, and can keep it running as a systemd user service after the window closes — Firefox at `127.0.0.1:47831` then shows the same NeuraOS, and your phone can reach it on the LAN.
 
+**NeuraOS as an MCP server.** `freeai4u-desktop --mcp` lets Claude Code, Gemini CLI, Codex or any MCP client ask the models running on this machine (`neuraos_chat`), draw with the image server, list what the PC has, and open a folder in NeuraOS. Settings → Connectors copies the `claude mcp add` line.
+
 **Coding agents behind NeuraOS's approvals.** Code → Agents (ACP) runs Gemini CLI, Claude Code, Codex or any [Agent Client Protocol](https://agentclientprotocol.com) agent inside the open folder. Every file it wants to write and every permission it asks for is a card — and a desktop notification with **Allow / Reject** buttons, so you can keep working in another window.
 
 **Linux-native.**

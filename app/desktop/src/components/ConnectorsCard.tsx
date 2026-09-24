@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { pushToast } from './Toasts';
 import { api } from '../api';
-import { authWindowOpen, hasShell, mcpStdioList, mcpStdioStop, onConnectFinished } from '../bridge';
+import { authWindowOpen, hasShell, mcpServerCommand, mcpStdioList, mcpStdioStop, onConnectFinished, type McpServerCommand } from '../bridge';
 import { startStdio, stdioId } from '../tool-run';
 import HfSignIn from './HfSignIn';
 import { examplePathPlaceholder } from '../platform';
@@ -313,6 +313,8 @@ export default function ConnectorsCard() {
         <p className="settings-hint">For the Hugging Face models in Chat (the Inference Providers router) and gated downloads.</p>
         <HfSignIn showClientId />
 
+        <NeuraOsAsServer />
+
         <h3 className="local-heading">MCP servers</h3>
         {servers.length > 0 && (
           <div className="local-catalogue">
@@ -429,5 +431,45 @@ export default function ConnectorsCard() {
         </p>
       </div>
     </section>
+  );
+}
+
+/** A shell-quoted command line for a snippet (single quotes, POSIX). */
+export function shellLine(command: string, args: string[]): string {
+  const quote = (part: string) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(part) ? part : `'${part.replace(/'/g, `'\\''`)}'`);
+  return [command, ...args].map(quote).join(' ');
+}
+
+/**
+ * NeuraOS as an MCP server (docs/MASTER_PLAN.md L6): the command other
+ * agents add, with the three snippets people actually paste.
+ */
+function NeuraOsAsServer() {
+  const [cmd, setCmd] = useState<McpServerCommand | null>(null);
+  useEffect(() => {
+    if (!hasShell()) return;
+    mcpServerCommand().then(setCmd).catch(() => setCmd(null));
+  }, []);
+  if (!cmd?.available) return null;
+  const line = shellLine(cmd.command, cmd.args);
+  const json = JSON.stringify({ mcpServers: { neuraos: { command: cmd.command, args: cmd.args } } }, null, 2);
+  const copy = (text: string, what: string) => {
+    navigator.clipboard?.writeText(text).then(() => pushToast('ok', `${what} copied.`)).catch(() => pushToast('error', 'Could not copy.'));
+  };
+  return (
+    <>
+      <h3 className="local-heading">Use NeuraOS from other agents</h3>
+      <p className="settings-hint">
+        Claude Code, Gemini CLI, Codex or any MCP client can ask the models running here (neuraos_chat), draw with the image
+        server (neuraos_image), list what this machine has (neuraos_status, neuraos_models) and open a folder in NeuraOS
+        (neuraos_open). Free and private: nothing leaves this PC.
+      </p>
+      <div className="setting-row">
+        <button type="button" onClick={() => copy(`claude mcp add neuraos -- ${line}`, 'The Claude Code command')}>Copy for Claude Code</button>
+        <button type="button" onClick={() => copy(`gemini mcp add neuraos ${line}`, 'The Gemini CLI command')}>Copy for Gemini CLI</button>
+        <button type="button" onClick={() => copy(json, 'The mcpServers JSON')}>Copy config JSON</button>
+      </div>
+      <p className="settings-hint">Command: <span className="mono">{line}</span></p>
+    </>
   );
 }

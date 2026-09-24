@@ -1131,6 +1131,19 @@ export function onScreenAsk(handler: () => void): Promise<() => void> {
   return subscribe<unknown>('screen-ask', () => handler());
 }
 
+/** How another agent runs NeuraOS as an MCP server (`--mcp`, mcp_server.rs). */
+export interface McpServerCommand {
+  available: boolean;
+  command: string;
+  args: string[];
+  error?: string;
+}
+
+export async function mcpServerCommand(): Promise<McpServerCommand> {
+  if (!hasShell()) return { available: false, command: '', args: [] };
+  return call<McpServerCommand>('mcp_server_command');
+}
+
 /** Wayland: bind the global chords through the GlobalShortcuts portal. */
 export async function portalShortcutsBind(combos: { quick: string; selection: string; voice: string; screen: string }): Promise<{ bound: number; via: string }> {
   if (!hasShell()) return { bound: 0, via: 'none' };

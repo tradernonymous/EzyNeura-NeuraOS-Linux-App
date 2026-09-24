@@ -710,3 +710,23 @@ mod control_tests {
         assert_eq!(png_size(b"not a png"), None);
     }
 }
+
+// ---- NeuraOS as an MCP server -----------------------------------------------
+
+/// The command another agent runs to use NeuraOS as an MCP server
+/// (mcp_server.rs): this app's own launcher with `--mcp`. Off Linux the
+/// mode does not exist yet.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn mcp_server_command() -> serde_json::Value {
+    match launcher() {
+        Ok(command) => serde_json::json!({ "available": true, "command": command, "args": ["--mcp"] }),
+        Err(e) => serde_json::json!({ "available": false, "command": "", "args": [], "error": e }),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn mcp_server_command() -> serde_json::Value {
+    serde_json::json!({ "available": false, "command": "", "args": [] })
+}
