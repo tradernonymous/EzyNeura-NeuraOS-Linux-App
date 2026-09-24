@@ -364,6 +364,7 @@ fn main() {
             git::local_git_status,
             git::local_git_diff,
             git::local_git_clone,
+            git::local_git_commit,
             local::local_list_dir,
             local::local_read_file,
             local::local_write_file,

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { pushToast } from './Toasts';
 import SelectPill from './SelectPill';
+import '../flux-setup.js';
+
+const fluxSetup: typeof import('../flux-setup.js') = (globalThis as any).FreeAI4UFluxSetup;
 import {
   call,
   hasShell,
@@ -73,6 +76,8 @@ function progressLabel(p: Progress): string {
 }
 
 export interface HubDownloaderProps {
+  /** A repo to look up as soon as it is set (the setup card's "Get" button). */
+  autoLookup?: string;
   kind: 'image' | 'voice';
   placeholder: string;
   /** Repos worth one click: shown as chips that fill the box and look up. */
@@ -95,7 +100,7 @@ export interface HubDownloaderProps {
  * this takes back every file of the set that this run fetched, because half
  * a set is only disk used.
  */
-export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, disabled }: HubDownloaderProps) {
+export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, disabled, autoLookup }: HubDownloaderProps) {
   const [query, setQuery] = useState('');
   const [looking, setLooking] = useState(false);
   const [offer, setOffer] = useState<{ repo: string; rows: HubOfferRow[]; gated: boolean; license: string } | null>(null);
@@ -112,7 +117,15 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
     onLocalDownload((event) => {
       setProgress(setRef.current ? localModels.setProgress(setRef.current, event) : event);
     }, kind).then((unsubscribe) => { stop = unsubscribe; });
-    return () => stop();
+    // The setup card's "Get FLUX.2" fills the box and looks the set up at once.
+  useEffect(() => {
+    if (!autoLookup) return;
+    setQuery(autoLookup);
+    lookUp(autoLookup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLookup]);
+
+  return () => stop();
   }, [kind]);
 
   const lookUp = (text: string) => {
@@ -372,6 +385,16 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
 
   const models = facts?.models || [];
   const running = status?.state === 'ready' || status?.state === 'starting';
+  // The three steps to FLUX.2 on this PC, each with the one click it needs.
+  const [wantRepo, setWantRepo] = useState('');
+  const setupSteps = fluxSetup.steps(facts, status);
+  const setupNext = fluxSetup.next(setupSteps);
+  const doStep = (step: import('../flux-setup.js').SetupStep) => {
+    if (step.action === 'pick-server') pickBinary();
+    else if (step.action === 'get-model') setWantRepo(fluxSetup.DEFAULT_REPO);
+    else if (step.action === 'pick-flux' && step.pick) chooseModel(step.pick);
+    else if (step.action === 'start') void guard('start', onStart);
+  };
 
   if (!shell) {
     return (
@@ -390,6 +413,24 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
         On this PC {status?.state === 'ready' ? '· running' : facts?.found && facts?.model ? '· ready to start' : '· not set up'}
       </summary>
       <div className="providers-note-body">
+        {/* The guided path: three steps, the state of each, one button. */}
+        <ol className="flux-steps" aria-label="FLUX.2 on this PC">
+          {setupSteps.map((step, i) => (
+            <li key={step.id} className={`flux-step ${step.done ? 'is-done' : setupNext && setupNext.id === step.id ? 'is-next' : ''}`}>
+              <span className="flux-step-no" aria-hidden="true">{step.done ? '✓' : i + 1}</span>
+              <span className="flux-step-body">
+                <span className="flux-step-label">{step.label}</span>
+                <span className="flux-step-detail">{step.detail}</span>
+              </span>
+              {!step.done && step.action && (
+                <button type="button" className="raised" disabled={!!busy || drawing} onClick={() => doStep(step)}>
+                  {step.action === 'pick-server' ? 'Choose sd-server…' : step.action === 'get-model' ? 'Get FLUX.2 [klein] 4B' : step.action === 'pick-flux' ? 'Use it' : 'Start'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ol>
+        {!setupNext && <p className="settings-hint flux-ready">FLUX.2 is ready: pick Image or Edit image above and describe the picture.</p>}
         <p className="settings-hint">
           stable-diffusion.cpp draws here: no account, no network. You supply the <span className="mono">sd-server</span>{' '}
           build and the model file; the app starts it on 127.0.0.1 when you draw and stops it when you quit.
@@ -436,6 +477,7 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
           suggestions={FLUX2_SUGGESTIONS}
           disabled={drawing}
           onDownloaded={downloaded}
+          autoLookup={wantRepo}
         />
 
         <div className="dictation-row">

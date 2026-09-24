@@ -10,6 +10,11 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import emblem from '../../../assets/branding/neuraos-emblem.svg';
 import { NAV_ITEMS, SUB_VIEWS, defaultViewOf, destinationOf, tabsOf, type NavId, type ViewId } from '../Sidebar';
+import '../shell.js';
+
+const shellLib: typeof import('../shell.js') = (globalThis as any).FreeAI4UShell;
+/** How many recent folders the Code menu pins. */
+export const RECENT_IN_MENU = 5;
 
 /** How long the pointer rests on a destination before its menu opens. */
 export const HOVER_DELAY_MS = 150;
@@ -62,6 +67,14 @@ export default function TopNav({ active, onNavigate, onOpenPalette, onOpenSettin
 
   const current = destinationOf(active);
   const go = (view: ViewId) => { setOpen(null); onNavigate(view); };
+  // The Code menu pins the recent folders (shell.js remembers them): one
+  // hover switches the working folder and opens the agent there.
+  const recent = open === 'code' ? shellLib.readRecent().slice(0, RECENT_IN_MENU) : [];
+  const openProject = (path: string) => {
+    setOpen(null);
+    window.dispatchEvent(new CustomEvent('freeai4u:open-project', { detail: { project: path } }));
+    onNavigate('code');
+  };
 
   return (
     <nav className="topnav" ref={barRef} aria-label="Main">
@@ -128,6 +141,17 @@ export default function TopNav({ active, onNavigate, onOpenPalette, onOpenSettin
                       <span className="topnav-menu-hint">{t.hint}</span>
                     </button>
                   ))}
+                  {item.id === 'code' && recent.length > 0 && (
+                    <>
+                      <div className="topnav-menu-head">Recent projects</div>
+                      {recent.map((p) => (
+                        <button key={p} type="button" role="menuitem" className="topnav-menu-row topnav-menu-project" onClick={() => openProject(p)} title={p}>
+                          <span className="topnav-menu-label"><Icon name="folder" size={12} /> {shellLib.projectName(p)}</span>
+                          <span className="topnav-menu-hint">{p}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </li>
