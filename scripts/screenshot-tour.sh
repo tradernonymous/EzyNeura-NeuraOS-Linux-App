@@ -57,7 +57,15 @@ shot() { # name [x y]...  -- clicks, then a capture
 # The rail's icons, top to bottom (Sidebar.tsx NAV_ITEMS), at the window's
 # default 1360x900 placed at the top-left of the virtual screen.
 RAIL_X=20
-shot chat     $RAIL_X 117
+# Chat, then "New chat" on a fresh profile (the button sits where the
+# empty state's centre is; on a profile with chats the click lands on
+# nothing).
+xdotool mousemove $RAIL_X 117 click 1; sleep 1
+xdotool mousemove 679 525 click 1; sleep 1.5
+# A chip may have taken that click once the new chat rendered: empty the composer.
+xdotool mousemove 679 766 click 1; sleep 0.3
+xdotool key --clearmodifiers ctrl+a BackSpace; sleep 0.3
+shot chat
 # A first message, so the chat is not an empty state: "New chat", the
 # composer, Return, and time for an answer from the engine's free router.
 if [ -n "${NEURAOS_TOUR_CHAT:-}" ]; then
@@ -76,3 +84,7 @@ shot activity $RAIL_X 270
 shot settings $RAIL_X 777
 xdotool key --clearmodifiers ctrl+k; sleep 2
 scrot -o "$OUT/palette.png"; echo "wrote $OUT/palette.png"
+xdotool key --clearmodifiers Escape; sleep 1
+# The light theme: the rail's footer toggle, Chat, and back.
+shot chat-light $RAIL_X 853 $RAIL_X 117
+xdotool mousemove $RAIL_X 853 click 1; sleep 1

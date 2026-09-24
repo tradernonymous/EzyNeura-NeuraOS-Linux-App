@@ -280,6 +280,60 @@ binary still starts under Xvfb with no panic. Not verified: any of it on a
 real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
 picking the actions up, the tray dot in the XApp applet).
 
+## Neural: the AI-era pass on the look (L2, second round)
+
+The first Mint screenshots read as a green terminal skin: the whole ramp
+(`--bg-0` #050a06 … `--bg-3` #172818, text #e8f0e3) carried upstream's old
+green accent even after the accent itself became Neural Violet. Researched
+before touching anything (September 2026): Linear's near-black canvas with
+graphite surfaces stacked by translucent white hairlines rather than
+shadows, Inter at custom weights and a restrained indigo family; Raycast's
+absolute-black canvas, Inter everywhere with OpenType alternates and a
+touch of positive tracking, tight spacing and precise radii; the 2026
+consensus on AI interfaces -- dark-first, translucent layers for depth
+without extra colour, glass only for overlays and navigation, motion that
+explains a state change and nothing that moves on its own; and the agent
+UX catalogues' tool cards with status pills and approval gates streamed as
+they happen (already the app's shape). The person asked for futuristic and
+AI-like with few animations, which is the same brief.
+
+What changed (`index.css`, the tokens in place and one "Neural" layer at
+the end that wins):
+
+- **Palette**: graphite with a whisper of violet -- canvas #050509, `--bg-0`
+  #07070c to `--bg-3` #1b1b26, hairline #252533, text #ededf5 / #a7aabd /
+  #80849a; the light theme the same family (#f6f6fa … #d9d9e5). Every text
+  token re-measured: ≥ 4.6:1 on `--bg-0`..`--bg-2` in both themes (the
+  contrast sweep in `desktop-look.test.js` still passes at every accent
+  hue). A new `--ai` (#38d6ff, the Android app's activity cyan) is the one
+  colour that means "the model is doing something": the assistant's label
+  and its dot, the typing mark, the tray dot.
+- **Type**: Inter with `cv11`, `ss01`, `calt`, `kern` and 0.1px tracking.
+- **Messages**: the assistant speaks without a box; the person's words keep
+  a bubble tinted with the accent, 16px corners.
+- **Composer**: one floating glass surface with a soft accent ring on
+  focus; the send button and primary buttons carry the app's one gradient.
+- **Cards** lit by a hairline along the top (`--glass-light`), not a
+  heavier border; the rail's active row is an accent bar with a fade; the
+  palette is a glass sheet with 14px corners; buttons and inputs settle on
+  8px, chips on pills.
+- **Empty states**: a lit 64px tile, a real title, and, in Chat, four
+  prompt chips that drop into the composer.
+- **Motion**: the 72-second ambient drift is gone. Hover, focus and the
+  orb still move; nothing else does.
+
+Verified here: `node --test` (the hue and contrast sweep), `tsc`,
+`npm run build`, and the screenshot tour on the debug build (the screens
+in `docs/assets/screens/` are the new ones). Not verified: on Mint
+hardware, the light theme in daylight, a long conversation with tool
+cards.
+
+Sources read: groovyweb.co "12 UI/UX Design Trends for AI Apps (2026)",
+designmd.cc/benchmarks/linear, open-design.ai (Raycast design system),
+fuselabcreative.com "Agent UX: UI Design for AI Agents in 2026",
+zylos.ai "Agentic UX: Frontend Design Patterns", timgraf.com on
+glassmorphism in 2026, pixelmatters.com "7 UI design trends 2026".
+
 ## The README, and a screenshot tour
 
 The README is now the front door: an SVG banner (`docs/assets/banner.svg`,

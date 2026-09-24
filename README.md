@@ -99,7 +99,7 @@ The zip holds `deb/` and `appimage/`, and the file names contain a space. The ru
 </tr>
 </table>
 
-<sub>Captured on the CI build under a virtual display (`scripts/screenshot-tour.sh`), dark theme, no model connected — so the screens are honest empty states, not a demo.</sub>
+<sub>Captured on the build under a virtual display (`scripts/screenshot-tour.sh`), no model connected — so the screens are honest empty states, not a demo. The same in daylight: <a href="docs/assets/screens/chat-light.png">light theme</a>.</sub>
 
 ## Five spaces, one orb
 
