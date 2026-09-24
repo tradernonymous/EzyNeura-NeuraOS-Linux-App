@@ -60,7 +60,8 @@ export declare const QUALITY: string;
 export declare const SIZE_PRESETS: ImageSizePreset[];
 export declare const BROWSER_ID: string;
 export declare const LOCAL_ID: string;
-export declare const LOCAL_STEPS: number;
+/** The steps a request carries: the caller's number, or null so the shell picks the model's own. */
+export declare function localSteps(value: unknown): number | null;
 export declare const LOCAL_STEP_PX: number;
 export declare const LOCAL_MAX_PX: number;
 
@@ -73,7 +74,7 @@ export declare function localRequest(request: {
   size: string;
   negativePrompt?: string;
   steps?: number;
-}): { prompt: string; negativePrompt: string; width: number; height: number; steps: number };
+}): { prompt: string; negativePrompt: string; width: number; height: number; steps: number | null };
 export declare function localJobView(job: any): LocalJobView;
 export declare function localElapsed(ms: number): string;
 export declare function localAdvice(message: string): string;
@@ -132,7 +133,7 @@ export type ImageEditPlan =
       negativePrompt: string;
       width: number;
       height: number;
-      steps: number;
+      steps: number | null;
       initImage: string;
       strength: number;
     };

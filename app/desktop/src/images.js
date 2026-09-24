@@ -50,9 +50,13 @@
   // here rather than refused by the server after the user pressed Draw.
   var LOCAL_STEP_PX = 64;
   var LOCAL_MAX_PX = 2048;
-  // Enough steps for a recognisable picture without a ten-minute wait. The
-  // number is on screen: nothing here invents a "quality" for somebody.
-  var LOCAL_STEPS = 20;
+  // Steps are the model's business, not this file's: the shell (sd.rs
+  // family_of) knows that a FLUX.2 [klein] is a four-step model and that a
+  // Stable Diffusion checkpoint wants sd-server's twenty, so a request
+  // carries steps only when the caller asked for a number, and null otherwise.
+  function localSteps(value) {
+    return Number(value) > 0 ? Math.round(Number(value)) : null;
+  }
 
   function preset(id) {
     for (var i = 0; i < SIZE_PRESETS.length; i += 1) {
@@ -198,7 +202,7 @@
       negativePrompt: String(req.negativePrompt || '').trim(),
       width: shape.width,
       height: shape.height,
-      steps: Number(req.steps) > 0 ? Math.round(Number(req.steps)) : LOCAL_STEPS,
+      steps: localSteps(req.steps),
     };
   }
 
@@ -463,7 +467,7 @@
         negativePrompt: String(req.negativePrompt || '').trim(),
         width: width,
         height: height,
-        steps: Number(req.steps) > 0 ? Math.round(Number(req.steps)) : LOCAL_STEPS,
+        steps: localSteps(req.steps),
         initImage: source,
         strength: mask ? LOCAL_MASK_STRENGTH : LOCAL_EDIT_STRENGTH,
       };
@@ -550,7 +554,7 @@
     SIZE_PRESETS: SIZE_PRESETS,
     BROWSER_ID: BROWSER_ID,
     LOCAL_ID: LOCAL_ID,
-    LOCAL_STEPS: LOCAL_STEPS,
+    localSteps: localSteps,
     LOCAL_STEP_PX: LOCAL_STEP_PX,
     LOCAL_MAX_PX: LOCAL_MAX_PX,
     localRow: localRow,
