@@ -19,6 +19,41 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 2: Chat in the Freebuff anatomy
+
+- **One centred column.** The thread and the composer share
+  `--workspace-max`; the composer is a raised card, not a bar.
+- **Your message is a card with a rewind** (`turn.rewindTo`): the thread
+  is cut before it and its words come back to the box, minus the
+  attachment text.
+- **"Worked N steps ›"** (`components/StepsFold.tsx`, `turn.stepsOf`): a
+  reply's tool calls fold into one line with a badge per step (DONE,
+  RUNNING, NEEDS OK, FAILED, DECLINED); a turn still running or asking
+  starts open, a finished one folds. `Ctrl+T` still opens every card.
+- **A stopped turn says so** (`Msg.stopped`, set when Stop cuts a reply
+  with words in it) with its own Retry.
+- **Chips under the last answer** (`turn.chips`): Continue, Shorter,
+  Explain, and Turn into code when the reply had no code, Review changes
+  and Run tests when the chat changed files. A chip fills the box; it does
+  not send, so a free tier is never spent by a slip.
+- **A Goal row** (`ChatSession.goal`, `turn.goalPrompt`): pinned above the
+  box and sent as a system line with every turn.
+- **One bar under the box:** model · Reasoning (click to cycle) · Skills
+  (`/`) · Goal · approvals · tool chips on the left; attach, mic and a
+  round send on the right. The hint line moved into the send button's
+  title.
+- **The output panel** (`components/ChatOutput.tsx`, `turn.outputOf`) sits
+  at the right only when a turn produced something: Preview (the newest
+  picture) and Changes (every file a reply wrote or edited, once, the
+  latest touch last, `W`/`E`, opens the Local folder). It opens by itself
+  the first time and remembers being closed per chat; an "Output" button
+  brings it back.
+
+Verified here: `tsc`, `vite build`, `node --test` (68), and headless
+Chromium screenshots of the built bundle against a mock engine with a
+seeded chat (fold, stop card, chips, goal, bar, Changes panel all drawn).
+Not verified: a live turn on Mint hardware.
+
 ## UI plan, phase 1: the app frame
 
 The approved UI/UX plan (six phases, one PR each). Phase 1 is the frame every

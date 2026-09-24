@@ -6295,3 +6295,159 @@ input, textarea, select { border-radius: 8px; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .deck { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-2); }
 }
+
+/* =========================================================================
+   Chat (UI plan, phase 2): one centred column, the reply's steps folded into
+   a line, chips under the last answer, a goal row, one bar under the box, and
+   an output panel that exists only when a turn produced something.
+   ========================================================================= */
+
+.screen.chat { flex-direction: row; }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chat-messages { padding: 20px 24px 12px; gap: 14px; }
+.message { max-width: var(--workspace-max); position: relative; }
+.composer { border-top: 0; background: transparent; padding: 4px 24px 14px; }
+.composer > * { max-width: var(--workspace-max); margin-inline: auto; }
+.composer-box {
+  background: var(--riser);
+  box-shadow: inset 0 1px 0 var(--chrome-top), var(--shadow-1);
+  border-radius: 14px;
+}
+
+/* Your message: a bordered card with the rewind at its corner. */
+.message.user .message-content { border-radius: 12px; }
+.message-rewind {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--riser);
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.message.user:hover .message-rewind, .message-rewind:focus-visible { opacity: 1; }
+.message-rewind:hover:not(:disabled) { color: var(--text-1); }
+
+/* Worked N steps ›: monospace rows, a badge each, folded once done. */
+.steps-fold { margin-top: 8px; border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-2); overflow: hidden; }
+.steps-fold.is-live { border-color: var(--accent-mid); }
+.steps-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.steps-summary:hover { color: var(--text-1); background: var(--hover); }
+.steps-label { flex: 1; }
+.steps-chevron { color: var(--text-3); font-size: 12px; }
+.step-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--bg-3);
+  color: var(--text-2);
+}
+.badge-asking { background: var(--accent-dim); color: var(--accent); }
+.badge-error { background: rgba(229, 72, 77, 0.14); color: var(--err); }
+.steps-body { padding: 0 8px 8px; }
+.steps-body .tool-cards { margin-top: 0; }
+.steps-body .tool-card { border-radius: 6px; }
+.steps-body .tool-card-head { font-family: var(--font-mono); font-size: 11.5px; }
+.steps-body .tool-card-status { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* A stopped turn: says so, offers Retry. */
+.stopped-card { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 12px; border: 1px dashed var(--edge); border-radius: 10px; font-size: 12px; color: var(--text-3); }
+.stopped-card .raised { padding: 4px 9px; }
+
+/* Chips under the last answer. */
+.reply-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reply-chip {
+  padding: 5px 11px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--riser);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--chrome-top);
+}
+.reply-chip:hover { color: var(--text-1); border-color: var(--accent-mid); background: var(--accent-dim); }
+
+/* The goal row: pinned above the box, sent with every message. */
+.goal-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-2); }
+.goal-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.goal-row input { flex: 1; border: 0; background: transparent; color: var(--text-1); font: inherit; font-size: 12.5px; outline: none; }
+.goal-row button { display: inline-flex; padding: 2px; border: 0; background: transparent; color: var(--text-3); cursor: pointer; }
+.goal-row button:hover { color: var(--text-1); }
+
+/* One bar under the box. */
+.composer-foot { justify-content: space-between; gap: 10px; }
+.composer-foot-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.composer-foot-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.composer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.composer-pill:hover { color: var(--text-1); background: var(--hover); }
+.composer-pill.is-set, .composer-pill[aria-pressed="true"] { color: var(--accent); border-color: var(--accent-mid); }
+.composer-pill kbd { font-family: var(--font-mono); font-size: 10px; padding: 0 4px; border: 1px solid var(--edge); border-radius: 4px; }
+.send-btn { width: 34px; height: 34px; border-radius: 50%; }
+.send-btn.is-stop { border-radius: 50%; }
+
+/* The output panel: Preview and Changes, at the right, only when there is something. */
+.chat-output { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid var(--edge); background: var(--riser); box-shadow: var(--riser-edge); }
+.chat-output-head { display: flex; align-items: center; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--edge); }
+.chat-output-tab { padding: 6px 10px 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-3); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.chat-output-tab:hover { color: var(--text-1); }
+.chat-output-tab.active { color: var(--text-1); border-bottom-color: var(--gilt); }
+.chat-output-count { padding: 0 6px; border-radius: 999px; background: var(--bg-3); font-size: 10px; }
+.chat-output-close { margin-left: auto; margin-bottom: 6px; display: inline-flex; padding: 4px; border: 0; background: transparent; color: var(--text-3); cursor: pointer; border-radius: 6px; }
+.chat-output-close:hover { color: var(--text-1); background: var(--hover); }
+.chat-output-body { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
+.chat-output-preview { display: flex; flex-direction: column; gap: 8px; }
+.chat-output-preview img { width: 100%; border-radius: 8px; border: 1px solid var(--edge); }
+.chat-output-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.chat-output-changes button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.chat-output-changes button:hover { color: var(--text-1); background: var(--hover); }
+.change-kind { width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+.change-write { background: rgba(74, 222, 128, 0.16); color: var(--ok); }
+.change-edit { background: var(--accent-dim); color: var(--accent); }
+.change-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; }
+.change-turns { font-size: 10px; color: var(--text-3); }
+.chat-output-toggle { position: absolute; top: 10px; right: 12px; z-index: 5; }
+.screen.chat { position: relative; }
+
+@media (max-width: 1100px) {
+  .chat-output { width: 260px; }
+}
