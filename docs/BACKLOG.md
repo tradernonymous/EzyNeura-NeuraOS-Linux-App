@@ -280,6 +280,27 @@ binary still starts under Xvfb with no panic. Not verified: any of it on a
 real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
 picking the actions up, the tray dot in the XApp applet).
 
+## The README, and a screenshot tour
+
+The README is now the front door: an SVG banner (`docs/assets/banner.svg`,
+the emblem's violet-to-cyan, a slow glow and one activity line; GitHub
+plays SMIL in an `<img>`), badges, a three-column install table (`.deb`,
+AppImage, the apt repository), six real screens, the five spaces, the
+Linux features in two columns, and a mermaid diagram of what talks to
+what. `tradernonymous/EzyAi` was never reachable from this session (the
+GitHub connector has no access to it), so the graphics are this
+repository's own.
+
+`scripts/screenshot-tour.sh` makes the screens: the built app under Xvfb
+with a session bus, optionally pointed at an engine (`NEURAOS_ENGINE_URL`;
+the bundled engine on Node 24 with no accounts configured needs no
+login), the rail's icons clicked with xdotool, the pointer parked off the
+rail, one PNG per space plus Settings and the palette. The screens in
+`docs/assets/screens/` came from the debug build at 1360×900 with the
+engine on `localhost:47831` and no model picked, so the empty states are
+what a first start shows. A chat message was tried and not kept: with no
+model picked the engine answers "model and messages are required".
+
 ## L6: NeuraOS as an MCP server
 
 `freeai4u-desktop --mcp` (`mcp_server.rs`, Linux only) speaks MCP
