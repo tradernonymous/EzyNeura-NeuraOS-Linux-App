@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import DiffView from './DiffView';
-import { gitDiff, gitStatus, hasShell, type GitStatus } from '../bridge';
+import { gitCommit, gitDiff, gitStatus, hasShell, type GitStatus } from '../bridge';
+import { pushToast } from './Toasts';
 import '../turn.js';
 
 const turn: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
@@ -34,6 +35,30 @@ export default function ChatOutput({ messages, root, tab, onTab, onClose, onOpen
   const [diff, setDiff] = useState('');
   const [busy, setBusy] = useState(false);
   const canGit = !!root && hasShell();
+  // Commit from here: the files ticked (all by default), a message, one
+  // button. Nothing is pushed; the terminal is still there for that.
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  const [message, setMessage] = useState('');
+  const [committing, setCommitting] = useState(false);
+  const isTicked = (path: string) => ticked[path] !== false;
+  const commit = async () => {
+    if (!git || !git.repo || committing) return;
+    const paths = git.changes.filter((c) => isTicked(c.path)).map((c) => c.path);
+    if (!paths.length) { pushToast('warn', 'Tick at least one file.'); return; }
+    setCommitting(true);
+    try {
+      const done = await gitCommit(root, paths, message);
+      pushToast('ok', `Committed ${done.files} file${done.files === 1 ? '' : 's'} as ${done.sha}.`);
+      setMessage('');
+      setTicked({});
+      setPicked('');
+      refresh();
+    } catch (e) {
+      pushToast('error', (e as Error).message || String(e));
+    } finally {
+      setCommitting(false);
+    }
+  };
   // Re-read git whenever a turn lands (the message count moves) or on Refresh.
   const refresh = useCallback(() => {
     if (!canGit) { setGit(null); return; }
@@ -80,7 +105,8 @@ export default function ChatOutput({ messages, root, tab, onTab, onClose, onOpen
             </div>
             <ul className="chat-output-changes">
               {gitRows.map((c) => (
-                <li key={c.path}>
+                <li key={c.path} className="change-row">
+                  <input type="checkbox" checked={isTicked(c.path)} onChange={(e) => setTicked((t) => ({ ...t, [c.path]: e.target.checked }))} aria-label={`Include ${c.path} in the commit`} />
                   <button type="button" className={picked === c.path ? 'active' : ''} onClick={() => setPicked((p) => (p === c.path ? '' : c.path))} title={`${STATUS_WORD[c.status] || c.status}: ${c.path} — click for the diff`}>
                     <span className={`change-kind change-${c.status === '?' || c.status === 'A' ? 'write' : 'edit'}`}>{c.status}</span>
                     <span className="change-path">{c.path}</span>
@@ -88,6 +114,18 @@ export default function ChatOutput({ messages, root, tab, onTab, onClose, onOpen
                 </li>
               ))}
             </ul>
+            <form className="chat-output-commit" onSubmit={(e) => { e.preventDefault(); void commit(); }}>
+              <input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Commit message"
+                aria-label="Commit message"
+                disabled={committing}
+              />
+              <button type="submit" className="raised" disabled={committing || !message.trim() || !gitRows.some((c) => isTicked(c.path))} title="git add the ticked files, then git commit. Nothing is pushed.">
+                {committing ? 'Committing…' : `Commit ${gitRows.filter((c) => isTicked(c.path)).length}`}
+              </button>
+            </form>
             {picked && (
               <div className="chat-output-diff">
                 <div className="chat-output-diff-head">

@@ -227,6 +227,84 @@ pub fn local_git_clone(url: String, parent: String) -> Result<String, String> {
     Ok(dest.display().to_string())
 }
 
+
+/// Which paths a commit may take: relative, inside the folder, never an
+/// option. Empty means "everything that changed".
+pub fn check_commit_paths(paths: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for p in paths {
+        let t = p.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.starts_with('-') || t.contains('\0') {
+            return Err(format!("Refused: '{}' is not a file path.", t));
+        }
+        out.push(t.to_string());
+    }
+    Ok(out)
+}
+
+/// A commit message: trimmed, at most 2000 characters, never empty.
+pub fn check_commit_message(message: &str) -> Result<String, String> {
+    let m = message.trim();
+    if m.is_empty() {
+        return Err("Write a commit message first.".to_string());
+    }
+    Ok(m.chars().take(2000).collect())
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Committed {
+    pub sha: String,
+    pub files: usize,
+}
+
+/// Stage the given files (or every change) and commit them with the message.
+/// Nothing is pushed. A missing identity is reported in words, with the two
+/// commands that set it, instead of git's own note.
+#[tauri::command(async)]
+pub fn local_git_commit(root: String, paths: Vec<String>, message: String) -> Result<Committed, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    let wanted = check_commit_paths(&paths)?;
+    let text = check_commit_message(&message)?;
+    for p in &wanted {
+        crate::local::resolve_inside(&root_path, p)?;
+    }
+    let mut add: Vec<&str> = vec!["add", "-A", "--"];
+    if wanted.is_empty() {
+        add.push(".");
+    } else {
+        add.extend(wanted.iter().map(String::as_str));
+    }
+    let staged = git(&root_path, &add)?;
+    if !staged.status.success() {
+        return Err(String::from_utf8_lossy(&staged.stderr).lines().last().unwrap_or("git add failed").trim().to_string());
+    }
+    let out = git(&root_path, &["commit", "-m", &text, "--no-verify"])?;
+    if !out.status.success() {
+        let why = String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
+        if why.contains("Please tell me who you are") || why.contains("user.email") {
+            return Err("git does not know who you are yet. In a terminal: git config --global user.name \"Your Name\" and git config --global user.email \"you@example.com\", then commit again.".to_string());
+        }
+        if why.contains("nothing to commit") || why.contains("no changes added") {
+            return Err("Nothing to commit: the files you picked have no changes.".to_string());
+        }
+        let line = why.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("git commit failed");
+        return Err(line.trim().to_string());
+    }
+    let sha = git(&root_path, &["rev-parse", "--short", "HEAD"])
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let count = git(&root_path, &["show", "--stat", "--format=", "HEAD"])
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().filter(|l| l.contains('|')).count())
+        .unwrap_or(0);
+    Ok(Committed { sha, files: count })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +327,16 @@ mod tests {
         let fresh = parse_status("## No commits yet on main\n?? a\n");
         assert_eq!(fresh.branch, "main");
         assert_eq!(parse_status("").branch, "");
+    }
+
+    #[test]
+    fn commit_paths_and_message_are_checked_before_git_runs() {
+        assert_eq!(check_commit_paths(&["a.ts".into(), " ".into(), "src/b.ts".into()]).unwrap(), vec!["a.ts".to_string(), "src/b.ts".to_string()]);
+        assert!(check_commit_paths(&["--all".into()]).is_err());
+        assert!(check_commit_paths(&[]).unwrap().is_empty());
+        assert!(check_commit_message("   ").is_err());
+        assert_eq!(check_commit_message("  Fix the thing  ").unwrap(), "Fix the thing");
+        assert_eq!(check_commit_message(&"x".repeat(5000)).unwrap().len(), 2000);
     }
 
     #[test]

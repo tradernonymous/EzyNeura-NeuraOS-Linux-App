@@ -155,6 +155,32 @@ Chromium screenshots of the built bundle against a mock engine with a
 seeded chat (fold, stop card, chips, goal, bar, Changes panel all drawn).
 Not verified: a live turn on Mint hardware.
 
+## The next three: FLUX.2 steps, commit from Changes, recent projects
+
+- **FLUX.2 on this PC as three steps** (`flux-setup.js`, top of the "On
+  this PC" card in Create → Image): sd-server chosen, a FLUX.2 model set,
+  the server running. Each step shows its state and the one button it
+  needs: Choose sd-server…, Get FLUX.2 [klein] 4B (fills the Hugging Face
+  box and looks the set up at once), Use it (a FLUX.2 set already on
+  disk), Start. All three done reads "FLUX.2 is ready".
+- **Commit from Chat's Changes panel** (`local_git_commit`): tick the
+  files (all by default), write a message, Commit. `git add -A -- <paths>`
+  then `git commit -m`; nothing is pushed. A missing git identity is
+  explained with the two config commands; paths and the message are
+  checked before git runs (unit-tested). A chat whose folder has
+  uncommitted files shows a "Changes · N" toggle at the top right even
+  before any turn has written a file, so the panel is reachable for a
+  commit of one's own edits.
+- **Recent projects in the Code menu**: the top bar's Code deck lists the
+  last five folders (`shell.js` remembers them); one click sets the
+  working folder and opens the agent there.
+
+Verified here: `cargo test git::` (3), clippy clean, `tsc`, `node --test`
+(91), `vite build`, and the debug build under Xvfb with a dirty git
+repository as the chat's home folder: the toggle, the panel, the diff,
+and a commit of one ticked file (the other left untracked, a toast with
+the short sha, the panel re-read).
+
 ## Git in the shell: clone, the changed count, the diff panel
 
 Three follow-ups to the UI plan (suggestions 2–4 of its report):

@@ -162,6 +162,11 @@ export async function gitDiff(root: string, path?: string): Promise<string> {
   return call<string>('local_git_diff', { root, path: path || null });
 }
 
+/** Stage the paths (or everything) and commit with the message; nothing is pushed. */
+export async function gitCommit(root: string, paths: string[], message: string): Promise<{ sha: string; files: number }> {
+  return call('local_git_commit', { root, paths, message });
+}
+
 /** `git clone <url>` into `<parent>/<repo name>`; returns the new folder. */
 export async function gitClone(url: string, parent: string): Promise<string> {
   return call<string>('local_git_clone', { url, parent });

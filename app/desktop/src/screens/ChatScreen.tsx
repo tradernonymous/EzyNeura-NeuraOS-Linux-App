@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense, type ComponentType } from 'react';
 import { api, imageUrlFrom, streamChat, streamLocalChat, type StreamFrame } from '../api';
-import { byokStream, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile, notifyWithActions, onNotificationAction } from '../bridge';
+import { byokStream, gitStatus, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile, notifyWithActions, onNotificationAction } from '../bridge';
 import { renderMarkdown } from '../markdown';
 import { renderMermaid } from '../diagram';
 import { localSetup, startRecording, transcribeAuto, type Recording } from '../dictate';
@@ -367,6 +367,7 @@ export default function ChatScreen() {
   // turn produces something in this chat, and stays where the person put it.
   const [outputOpen, setOutputOpen] = useState<Record<string, boolean>>({});
   const [outputTab, setOutputTab] = useState<'preview' | 'changes'>('changes');
+  const [gitDirty, setGitDirty] = useState(0);
   const [goalOpen, setGoalOpen] = useState(false);
   const [skillRows, setSkillRows] = useState<SlashCommand[]>([]);
   const [folderFiles, setFolderFiles] = useState<string[]>([]);
@@ -448,6 +449,15 @@ export default function ChatScreen() {
   const stickToBottom = useRef(true);
 
   const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
+  // How many files the chat's folder has changed in git, so the panel can be
+  // opened (and committed from) before any turn has touched a file.
+  useEffect(() => {
+    const root = openFolder();
+    if (!hasShell() || !root || !active) { setGitDirty(0); return; }
+    let live = true;
+    gitStatus(root).then((g) => { if (live) setGitDirty(g.repo ? g.changes.length : 0); }).catch(() => { if (live) setGitDirty(0); });
+    return () => { live = false; };
+  }, [active?.id, active?.messages.length]);
   // The shell works in the chat's folder: the terminal, the folder tree and the
   // local tools follow the chat on screen, the way a Claude Code session does.
   const activeProject = active ? (active.project || '') : '';
@@ -2613,9 +2623,9 @@ _${done.notes.join(' · ')}_` : said,
           onSavePicture={(url) => imageRun.savePicture(url)}
         />
       )}
-      {!(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && turnLib.outputOf(active.messages).any && (
+      {!(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && (turnLib.outputOf(active.messages).any || gitDirty > 0) && (
         <button type="button" className="raised chat-output-toggle" onClick={() => setOutputOpen((o) => ({ ...o, [active.id]: true }))} title="Show the output panel (preview and changes)">
-          <Icon name="activity" size={13} /> Output
+          <Icon name="activity" size={13} /> {turnLib.outputOf(active.messages).any ? 'Output' : `Changes · ${gitDirty}`}
         </button>
       )}
     </div>
