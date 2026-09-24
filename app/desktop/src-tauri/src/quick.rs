@@ -31,6 +31,9 @@ static SELECTION: Mutex<Option<Shortcut>> = Mutex::new(None);
 /// release stops it and types what was said into the focused app.
 static VOICE: Mutex<Option<Shortcut>> = Mutex::new(None);
 pub const VOICE_EVENT: &str = "voice-type";
+/// Screen-ask (L9): one press takes a screenshot into a new chat.
+static SCREEN: Mutex<Option<Shortcut>> = Mutex::new(None);
+pub const SCREEN_EVENT: &str = "screen-ask";
 
 /// The global-shortcut plugin, with the one handler this app needs.
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -44,6 +47,12 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
                 return;
             }
             if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            let is_screen = SCREEN.lock().ok().map(|s| *s == Some(*shortcut)).unwrap_or(false);
+            if is_screen {
+                use tauri::Emitter;
+                let _ = app.emit(SCREEN_EVENT, ());
                 return;
             }
             let is_selection = SELECTION.lock().ok().map(|s| *s == Some(*shortcut)).unwrap_or(false);
@@ -90,7 +99,7 @@ pub fn register_selection(app: &AppHandle, combo: &str) -> Result<String, String
     Ok(combo.trim().to_string())
 }
 
-fn toggle(app: &AppHandle) {
+pub(crate) fn toggle(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("quick") {
         if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
             let _ = window.hide();
@@ -189,4 +198,33 @@ pub fn register_voice(app: &AppHandle, combo: &str) -> Result<String, String> {
 #[tauri::command]
 pub fn voice_hotkey_set(app: AppHandle, combo: String) -> Result<String, String> {
     register_voice(&app, &combo)
+}
+
+/// Take (or, with an empty combo, release) the screen-ask chord.
+pub fn register_screen(app: &AppHandle, combo: &str) -> Result<String, String> {
+    let shortcuts = app.global_shortcut();
+    let mut current = SCREEN.lock().map_err(|_| "the hotkey is being changed".to_string())?;
+    if let Some(old) = current.take() {
+        let _ = shortcuts.unregister(old);
+    }
+    if combo.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let shortcut = Shortcut::from_str(combo.trim()).map_err(|e| format!("\"{}\" is not a shortcut: {}", combo, e))?;
+    let taken = [&CURRENT, &SELECTION, &VOICE]
+        .iter()
+        .any(|slot| slot.lock().ok().map(|c| *c == Some(shortcut)).unwrap_or(false));
+    if taken {
+        return Err(format!("{} is already another NeuraOS hotkey", combo));
+    }
+    shortcuts
+        .register(shortcut)
+        .map_err(|e| format!("could not take {} (another app may own it): {}", combo, e))?;
+    *current = Some(shortcut);
+    Ok(combo.trim().to_string())
+}
+
+#[tauri::command]
+pub fn screen_hotkey_set(app: AppHandle, combo: String) -> Result<String, String> {
+    register_screen(&app, &combo)
 }

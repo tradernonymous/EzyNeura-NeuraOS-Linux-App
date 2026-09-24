@@ -9,6 +9,7 @@ import ConnectorsCard from '../components/ConnectorsCard';
 import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
 import StartupCard from '../components/StartupCard';
+import DesktopControlCard from '../components/DesktopControlCard';
 import FileTree from '../components/FileTree';
 import Terminal from '../components/Terminal';
 
@@ -186,6 +187,8 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
               why it is not a sidebar row any more: the local folder and the
               local terminal answer for the app's own machine. */}
           <StartupCard />
+
+          <DesktopControlCard />
 
           <section className="settings-section">
             <h2>Advanced</h2>

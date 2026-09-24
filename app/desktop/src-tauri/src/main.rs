@@ -39,6 +39,8 @@ mod pty;
 mod launch;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+mod portal;
 mod quick;
 mod runtimes;
 mod desktop;
@@ -296,6 +298,11 @@ fn main() {
             desktop::notify_with_actions,
             desktop::renderer_mode_get,
             desktop::renderer_mode_set,
+            desktop::desktop_capabilities,
+            desktop::desktop_screenshot,
+            desktop::desktop_act,
+            desktop::portal_shortcuts_bind,
+            quick::screen_hotkey_set,
             acp::acp_start,
             acp::acp_prompt,
             acp::acp_cancel,

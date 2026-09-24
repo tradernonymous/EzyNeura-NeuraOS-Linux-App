@@ -78,6 +78,21 @@
     fn('run_command', 'Run a shell command in the project folder. Asks the user first.', { command: STR, cwd: STR }, ['command']),
   ];
 
+  // The desktop (docs/MASTER_PLAN.md L9): offered only when the person turned
+  // Desktop control on in Settings, and every one of them asks -- a
+  // screenshot shows whatever is on screen, and a click or a key lands in
+  // whichever app is in front.
+  var NUM = { type: 'number' };
+  var DESKTOP = [
+    fn('screen_capture', 'Take a screenshot of the whole screen. The picture is attached to the conversation so you can look at it; the reply tells you its size in pixels, which is the coordinate space for desktop_click.', {}, []),
+    fn('desktop_click', 'Click at screen coordinates (pixels from the top-left, as in the last screen_capture).',
+      { x: NUM, y: NUM, button: { type: 'number', description: '1 left (default), 2 middle, 3 right' } }, ['x', 'y']),
+    fn('desktop_type', 'Type text into the app that has keyboard focus.', { text: STR }, ['text']),
+    fn('desktop_key', 'Press a key chord in the app that has keyboard focus, such as ctrl+s, alt+F4 or Return.', { key: STR }, ['key']),
+    fn('desktop_scroll', 'Scroll the mouse wheel where the pointer is: positive steps scroll down, negative up.', { steps: NUM }, ['steps']),
+  ];
+  var DESKTOP_NAMES = DESKTOP.map(function (t) { return t.function.name; });
+
   // Delegation to a sub-agent (agents.js). Not in the catalogue: Chat offers it
   // with the list of agents in its description. The agent's own tools still
   // ask one by one; this asks before the agent starts at all.
@@ -94,6 +109,11 @@
     github_commit_file: 'commits to GitHub',
     github_delete_file: 'deletes a file on GitHub',
     github_create_branch: 'creates a branch on GitHub',
+    screen_capture: 'takes a picture of your screen',
+    desktop_click: 'clicks on your desktop',
+    desktop_type: 'types into the app in front',
+    desktop_key: 'presses keys in the app in front',
+    desktop_scroll: 'scrolls the app under the pointer',
   };
 
   function storage(given) {
@@ -478,6 +498,7 @@
     var out = WEB.slice();
     if (ctx.github) out = out.concat(GITHUB);
     if (ctx.localRoot && ctx.shell) out = out.concat(LOCAL);
+    if (ctx.desktop && ctx.shell) out = out.concat(DESKTOP);
     return out.concat(mcpDefs(given));
   }
 
@@ -632,6 +653,11 @@
     if (n === 'write_file') return 'Write ' + (a.path || 'a file') + ' (' + String(a.content || '').length + ' characters)';
     if (n === 'edit_file') return 'Edit ' + (a.path || 'a file');
     if (n === 'run_command') return 'Run: ' + (a.command || '');
+    if (n === 'screen_capture') return 'Take a screenshot';
+    if (n === 'desktop_click') return 'Click at ' + (a.x | 0) + ', ' + (a.y | 0) + (a.button && a.button !== 1 ? ' (button ' + a.button + ')' : '');
+    if (n === 'desktop_type') return 'Type “' + String(a.text || '').slice(0, 60) + (String(a.text || '').length > 60 ? '…' : '') + '”';
+    if (n === 'desktop_key') return 'Press ' + (a.key || '');
+    if (n === 'desktop_scroll') return 'Scroll ' + (Number(a.steps) < 0 ? 'up' : 'down') + ' ' + Math.abs(Number(a.steps) || 0);
     if (n === 'github_commit_file') return 'Commit ' + (a.path || 'a file') + ' to ' + (a.repo || 'a repository') + (a.branch ? ' (' + a.branch + ')' : '');
     if (n === 'github_delete_file') return 'Delete ' + (a.path || 'a file') + ' from ' + (a.repo || 'a repository');
     if (n === 'github_create_branch') return 'Create branch ' + (a.branch || '') + ' in ' + (a.repo || 'a repository');
@@ -647,6 +673,8 @@
   }
 
   return {
+    DESKTOP: DESKTOP,
+    DESKTOP_NAMES: DESKTOP_NAMES,
     MCP_KEY: MCP_KEY,
     ON_KEY: ON_KEY,
     ALWAYS_KEY: ALWAYS_KEY,

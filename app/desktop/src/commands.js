@@ -56,6 +56,7 @@
     { id: 'build-logs', group: 'Do', title: 'Show build logs', hint: 'The live build timeline and its approvals', palette: 'build' },
     { id: 'local-models', group: 'Do', title: 'Local LLM', hint: 'Start or stop the llama.cpp server on this machine', palette: 'settings' },
     { id: 'export-chats', group: 'Do', title: 'Export chats', hint: 'Write every conversation to a JSON file' },
+    { id: 'screenshot-ask', group: 'Do', title: 'Ask about the screen', hint: 'Take a screenshot and attach it to the chat' },
     { id: 'check-updates', group: 'Do', title: 'Check for updates', hint: 'Read the latest release' },
     { id: 'copy-diagnostics', group: 'Do', title: 'Copy diagnostics', hint: 'The report, in Settings', palette: 'settings' },
   ];

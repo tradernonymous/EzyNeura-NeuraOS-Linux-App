@@ -69,7 +69,10 @@ export declare function splitStderr(message: string): { message: string; stderr:
 export declare function mcpToolName(server: string, tool: string): string;
 export declare function mcpTarget(name: string, storage?: any): { server: McpServer; tool: string } | null;
 export declare function mcpDefs(storage?: any): ToolDef[];
-export declare function catalogue(context: { github?: boolean; localRoot?: string; shell?: boolean }, storage?: any): ToolDef[];
+export declare function catalogue(context: { github?: boolean; localRoot?: string; shell?: boolean; desktop?: boolean }, storage?: any): ToolDef[];
+/** The desktop tools (L9): screen_capture, desktop_click, desktop_type, desktop_key, desktop_scroll. */
+export declare const DESKTOP: ToolDef[];
+export declare const DESKTOP_NAMES: string[];
 export declare function enabled(storage?: any): boolean;
 export declare function setEnabled(on: boolean, storage?: any): boolean;
 export declare function alwaysKey(name: string): string;

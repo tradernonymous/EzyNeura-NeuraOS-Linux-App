@@ -19,7 +19,8 @@ import HfSignIn from '../components/HfSignIn';
 import { modelTargets } from '../stream-any';
 import { GITHUB_CHANGED_EVENT } from '../components/ConnectorsCard';
 import { runTurn, type ToolEvent, type TurnOptions } from '../agent-turn';
-import { executeTool, startStdio, stdioId } from '../tool-run';
+import { executeTool, startStdio, stdioId, takeToolImages } from '../tool-run';
+import { desktopToolsAvailable, SCREEN_ASK_EVENT } from '../desktopControl';
 import '../tools.js';
 import '../approval.js';
 import '../composer.js';
@@ -691,7 +692,7 @@ export default function ChatScreen() {
     const target = agent.model || { provider: active.provider, model: active.model };
     const root = openFolder();
     const canSpawn = run.depth < agentsLib.MAX_DEPTH;
-    const offered = toolsOn ? agentsLib.pickTools(agent, toolsLib.catalogue({ github: githubConnected, localRoot: root, shell: hasShell() })) : [];
+    const offered = toolsOn ? agentsLib.pickTools(agent, toolsLib.catalogue({ github: githubConnected, localRoot: root, shell: hasShell(), desktop: desktopToolsAvailable() })) : [];
     if (toolsOn && canSpawn && agent.spawnableAgents?.length) offered.push(...spawnDefFor(agent));
     // Tool-call ids repeat across providers; the prefix keeps each card its own.
     const prefix = `${agent.id}-${Math.random().toString(36).slice(2, 6)}:`;
@@ -709,6 +710,7 @@ export default function ChatScreen() {
         spawnAgent: canSpawn ? (a) => spawnFrom(agent, a, { ...run, depth: run.depth + 1, onText: undefined }) : undefined,
       }),
       approve: (event) => ask({ ...event, id: prefix + event.id }),
+      imagesFor: takeToolImages,
       onText: (piece) => { last += piece; run.onText?.(piece); },
       onTool: (event) => { last = ''; upsert({ ...event, id: prefix + event.id, summary: `${agent.name}: ${event.summary}` }); },
       onNote: (note) => pushToast('info', `${agent.name}: ${note}`),
@@ -1364,7 +1366,7 @@ _${done.notes.join(' · ')}_` : said,
           // the point: a chip that only remembered itself would be a claim the
           // turn never honoured.
           ? approval.offered(
-            toolsLib.catalogue({ github: githubConnected, localRoot: root, shell: hasShell() }),
+            toolsLib.catalogue({ github: githubConnected, localRoot: root, shell: hasShell(), desktop: desktopToolsAvailable() }),
             approval.readGroups(),
           )
             // Plan changes nothing, so it is offered nothing that could.
@@ -1378,6 +1380,7 @@ _${done.notes.join(' · ')}_` : said,
           spawnAgent: (a) => spawnFrom(null, a, { sid, signal: controller.signal, history, depth: 1 }),
         }),
         approve: askApproval(controller.signal),
+        imagesFor: takeToolImages,
         onText: append,
         onTool: upsertTool,
         onNote: (note) => pushToast('info', note),
@@ -1701,6 +1704,15 @@ _${done.notes.join(' · ')}_` : said,
       if (!/denied|abort|cancel/i.test(msg)) pushToast('error', `Screen capture: ${msg}`);
     }
   };
+  // The screen-ask chord, the palette and the Quick window all land here
+  // (desktopControl.ts): one frame into this chat, then the composer.
+  const screenshotRef = useRef<() => void>(() => {});
+  screenshotRef.current = () => { void screenshot().then(() => inputRef.current?.focus()); };
+  useEffect(() => {
+    const onAsk = () => screenshotRef.current();
+    window.addEventListener(SCREEN_ASK_EVENT, onAsk);
+    return () => window.removeEventListener(SCREEN_ASK_EVENT, onAsk);
+  }, []);
 
   useEffect(() => {
     if (sending && !busyChat.current && active) {

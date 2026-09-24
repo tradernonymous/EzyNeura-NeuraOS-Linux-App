@@ -21,6 +21,7 @@
 // no plan. Both now get one closing pass with the tools withheld, which is the
 // only thing the model can do with it: answer.
 import './tools.js';
+import { withImages } from './attach-image';
 import type { StreamFrame } from './api';
 
 const tools: typeof import('./tools.js') = (globalThis as any).FreeAI4UTools;
@@ -56,6 +57,12 @@ export interface TurnOptions {
   onTool: (event: ToolEvent) => void;
   onNote?: (note: string) => void;
   signal?: AbortSignal;
+  /**
+   * Pictures a tool call produced (screen_capture): they follow the tool
+   * message as a user turn with image parts, the one place every vision
+   * model reads a picture from.
+   */
+  imagesFor?: (callId: string) => string[];
 }
 
 /** What the person would actually read: the answer without its reasoning. */
@@ -162,6 +169,10 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       event.result = tools.clip(result);
       options.onTool({ ...event });
       messages.push(tools.toolMessage(call, result));
+      const images = options.imagesFor?.(call.id) || [];
+      if (images.length) {
+        messages.push({ role: 'user', content: withImages(`[The picture from ${call.name}.]`, images) });
+      }
     }
   }
   if (!options.signal?.aborted) {
