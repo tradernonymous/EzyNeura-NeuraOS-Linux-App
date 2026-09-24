@@ -304,6 +304,14 @@ interface ProviderRow {
   apiKey?: string;
 }
 
+/** The empty chat's prompts: one per thing the app is for, each a real ask. */
+const EMPTY_PROMPTS = [
+  'Explain what this project does and where to start reading',
+  'Draft a plan to add dark mode to my app',
+  'Write a bash script that renames photos by their date',
+  'Compare three local models I could run on this GPU',
+];
+
 export default function ChatScreen() {
   // Parsed once. The active id is taken from the list this component already
   // loaded; the old code read and parsed localStorage a second time here.
@@ -2159,8 +2167,20 @@ _${done.notes.join(' · ')}_` : said,
         {active.messages.length === 0 && (
           <div className="empty-state">
             <div className="empty-icon"><Icon name="chat" size={28} /></div>
-            <h2>Start a conversation</h2>
+            <h2>What are we doing today?</h2>
             <p>Free models first, limits on the row. Plan drafts a plan; Build starts a real build session with approvals.</p>
+            <div className="empty-suggestions" aria-label="Suggested prompts">
+              {EMPTY_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="empty-suggestion"
+                  onClick={() => window.dispatchEvent(new CustomEvent('freeai4u:composer-insert', { detail: { text: prompt } }))}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {active.messages.map((msg, i) => (
