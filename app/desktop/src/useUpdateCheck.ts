@@ -20,6 +20,7 @@ import './update.js';
 import './net-policy.js';
 import { APP_VERSION } from './version';
 import { downloadVerified, hasShell, installKind, runInstaller, updateManifest } from './bridge';
+import { isLinux, LINUX_RELEASES_REPO } from './platform';
 
 const update: typeof import('./update.js') = (globalThis as any).FreeAI4UUpdate;
 const netPolicy: typeof import('./net-policy.js') = (globalThis as any).FreeAI4UNetPolicy;
@@ -64,6 +65,13 @@ function recording(base: typeof fetch): typeof fetch {
     }
   }) as typeof fetch;
 }
+
+// The Linux port has its own releases (docs/MASTER_PLAN.md L7), versioned
+// and read through GitHub's releases/latest redirect; the Windows app keeps
+// upstream's moving tag. Decided once, from the platform the window is on.
+const release: { repo?: string; tag?: string } = isLinux()
+  ? { repo: LINUX_RELEASES_REPO, tag: update.LATEST_TAG }
+  : {};
 
 const DISMISSED_KEY = 'freeai4u.updateDismissed';
 const POLL_MS = 1000 * 60 * 60;
@@ -149,7 +157,7 @@ export function useUpdateCheck(): UpdateCheck {
     // signature before anything here trusts the sha256 values inside it.
     const fetchImpl = hasShell() ? signedFetch : fetch;
     lastCheckFailure = '';
-    const found = await update.fetchVersion({ fetchImpl: recording(fetchImpl) });
+    const found = await update.fetchVersion({ fetchImpl: recording(fetchImpl), repo: release.repo, tag: release.tag });
     if (!found) {
       setCheckError(lastCheckFailure || 'the release could not be reached');
       return 'unknown';
@@ -179,11 +187,11 @@ export function useUpdateCheck(): UpdateCheck {
       // Asked again rather than read from state: the answer decides which
       // installer runs, and a click before the first answer must not guess.
       const kind = await installKind();
-      const plan = update.installPlan({ installer: update.installerFor(info, kind) });
+      const plan = update.installPlan({ installer: update.installerFor(info, kind), repo: release.repo, tag: release.tag });
       if (!plan) {
         // A portable copy and a release with no portable build: the release
         // page is where the user picks a file, rather than an installer run here.
-        if (info) window.open(update.desktopUrl(), '_blank', 'noreferrer');
+        if (info) window.open(update.desktopUrl(release.repo, release.tag), '_blank', 'noreferrer');
         return;
       }
       // Without a shell there is nothing to install with; the release page is the
@@ -214,8 +222,13 @@ export function useUpdateCheck(): UpdateCheck {
         }
         setInstallState('installing');
         // The installer takes over and the app exits; nothing after this runs
-        // in a real install.
+        // in a real install -- except a .deb on Linux, which the shell hands
+        // to Mint's package installer and comes back from (net.rs).
         await runInstaller(result.path);
+        if (kind === 'deb') {
+          setInstallState('saved');
+          setInstallNotice('The package installer has opened with the new version. Finish there, then start NeuraOS again.');
+        }
       } catch (err: unknown) {
         setInstallState('error');
         setInstallError(err instanceof Error ? err.message : String(err));
@@ -228,7 +241,7 @@ export function useUpdateCheck(): UpdateCheck {
     installer: update.installerFor(info, kind),
     dismiss,
     humanSize: update.humanSize,
-    releaseUrl: update.desktopUrl(),
+    releaseUrl: update.desktopUrl(release.repo, release.tag),
     checkNow,
     checkError,
     installState,

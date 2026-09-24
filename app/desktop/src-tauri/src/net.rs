@@ -619,18 +619,25 @@ fn spawn_detached(program: &Path, args: &[String]) -> std::io::Result<()> {
     std::process::Command::new(program).args(args).spawn().map(|_| ())
 }
 
-/// Run a downloaded installer and quit, so the installer is the only thing
-/// touching the installed files. Only a file inside our own downloads folder is
-/// accepted: a command that runs an arbitrary path is a command an attacker
+/// The downloaded file, if and only if it sits inside our own downloads
+/// folder: a command that runs an arbitrary path is a command an attacker
 /// would love.
-#[tauri::command]
-pub fn run_installer(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    let dir = downloads_dir(&app)?;
+fn downloaded_installer(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, String> {
+    let dir = downloads_dir(app)?;
     let allowed = std::fs::canonicalize(&dir).map_err(|e| e.to_string())?;
-    let target = std::fs::canonicalize(&path).map_err(|e| format!("installer not found: {}", e))?;
+    let target = std::fs::canonicalize(path).map_err(|e| format!("installer not found: {}", e))?;
     if !target.starts_with(&allowed) {
         return Err("only a downloaded installer can be run".to_string());
     }
+    Ok(target)
+}
+
+/// Run a downloaded installer and quit, so the installer is the only thing
+/// touching the installed files.
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn run_installer(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let target = downloaded_installer(&app, &path)?;
     let is_msi = target
         .extension()
         .map(|e| e.eq_ignore_ascii_case("msi"))
@@ -648,10 +655,77 @@ pub fn run_installer(app: tauri::AppHandle, path: String) -> Result<(), String> 
     Ok(())
 }
 
+/// Put the downloaded AppImage in place of the running one: copied beside it
+/// first, made executable, then renamed over it -- a rename in the same
+/// folder is atomic, so a crash halfway leaves the old file whole. The
+/// running process keeps its mapped copy until it restarts.
+#[cfg(target_os = "linux")]
+pub fn replace_appimage(downloaded: &Path, current: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let staged = PathBuf::from(format!("{}.new", current.display()));
+    std::fs::copy(downloaded, &staged).map_err(|e| format!("cannot write beside {}: {}", current.display(), e))?;
+    std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("cannot make the new AppImage executable: {}", e))?;
+    std::fs::rename(&staged, current).map_err(|e| {
+        let _ = std::fs::remove_file(&staged);
+        format!("cannot replace {}: {}", current.display(), e)
+    })
+}
+
+/// Linux (docs/MASTER_PLAN.md L7): an AppImage replaces itself and restarts;
+/// a .deb is handed to the desktop's package installer (Mint: gdebi), which
+/// asks for the password and does the install while this app stays up --
+/// the page tells the person to restart NeuraOS when it is done.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn run_installer(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let target = downloaded_installer(&app, &path)?;
+    let name = target.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name.ends_with(".AppImage") {
+        let current = std::env::var_os("APPIMAGE")
+            .map(PathBuf::from)
+            .filter(|p| p.is_file())
+            .ok_or("this copy is not running as an AppImage, so it cannot replace itself")?;
+        replace_appimage(&target, &current)?;
+        app.restart();
+    }
+    if name.ends_with(".deb") {
+        spawn_detached(Path::new("xdg-open"), &[target.display().to_string()])
+            .map_err(|e| format!("could not open the package installer: {}", e))?;
+        return Ok(());
+    }
+    Err("not an installer this app knows (.deb or .AppImage)".to_string())
+}
+
+/// Linux: "appimage" when the AppImage runtime set APPIMAGE (the file that
+/// updates is that one), "deb" when the binary was installed under /usr or
+/// /opt (dpkg's territory: the .deb of the next release updates it), else a
+/// bare binary somebody built or unpacked -- "portable", which is never
+/// handed an installer.
+#[cfg(target_os = "linux")]
+pub fn linux_kind(appimage: Option<&std::ffi::OsStr>, exe: &Path) -> &'static str {
+    if appimage.map(|p| !p.is_empty()).unwrap_or(false) {
+        return "appimage";
+    }
+    if exe.starts_with("/usr/") || exe.starts_with("/opt/") {
+        "deb"
+    } else {
+        "portable"
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn install_kind() -> String {
+    let exe = std::env::current_exe().unwrap_or_default();
+    linux_kind(std::env::var_os("APPIMAGE").as_deref(), &exe).to_string()
+}
+
 /// A Windows path as a comparable string: lowercased, forward slashes turned
 /// into backslashes, no trailing separator. Windows paths are
 /// case-insensitive and `Path::starts_with` is not, so the comparison is done
 /// on these strings instead.
+#[cfg(not(target_os = "linux"))]
 fn folded_path(path: &Path) -> String {
     let text = path.to_string_lossy().replace('/', "\\").to_lowercase();
     text.trim_end_matches('\\').to_string()
@@ -665,6 +739,7 @@ fn folded_path(path: &Path) -> String {
 /// Installer keeps its uninstall entry elsewhere). Anything else -- Downloads,
 /// the desktop, a USB stick -- is the portable exe, which must never be
 /// replaced by running an installer.
+#[cfg(not(target_os = "linux"))]
 fn kind_of(exe_dir: &Path, has_uninstaller: bool, program_dirs: &[PathBuf]) -> &'static str {
     if has_uninstaller {
         return "nsis";
@@ -686,6 +761,7 @@ fn kind_of(exe_dir: &Path, has_uninstaller: bool, program_dirs: &[PathBuf]) -> &
 /// with Windows instead of upgrading the first, and a portable exe is not
 /// installed at all. A copy whose own location cannot be read is treated as
 /// portable, the one kind that never runs anything.
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 pub fn install_kind() -> String {
     let exe = match std::env::current_exe() {
@@ -711,6 +787,7 @@ pub fn install_kind() -> String {
 mod tests {
     use super::*;
 
+    #[cfg(not(target_os = "linux"))]
     fn program_files() -> Vec<PathBuf> {
         vec![
             PathBuf::from(r"C:\Program Files"),
@@ -718,6 +795,7 @@ mod tests {
         ]
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn an_nsis_install_is_known_by_its_uninstaller() {
         let per_user = Path::new(r"C:\Users\Ann\AppData\Local\NeuraOS Desktop");
@@ -728,6 +806,7 @@ mod tests {
         assert_eq!(kind_of(per_machine, true, &program_files()), "nsis");
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn an_msi_install_lives_under_program_files_without_an_uninstaller() {
         let dir = Path::new(r"C:\Program Files\NeuraOS Desktop");
@@ -736,6 +815,7 @@ mod tests {
         assert_eq!(kind_of(x86, false, &program_files()), "msi");
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn anything_else_is_portable() {
         let downloads = Path::new(r"C:\Users\Ann\Downloads");
@@ -749,6 +829,7 @@ mod tests {
         assert_eq!(kind_of(dir, false, &[PathBuf::new()]), "portable");
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn program_files_is_compared_without_case_or_slash_differences() {
         let dir = Path::new(r"c:\PROGRAM FILES\NeuraOS Desktop");
@@ -757,6 +838,48 @@ mod tests {
         assert_eq!(kind_of(forward, false, &program_files()), "msi");
         let trailing = vec![PathBuf::from(r"C:\Program Files\")];
         assert_eq!(kind_of(Path::new(r"C:\Program Files\NeuraOS Desktop"), false, &trailing), "msi");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn on_linux_the_kind_is_read_from_the_runtime_and_the_path() {
+        use std::ffi::OsStr;
+        assert_eq!(linux_kind(Some(OsStr::new("/home/ann/Apps/NeuraOS.AppImage")), Path::new("/tmp/.mount_x/usr/bin/freeai4u-desktop")), "appimage");
+        assert_eq!(linux_kind(None, Path::new("/usr/bin/freeai4u-desktop")), "deb");
+        assert_eq!(linux_kind(None, Path::new("/opt/neuraos/freeai4u-desktop")), "deb");
+        assert_eq!(linux_kind(Some(OsStr::new("")), Path::new("/usr/bin/freeai4u-desktop")), "deb", "an empty APPIMAGE is not one");
+        assert_eq!(linux_kind(None, Path::new("/home/ann/build/target/release/freeai4u-desktop")), "portable");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_appimage_is_replaced_in_place_and_stays_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("neuraos-appimage-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let current = dir.join("NeuraOS-1.0.0-x86_64.AppImage");
+        let downloaded = dir.join("downloads").join("NeuraOS-1.1.0-x86_64.AppImage");
+        std::fs::create_dir_all(downloaded.parent().unwrap()).unwrap();
+        std::fs::write(&current, b"old").unwrap();
+        std::fs::write(&downloaded, b"new").unwrap();
+        replace_appimage(&downloaded, &current).unwrap();
+        assert_eq!(std::fs::read(&current).unwrap(), b"new");
+        assert_eq!(std::fs::metadata(&current).unwrap().permissions().mode() & 0o111, 0o111);
+        assert!(!dir.join("NeuraOS-1.0.0-x86_64.AppImage.new").exists(), "the staging file is gone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_tauri_signer_signature_is_accepted_by_the_manifest_check() {
+        // A throwaway key made with `tauri signer generate` (discarded since),
+        // its `.sig` over this exact body, and the public half: proves the
+        // release workflow's signing step and this check agree on the format
+        // (base64 minisign text on both sides).
+        let pubkey = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFQTQwRERFMjIzNEI2Q0UKUldUT3RqUWkzZzJrYmlzZHJxWk1zb084NGwzZ3BYZkpxS29QczI5eHg0VjA5Njk4U1crMC8vNnEK";
+        let body = "{\"version\":\"0.0.1\"}\n";
+        let sig = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUT3RqUWkzZzJrYnBhTUdQTzhFUzY5MXAwWjg5U1lEeEhYd2ZLa1VwQjNqSTVTeW8rQ1pmZzRWc2xZQXlLSTFpUTZ5MWRYeG8zR2p5My8xQ0N4UGh4Q0xJQjZGNjNlTlFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjA5NzQ4CWZpbGU6bS5qc29uCjFhc09qU1N4YUoweFJYZkY4akc5ZlgzUHRud2h0V3h2OTU0ZDZGYTNzWVo5bXlxbEVlZkhwcjM1V1psOXkyb1d2NGg3QkRaOFhEQ0FOV3FzV011TURBPT0K";
+        verify_manifest(body, sig, pubkey).expect("a tauri signer signature verifies");
+        verify_manifest("{\"version\":\"0.0.2\"}\n", sig, pubkey).expect_err("a changed body does not");
     }
 
     fn extra(list: &[&str]) -> Vec<String> {

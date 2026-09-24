@@ -25,28 +25,40 @@
   if (root) root.FreeAI4UUpdate = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   var DEFAULT_REPO = 'tradernonymous/freeopenai';
+  // Upstream publishes to a moving tag; the Linux port publishes versioned
+  // releases and reads GitHub's own "latest" redirect instead (tag LATEST).
+  var DEFAULT_TAG = 'desktop-latest';
+  var LATEST_TAG = 'latest';
   var VERSION_FILE = 'desktop-version.json';
   var DEFAULT_ATTEMPTS = 3;
   var DEFAULT_BASE_DELAY_MS = 1500;
   var MAX_DELAY_MS = 8000;
 
-  function versionUrl(repo) {
-    return 'https://github.com/' + (repo || DEFAULT_REPO) +
-      '/releases/download/desktop-latest/' + VERSION_FILE;
+  // github.com/<repo>/releases/download/<tag>/ -- or, for LATEST_TAG, the
+  // releases/latest/download/ redirect GitHub keeps pointing at the newest
+  // non-prerelease release.
+  function downloadBase(repo, tag) {
+    var base = 'https://github.com/' + (repo || DEFAULT_REPO) + '/releases/';
+    if (tag === LATEST_TAG) return base + 'latest/download/';
+    return base + 'download/' + (tag || DEFAULT_TAG) + '/';
   }
 
-  function desktopUrl(repo) {
-    return 'https://github.com/' + (repo || DEFAULT_REPO) + '/releases/tag/desktop-latest';
+  function versionUrl(repo, tag) {
+    return downloadBase(repo, tag) + VERSION_FILE;
+  }
+
+  function desktopUrl(repo, tag) {
+    var base = 'https://github.com/' + (repo || DEFAULT_REPO) + '/releases/';
+    return tag === LATEST_TAG ? base + 'latest' : base + 'tag/' + (tag || DEFAULT_TAG);
   }
 
   // Where one artifact of the latest release is downloaded from. Same host as
   // the metadata (github.com), which the shell's allowlist permits; the CDN it
   // redirects to is allowed too.
-  function artifactUrl(repo, name) {
+  function artifactUrl(repo, name, tag) {
     var clean = String(name == null ? '' : name).trim();
     if (!clean) return '';
-    return 'https://github.com/' + (repo || DEFAULT_REPO) +
-      '/releases/download/desktop-latest/' + encodeURIComponent(clean);
+    return downloadBase(repo, tag) + encodeURIComponent(clean);
   }
 
   // What an install would do, decided here so it is testable: the URL, the
@@ -61,7 +73,7 @@
     var usable = /^[0-9a-f]{64}$/.test(digest);
     return {
       name: installer.name,
-      url: artifactUrl(opts.repo, installer.name),
+      url: artifactUrl(opts.repo, installer.name, opts.tag),
       sha256: usable ? digest : '',
       size: Number(installer.size) || 0,
       verified: usable,
@@ -143,6 +155,11 @@
   function isMsi(a) { return /\.msi$/i.test(a.name); }
   // The portable build is the one .exe that is not an installer.
   function isPortable(a) { return /\.exe$/i.test(a.name) && !isSetupExe(a); }
+  // The Linux artifacts (docs/MASTER_PLAN.md L7): a .deb updates an
+  // installed copy through the package installer, an AppImage replaces
+  // itself. Neither is ever handed to the other kind.
+  function isDeb(a) { return /\.deb$/i.test(a.name); }
+  function isAppImage(a) { return /\.AppImage$/i.test(a.name); }
 
   // The artifact that updates THIS copy. `kind` is how it was installed, as
   // the shell reports it (install_kind in net.rs): the same installer type
@@ -155,6 +172,8 @@
     if (!parsed || !parsed.artifacts || !parsed.artifacts.length) return null;
     var list = parsed.artifacts;
     if (kind === 'portable') return list.filter(isPortable)[0] || null;
+    if (kind === 'deb') return list.filter(isDeb)[0] || null;
+    if (kind === 'appimage') return list.filter(isAppImage)[0] || null;
     var preferred = kind === 'msi' ? list.filter(isMsi)[0]
       : kind === 'nsis' ? list.filter(isSetupExe)[0]
         : null;
@@ -186,7 +205,7 @@
   // user should see.
   function fetchVersion(options) {
     var opts = options || {};
-    var url = opts.url || versionUrl(opts.repo);
+    var url = opts.url || versionUrl(opts.repo, opts.tag);
     var attempts = Number(opts.attempts) > 0 ? Number(opts.attempts) : DEFAULT_ATTEMPTS;
     var doFetch = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
     var sleep = opts.sleep || wait;
@@ -211,6 +230,8 @@
 
   return {
     DEFAULT_REPO: DEFAULT_REPO,
+    DEFAULT_TAG: DEFAULT_TAG,
+    LATEST_TAG: LATEST_TAG,
     VERSION_FILE: VERSION_FILE,
     DEFAULT_ATTEMPTS: DEFAULT_ATTEMPTS,
     DEFAULT_BASE_DELAY_MS: DEFAULT_BASE_DELAY_MS,

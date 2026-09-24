@@ -14,19 +14,19 @@ Under **Assets**, download the file ending in `_amd64.deb`. The same page also h
 | :-- | :-- |
 | **Runs on** | Linux Mint 21.x, 22.x and 23, and Ubuntu 22.04 or newer (64-bit `amd64`) |
 | **Package** | `.deb` (recommended on Mint) or `.AppImage` (any distro, no install) |
-| **Updates** | Manual for now: download the newer `.deb` and install it over the old one. Updates through Mint Update Manager arrive with the apt repository (`packaging/apt/`) |
+| **Updates** | In-app: a banner offers each new release, and one click installs it. Or the apt repository (`packaging/apt/README.md`) for Mint's Update Manager |
 
 ### Install the `.deb`
 
 Either double-click the downloaded file to open it in Mint's package installer, or run this in a terminal from the folder you saved it to:
 
 ```bash
-sudo apt install ./NeuraOS*_amd64.deb
+sudo apt install ./neura-os-desktop_*_amd64.deb
 ```
 
 `apt` pulls in what the app needs (`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libdbus-1-3`) and recommends `libvulkan1` (GPU models), `xdotool` (Voice Type) and `bubblewrap` (the light sandbox). NeuraOS Desktop then shows up in the Mint menu.
 
-To uninstall: `sudo apt remove neuraos-desktop`
+To uninstall: `sudo apt remove neura-os-desktop`
 
 ### Run the AppImage instead
 
@@ -37,7 +37,19 @@ chmod +x NeuraOS*.AppImage
 
 ### Latest development build
 
-Every push to `main` builds a fresh `.deb` and AppImage in CI and smoke-tests the binary under a virtual display. To try one before it's released, open the newest green [Linux workflow run](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/actions/workflows/linux.yml), scroll to **Artifacts** and download `neuraos-linux-<commit>` (you need to be signed in to GitHub). Unzip it and install the `.deb` inside as shown above. The run's `neuraos-smoke-screenshot` artifact is what that build looks like on first start.
+Every push to `main` builds a fresh `.deb` and AppImage in CI and smoke-tests the binary under a virtual display. To try one before it's released, open the newest green [Linux workflow run](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/actions/workflows/linux.yml), scroll to **Artifacts** and download `neuraos-linux-<commit>` (you need to be signed in to GitHub). The zip holds a `deb/` and an `appimage/` folder, and the file names contain a space, so install it like this:
+
+```bash
+cd ~/Downloads
+unzip -o neuraos-linux-*.zip
+sudo apt install ./deb/*.deb
+```
+
+The run's `neuraos-smoke-screenshot` artifact is what that build looks like on first start.
+
+### Updates
+
+An installed copy checks the [latest release](https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/releases/latest) once an hour and shows a banner. **Install** downloads the new `.deb` (sha256-checked against the signed manifest) and opens Mint's package installer with it; an AppImage swaps itself for the new file and restarts. With the apt repository added (`packaging/apt/README.md`), Update Manager offers new versions too.
 
 ## What you get on Mint
 
