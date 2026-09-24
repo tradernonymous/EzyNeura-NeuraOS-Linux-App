@@ -19,6 +19,31 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 3: Code with decks
+
+- **One compact toolbar** in place of the header, the model row and the
+  Docker paragraph: a project chip (folder · git branch, read from
+  `.git/HEAD`), the model pill, then Tests, Review, Terminal, Git and a
+  Docker toggle (its image in a small field when on).
+- **Task decks under the box** (`tasks.js`, `components/TaskDecks.tsx`):
+  Build · Fix · Refactor · Test · Review · Docs · Git & Ops, five to seven
+  common tasks each. Pointing at a deck for 150 ms, clicking it or ↓ opens
+  its card; a pick fills the box with a template and selects its first
+  `{{blank}}`, so typing replaces it.
+- **`/` opens the same list** in the box, filtered as you type, ↑↓ Enter.
+- **Your own tasks** live in the project as `.neuraos/commands/<name>.md`
+  (`# Title`, an optional `> hint`, then the template) and show as a
+  "Mine" deck; **Save as task** writes the box's text there.
+- **The empty state** offers the recent folders and Open a folder instead
+  of a large centred icon; picking one sets the working folder for every
+  local surface (`freeai4u:open-project`).
+- Not built: a "changed files" count on the project chip (it needs
+  `git status` and the app does not run commands unasked) and a task list
+  before the edit (the agent's own plan/steps already show as they run).
+
+Verified here: `tsc`, `vite build`, `node --test` (73), and a headless
+Chromium screenshot with a folder set and the Fix deck open.
+
 ## UI plan, phase 2: Chat in the Freebuff anatomy
 
 - **One centred column.** The thread and the composer share

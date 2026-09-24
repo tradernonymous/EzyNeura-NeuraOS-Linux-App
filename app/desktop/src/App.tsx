@@ -403,12 +403,26 @@ export default function App() {
     setView(isDestination ? (lastTab.current[to as NavId] || to) : to);
   }, []);
 
+  // The Code screen's recent-project buttons: the folder becomes the working folder.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const project = shellLib.cleanProject(((e as CustomEvent).detail || {}).project);
+      if (!project) return;
+      try { localStorage.setItem(LOCAL_ROOT_KEY, project); } catch { /* the session still has it */ }
+      setLocalRoot(project);
+      pushToast('ok', `Working in ${project}`);
+    };
+    window.addEventListener('freeai4u:open-project', onOpen);
+    return () => window.removeEventListener('freeai4u:open-project', onOpen);
+  }, []);
+
   // The composer's /history, /settings, /design... ask the shell to move.
   useEffect(() => {
     const onNav = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       if (detail.view) setView(detail.view as View);
       if (detail.panel === 'sessions') toggleSidebar();
+      if (detail.panel === 'terminal') setShowTerminal((v) => !v);
     };
     window.addEventListener(NAVIGATE_EVENT, onNav);
     return () => window.removeEventListener(NAVIGATE_EVENT, onNav);
