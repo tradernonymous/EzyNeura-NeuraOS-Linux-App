@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 
 // A picker that belongs to this app rather than to the operating system.
@@ -16,6 +16,10 @@ export interface SelectOption {
   note?: string;
   /** Greyed and unselectable, with its note as the explanation. */
   disabled?: boolean;
+  /** Rows with the same group sit under one heading, in first-seen order. */
+  group?: string;
+  /** A status dot before the name: ok, warn, or off. */
+  dot?: 'ok' | 'warn' | 'off';
 }
 
 interface SelectPillProps {
@@ -97,9 +101,12 @@ export default function SelectPill({
             />
           )}
           <div className="select-list">
-            {shown.map((o) => (
+            {shown.map((o, i) => (
+              <Fragment key={o.value || `row:${i}`}>
+              {o.group && (i === 0 || shown[i - 1].group !== o.group) && (
+                <div className="select-group">{o.group}</div>
+              )}
               <button
-                key={o.value}
                 type="button"
                 role="option"
                 aria-selected={o.value === value}
@@ -113,9 +120,11 @@ export default function SelectPill({
                   setFilter('');
                 }}
               >
+                {o.dot && <span className={`select-row-dot dot-${o.dot}`} aria-hidden="true" />}
                 <span className={`select-row-name ${mono ? 'mono' : ''}`}>{o.label}</span>
                 {o.note && <span className="select-row-note">{o.note}</span>}
               </button>
+              </Fragment>
             ))}
             {shown.length === 0 && <div className="select-empty">Nothing matches.</div>}
           </div>

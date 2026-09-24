@@ -260,7 +260,7 @@ test('reduced motion disables every animation and transition, and the parallax',
 
 // ---- startup speed -----------------------------------------------------------
 
-const LAZY = ['DesignScreen', 'EvalsScreen', 'AgentsScreen', 'RecipesScreen', 'ParallelScreen', 'BuildScreen', 'FilesScreen', 'ImagesScreen', 'LibraryScreen'];
+const LAZY = ['CreateScreen', 'EvalsScreen', 'AgentsScreen', 'RecipesScreen', 'ParallelScreen', 'BuildScreen', 'FilesScreen', 'LibraryScreen'];
 
 test('the heavy screens are React.lazy, Chat is not', () => {
   for (const screen of LAZY) {
@@ -268,6 +268,10 @@ test('the heavy screens are React.lazy, Chat is not', () => {
     assert.ok(!new RegExp(`^import[^;]*from '\\./screens/${screen}'`, 'm').test(APP), `${screen} has no static import`);
   }
   assert.match(APP, /^import ChatScreen, \{/m, 'Chat, the default view, is in the first bundle');
+  // Create is one lazy screen that lazy-loads its two halves in turn.
+  const CREATE = fs.readFileSync(path.join(ROOT, 'desktop', 'src', 'screens', 'CreateScreen.tsx'), 'utf8');
+  assert.match(CREATE, /const DesignScreen = lazy\(\(\) => import\('\.\/DesignScreen'\)\);/);
+  assert.match(CREATE, /const ImagesScreen = lazy\(\(\) => import\('\.\/ImagesScreen'\)\);/);
   assert.match(APP, /<Suspense fallback=\{<ScreenSkeleton \/>\}>/);
 });
 

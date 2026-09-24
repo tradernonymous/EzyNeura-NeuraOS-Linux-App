@@ -9,6 +9,9 @@ import { hasShell, writeLocalFile } from '../bridge';
 import { saveFile, base64ToBytes } from '../files/save';
 import { NAVIGATE_EVENT } from '../Sidebar';
 import { DESIGN_BRIEF_KEY } from './ChatScreen';
+import '../create.js';
+
+const createLib: typeof import('../create.js') = (globalThis as any).FreeAI4UCreate;
 import { CODE_HANDOFF_KEY } from './CodeScreen';
 import '../saved-models.js';
 // The design modules are UMD (shared with node:test): the import runs the
@@ -244,7 +247,14 @@ function CritiqueRadar({ scores }: { scores: Critique['scores'] }) {
   );
 }
 
-export default function DesignScreen() {
+interface DesignProps {
+  /** The Create switch's frame (page → desktop, deck, post → phone). */
+  viewportHint?: Viewport;
+  /** Tell the Create switch when a template card asks for another mode. */
+  onMode?: (mode: import('../create.js').CreateModeId) => void;
+}
+
+export default function DesignScreen({ viewportHint, onMode }: DesignProps = {}) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -268,7 +278,11 @@ export default function DesignScreen() {
   const [error, setError] = useState('');
   const [brandUrl, setBrandUrl] = useState('');
   const [brandBusy, setBrandBusy] = useState(false);
-  const [viewport, setViewport] = useState<Viewport>('desktop');
+  const [viewport, setViewport] = useState<Viewport>(viewportHint || 'desktop');
+  useEffect(() => { if (viewportHint) setViewport(viewportHint); }, [viewportHint]);
+  // The inspector folds to a narrow column on request, and is not there at
+  // all until there is a page to inspect.
+  const [inspectorFolded, setInspectorFolded] = useState(false);
   // Deck mode: where the frame says it is ({index, count} from neura:deck).
   const [deck, setDeck] = useState({ index: 0, count: 0 });
   // The page's full size as the frame reports it (neura:size), for page exports.
@@ -1007,8 +1021,15 @@ export default function DesignScreen() {
   const checks = useMemo(() => (canvasHtml ? slop.score(canvasHtml) : null), [canvasHtml]);
 
   return (
-    <div className="screen design studio">
+    <div className={`screen design studio ${!canvasHtml && !draft ? 'no-inspector' : inspectorFolded ? 'inspector-folded' : ''}`}>
       <aside className="studio-left">
+        <details className="studio-project" open={!active}>
+          <summary className="raised studio-project-summary" title="Project, template and design system">
+            <Icon name="folder" size={13} />
+            <span className="studio-project-name">{active ? active.name : 'Project'}</span>
+            <span className="studio-project-note">{system.name}{model ? ` · ${model}` : ''}</span>
+            <span className="topnav-caret" aria-hidden="true">▾</span>
+          </summary>
         <div className="studio-block">
           <SelectPill
             label="Project"
@@ -1057,6 +1078,7 @@ export default function DesignScreen() {
             {tier === 'local' ? 'local tier' : 'cloud tier'}
           </span>
         </div>
+        </details>
 
         <div className="studio-thread" aria-live="polite">
           {!active && <div className="empty">Create or open a project to start.</div>}
@@ -1122,14 +1144,17 @@ export default function DesignScreen() {
 
       <main className="studio-centre">
         <div className="design-toolbar">
-          <div className="seg" role="group" aria-label="Viewport">
-            {(Object.keys(VIEWPORTS) as Viewport[]).map((id) => (
-              <button key={id} className={viewport === id ? 'active' : ''} onClick={() => setViewport(id)}
-                title={id === 'deck' ? `Deck mode: a ${stageLib.deckSize(stageFormat).width}×${stageLib.deckSize(stageFormat).height} stage, one slide at a time` : `${VIEWPORTS[id].width}×${VIEWPORTS[id].height}${id === 'browser' ? ' in a browser frame' : ''}`}>
-                {VIEWPORTS[id].label}
-              </button>
-            ))}
-          </div>
+          <SelectPill
+            label="Frame"
+            title="The device or stage the page is shown in"
+            value={viewport}
+            options={(Object.keys(VIEWPORTS) as Viewport[]).map((id) => ({
+              value: id,
+              label: VIEWPORTS[id].label,
+              note: id === 'deck' ? `${stageLib.deckSize(stageFormat).width}×${stageLib.deckSize(stageFormat).height}, one slide at a time` : `${VIEWPORTS[id].width}×${VIEWPORTS[id].height}${id === 'browser' ? ' in a browser frame' : ''}`,
+            }))}
+            onPick={(id) => setViewport(id as Viewport)}
+          />
           <button className={fit || viewport === 'deck' ? 'active' : ''} onClick={() => setFit((f) => !f)} disabled={viewport === 'deck'} title="Fit the device to the stage, or show it at 100%">{fit || viewport === 'deck' ? `Fit ${Math.round(scale * 100)}%` : '100%'}</button>
           <div className="seg" role="group" aria-label="Canvas tool">
             {(['view', 'comment', 'edit'] as Tool[]).map((t) => (
@@ -1140,17 +1165,27 @@ export default function DesignScreen() {
             ))}
           </div>
           <span className="toolbar-spacer" />
-          <button onClick={exportHtml} disabled={!canvasHtml} title="The page as one self-contained HTML file">HTML</button>
-          <button onClick={exportPdf} disabled={!canvasHtml} title="Print the page (a deck prints one slide per page)">PDF</button>
           <SelectPill
             label="Export"
-            title="Export pictures, slides or the whole project"
+            title="HTML, PDF, pictures, slides, code, or hand the page to Code"
             value={lastExport}
             disabled={!canvasHtml || exporting}
-            options={EXPORTS.map((x) => ({ value: x.value, label: x.label, note: x.note }))}
-            onPick={(k) => exportAs(k as ExportKind)}
+            options={[
+              { value: 'html', label: 'HTML', note: 'one self-contained file' },
+              { value: 'pdf', label: 'PDF', note: 'print the page (a deck: one slide per page)' },
+              ...EXPORTS.map((x) => ({ value: x.value, label: x.label, note: x.note })),
+              { value: 'handoff', label: 'Handoff to Code', note: 'page, tokens.css, DESIGN.md and a README into the open folder' },
+            ]}
+            onPick={(k) => {
+              if (k === 'html') exportHtml();
+              else if (k === 'pdf') exportPdf();
+              else if (k === 'handoff') void handoff();
+              else void exportAs(k as ExportKind);
+            }}
           />
-          <button onClick={handoff} disabled={!canvasHtml} title="The page, tokens.css, DESIGN.md and an implementation README, into the open folder and on to Code (or a ZIP)">Handoff to Code</button>
+          <button type="button" className="raised icon-btn" onClick={() => setInspectorFolded((v) => !v)} aria-pressed={inspectorFolded} title={inspectorFolded ? 'Show the inspector' : 'Fold the inspector'} aria-label="Inspector" disabled={!canvasHtml && !draft}>
+            <Icon name="skills" size={13} />
+          </button>
         </div>
 
         {draft && (
@@ -1208,9 +1243,31 @@ export default function DesignScreen() {
               </div>
             </div>
           ) : (
-            <div className="canvas-placeholder">
-              {working ? 'Designing…' : active ? 'Nothing on the canvas yet — describe it on the left.' : 'Open or create a project.'}
-            </div>
+            working ? (
+              <div className="canvas-placeholder">Designing…</div>
+            ) : (
+              <div className="create-gallery" aria-label="Start from a template">
+                <h2>{active ? 'What are we making?' : 'Create a project, then pick a start'}</h2>
+                <div className="create-cards">
+                  {createLib.cardsFor('design').map((card) => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className={`create-card sketch-${card.sketch}`}
+                      title={card.brief || createLib.modeAt(card.mode)?.hint}
+                      onClick={() => {
+                        const m = createLib.modeAt(card.mode);
+                        if (m && m.screen === 'design') { if (m.viewport) setViewport(m.viewport as Viewport); if (card.brief) setBrief(card.brief); }
+                        onMode?.(card.mode);
+                      }}
+                    >
+                      <span className="create-card-sketch" aria-hidden="true"><i /><i /><i /><i /></span>
+                      <span className="create-card-label">{card.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
           )}
         </div>
         {viewport === 'deck' && frameDoc && (
@@ -1222,7 +1279,7 @@ export default function DesignScreen() {
         )}
       </main>
 
-      <aside className="studio-right">
+      <aside className={`studio-right ${!canvasHtml && !draft ? 'is-idle' : ''} ${inspectorFolded ? 'is-folded' : ''}`}>
         <div className="inspector-tabs" role="tablist" aria-label="Inspector">
           {(['tweaks', 'tokens', 'components', 'mockups', 'comments', 'checks', 'history'] as Tab[]).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>

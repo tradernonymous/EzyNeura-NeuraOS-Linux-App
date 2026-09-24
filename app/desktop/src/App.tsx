@@ -58,8 +58,7 @@ const shellLib: typeof import('./shell.js') = (globalThis as any).FreeAI4UShell;
 
 // Chat is the default view and stays in the first bundle. The heavy screens
 // are fetched the first time they are opened, so the window paints sooner.
-const DesignScreen = lazy(() => import('./screens/DesignScreen'));
-const ImagesScreen = lazy(() => import('./screens/ImagesScreen'));
+const CreateScreen = lazy(() => import('./screens/CreateScreen'));
 const BuildScreen = lazy(() => import('./screens/BuildScreen'));
 const ActivityScreen = lazy(() => import('./screens/ActivityScreen'));
 const AcpScreen = lazy(() => import('./screens/AcpScreen'));
@@ -754,8 +753,7 @@ export default function App() {
                 <Suspense fallback={<ScreenSkeleton />}>
                   {view === 'chat' && <ChatScreen />}
                   {view === 'code' && <CodeScreen localRoot={localRoot} />}
-                  {view === 'design' && <DesignScreen />}
-                  {view === 'images' && <ImagesScreen />}
+                  {(view === 'design' || view === 'images') && <CreateScreen initial={view} />}
                   {view === 'build' && <BuildScreen />}
                   {view === 'library' && <LibraryScreen />}
                   {view === 'local' && (

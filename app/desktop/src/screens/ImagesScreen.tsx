@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, imageUrlFrom } from '../api';
 import Icon from '../components/Icon';
 import SelectPill from '../components/SelectPill';
+import '../create.js';
+
+const createLib: typeof import('../create.js') = (globalThis as any).FreeAI4UCreate;
 import LocalImagesCard from '../components/LocalImagesCard';
 import MaskBrush from '../components/MaskBrush';
 // UMD modules: loaded for their side effect, read off globalThis.
@@ -80,7 +83,13 @@ type SdStatus = {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export default function ImagesScreen() {
+interface ImagesProps {
+  /** The Create switch's task: Image → generate, Edit image → edit. */
+  taskHint?: 'generate' | 'edit';
+  onMode?: (mode: import('../create.js').CreateModeId) => void;
+}
+
+export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   const [rows, setRows] = useState<any[]>([]);
   // The service, model and shape are kept (image-run.js CHOICE_KEY) so they
   // survive a restart and so Chat's /image draws with exactly what is shown
@@ -95,7 +104,10 @@ export default function ImagesScreen() {
   const [prompt, setPrompt] = useState('');
   // Make a picture, or change one. Two tasks rather than two screens: the
   // service, model and shape decisions are the same ones either way.
-  const [mode, setMode] = useState<'generate' | 'edit'>('generate');
+  const [mode, setMode] = useState<'generate' | 'edit'>(taskHint || 'generate');
+  useEffect(() => { if (taskHint) setMode(taskHint); }, [taskHint]);
+  // The switch above the screen owns the task; a change here tells it.
+  const pickMode = (next: 'generate' | 'edit') => { setMode(next); onMode?.(next === 'edit' ? 'edit' : 'image'); };
   const [source, setSource] = useState<Source | null>(null);
   const [mask, setMask] = useState<Source | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -381,8 +393,7 @@ export default function ImagesScreen() {
 
   return (
     <div className="screen images">
-      <header className="screen-header">
-        <h1>Images</h1>
+      <header className="screen-header images-toolbar">
         <span className="header-note">
           {readyCount > 0
             ? `${readyCount} service${readyCount === 1 ? '' : 's'} ready on the engine`
@@ -402,23 +413,25 @@ export default function ImagesScreen() {
               { value: 'generate', label: 'Make a picture', note: 'from your words alone' },
               { value: 'edit', label: 'Change a picture', note: 'start from one you choose' },
             ]}
-            onPick={(id) => setMode(id === 'edit' ? 'edit' : 'generate')}
+            onPick={(id) => pickMode(id === 'edit' ? 'edit' : 'generate')}
           />
           <SelectPill
-            label="Service"
-            title="Which service draws"
+            label="Engine"
+            title="What draws: a cloud service, or this PC"
             value={choice?.id || ''}
             options={rows.length
-              ? rows.map((r) => ({
+              ? createLib.engineGroups(rows).flatMap((g) => g.rows.map((r: any) => ({
                 value: r.id,
                 label: r.label,
+                group: g.label,
                 // In the edit task a service that only draws is shown greyed
                 // with the reason, rather than offered and then refused.
                 disabled: mode === 'edit' && !images.canEdit(r),
+                dot: r.kind === 'browser' ? 'warn' : r.ready ? 'ok' : 'off',
                 note: mode === 'edit' && !images.canEdit(r)
                   ? 'draws only, cannot change a picture'
-                  : r.kind === 'browser' ? 'your browser' : r.ready ? '' : (r.reason || 'not ready'),
-              }))
+                  : r.kind === 'browser' ? 'your browser' : r.ready ? (r.kind === 'local' ? (r.model || 'running') : '') : (r.reason || (r.kind === 'local' ? 'not running — Settings → Local models' : 'not ready')),
+              })))
               : [{ value: '', label: 'no service reported' }]}
             onPick={(id) => { setChoiceId(id); imageRun.writeChoice({ choiceId: id, model: '', editModel: '' }); }}
           />

@@ -19,6 +19,34 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 4: Create, one screen
+
+- **One Create screen** (`screens/CreateScreen.tsx`, `create.js`): a mode
+  switch at the top — Page · Deck · Post · Image · Edit image. The first
+  three open the design studio with that frame (desktop, deck, phone); the
+  last two open the picture tools with that task. Both halves keep their
+  own state and lazy-load as before.
+- **An Engine pill** in place of "Service": two sections, This PC and
+  Cloud, a status dot per row, and for a local server that is not running
+  the note says where to start it (Settings → Local models).
+  `SelectPill` learned `group` and `dot`.
+- **The studio's toolbar shrinks:** the five frame buttons are one
+  **Frame ▾** pill; HTML, PDF, the export pill and Handoff to Code are one
+  **Export ▾** pill; a fold button for the inspector.
+- **The three pickers** (project, template, system + service, model) fold
+  into one **Project ▾** disclosure, open until a project exists.
+- **The inspector** is absent until there is a page or a draft, and folds
+  to a 44px column of vertical tabs on request.
+- **The empty stage is a gallery of starts:** Landing page, Dashboard,
+  Deck, Social post, Logo, Photo, Edit a photo. A card fills the brief and
+  sets the frame, or switches the mode; hovering lifts it and tints its
+  sketch.
+- Not built: a live preview thumbnail on hover (the sketches are drawn in
+  CSS) and a "Templates" page of its own (the gallery is that).
+
+Verified here: `tsc`, `vite build`, `node --test` (77), and headless
+Chromium screenshots of both halves with the Engine pill open.
+
 ## UI plan, phase 3: Code with decks
 
 - **One compact toolbar** in place of the header, the model row and the
