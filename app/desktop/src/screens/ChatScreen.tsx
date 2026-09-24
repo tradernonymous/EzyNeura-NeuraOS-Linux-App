@@ -9,6 +9,11 @@ import Icon from '../components/Icon';
 import ModelPicker from '../components/ModelPicker';
 import Composer from '../components/Composer';
 import { DICTATION_EVENT, NAVIGATE_EVENT, ORB_EVENT } from '../Sidebar';
+import StepsFold from '../components/StepsFold';
+import ChatOutput from '../components/ChatOutput';
+import '../turn.js';
+
+const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -155,6 +160,8 @@ export interface Msg {
    *  rides the next message instead, so turns keep alternating). */
   note?: boolean;
   shell?: string;
+  /** The person pressed Stop mid-reply: what is here is all there is. */
+  stopped?: boolean;
   /** Pictures sent with a user turn, as data URLs (vision models only). */
   images?: string[];
   /** The agent (or recipe) that wrote this reply, for its label. */
@@ -194,6 +201,10 @@ export interface ChatSession {
   reasoning?: 'off' | 'low' | 'medium' | 'high';
   draft: string;
   updatedAt: number;
+  /** The folder this chat lives in (the project sidebar groups by it); '' or absent = the home folder. */
+  project?: string;
+  /** A goal pinned above the composer, sent with every turn. */
+  goal?: string;
 }
 
 // The chat store lives in ../chats.js -- key, cap, validation, merge, export.
@@ -230,7 +241,7 @@ function saveSessions(sessions: ChatSession[]) {
   }
 }
 
-export function newSession(provider = '', model = ''): ChatSession {
+export function newSession(provider = '', model = '', project = ''): ChatSession {
   return {
     id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     title: 'New chat',
@@ -240,6 +251,7 @@ export function newSession(provider = '', model = ''): ChatSession {
     mode: 'chat',
     draft: '',
     updatedAt: Date.now(),
+    project,
   };
 }
 
@@ -249,6 +261,8 @@ export const OPEN_CHAT_EVENT = 'freeai4u:open-chat';
 // session" does -- as an event -- so the shell never has to know how a chat is
 // created.
 export const NEW_CHAT_EVENT = 'freeai4u:new-chat';
+/** Fired with detail {id, project} when the chat on screen changes, so the shell can work in its folder. */
+export const ACTIVE_CHAT_EVENT = 'freeai4u:active-chat';
 /** Ctrl+M: open the model chip. */
 export const MODEL_PICK_EVENT = 'freeai4u:pick-model';
 /** Ctrl+T: open or fold every tool card. */
@@ -349,6 +363,11 @@ export default function ChatScreen() {
   // offer the next one.
   const [flow, setFlow] = useState<string | null>(null);
   const [cardsOpen, setCardsOpen] = useState<boolean | undefined>(undefined);
+  // The output panel (Preview / Changes) opens by itself the first time a
+  // turn produces something in this chat, and stays where the person put it.
+  const [outputOpen, setOutputOpen] = useState<Record<string, boolean>>({});
+  const [outputTab, setOutputTab] = useState<'preview' | 'changes'>('changes');
+  const [goalOpen, setGoalOpen] = useState(false);
   const [skillRows, setSkillRows] = useState<SlashCommand[]>([]);
   const [folderFiles, setFolderFiles] = useState<string[]>([]);
   const [compare, setCompare] = useState<{ open: boolean; prompt: string }>({ open: false, prompt: '' });
@@ -429,6 +448,13 @@ export default function ChatScreen() {
   const stickToBottom = useRef(true);
 
   const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
+  // The shell works in the chat's folder: the terminal, the folder tree and the
+  // local tools follow the chat on screen, the way a Claude Code session does.
+  const activeProject = active ? (active.project || '') : '';
+  useEffect(() => {
+    if (!active) return;
+    window.dispatchEvent(new CustomEvent(ACTIVE_CHAT_EVENT, { detail: { id: active.id, project: activeProject } }));
+  }, [active?.id, activeProject]);
 
   // A session id can outlive its session (pruned on save, or displaced by an
   // import), which left the screen on a fallback chat while activeId pointed at
@@ -578,7 +604,7 @@ export default function ChatScreen() {
     return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen);
   }, []);
 
-  const startNewRef = useRef<() => void>(() => {});
+  const startNewRef = useRef<(project?: string) => void>(() => {});
 
   const scrollToBottom = useCallback((smooth = true) => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
@@ -604,18 +630,22 @@ export default function ChatScreen() {
     return () => window.removeEventListener('freeai4u-attach', onAttach);
   }, []);
 
-  const startNew = () => {
-    const s = newSession(providerRows[0]?.id || '', '');
+  const startNew = (project = '') => {
+    const s = newSession(providerRows[0]?.id || '', '', project);
     persist([s, ...sessions].slice(0, MAX_SESSIONS));
     setActiveId(s.id);
     inputRef.current?.focus();
   };
 
   // The listener is registered once, so it reads the current startNew through a
-  // ref rather than re-subscribing on every render.
+  // ref rather than re-subscribing on every render. The event's detail names
+  // the folder the chat lives in (App asked, through the project picker).
   startNewRef.current = startNew;
   useEffect(() => {
-    const onNew = () => startNewRef.current();
+    const onNew = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      startNewRef.current(detail && typeof detail.project === 'string' ? detail.project : '');
+    };
     window.addEventListener(NEW_CHAT_EVENT, onNew);
     return () => window.removeEventListener(NEW_CHAT_EVENT, onNew);
   }, []);
@@ -1355,6 +1385,9 @@ _${done.notes.join(' · ')}_` : said,
 
     try {
       const turns = turnsFor(history);
+      // The pinned goal rides every turn as a system line (turn.goalPrompt).
+      const goalLine = turnLib.goalPrompt(active.goal);
+      if (goalLine) turns.unshift({ role: 'system', content: goalLine });
       if (active.mode === 'plan') {
         turns.unshift({
           role: 'system',
@@ -1407,7 +1440,7 @@ _${done.notes.join(' · ')}_` : said,
         const last = msgs[msgs.length - 1];
         if (last && last.role === 'assistant') {
           msgs[msgs.length - 1] = aborted
-            ? { ...last, error: false }
+            ? { ...last, error: false, stopped: true }
             : { ...last, error: true, failure: told };
           // A stopped turn with nothing in it is not a turn.
           if (aborted && !last.content) msgs.pop();
@@ -2114,7 +2147,7 @@ _${done.notes.join(' · ')}_` : said,
           <div className="empty-icon"><Icon name="chat" size={28} /></div>
           <h2>No chats yet</h2>
           <p>Starting one now…</p>
-          <button className="primary" onClick={startNew}>New chat</button>
+          <button className="primary" onClick={() => startNew()}>New chat</button>
         </div>
       </div>
     );
@@ -2157,6 +2190,7 @@ _${done.notes.join(' · ')}_` : said,
       )}
       <RunSettings open={runOpen && isSavedProvider(active.provider)} onClose={() => setRunOpen(false)} provider={active.provider} model={active.model} />
 
+      <div className="chat-main">
       <div
         className="chat-messages"
         ref={listRef}
@@ -2185,6 +2219,25 @@ _${done.notes.join(' · ')}_` : said,
         )}
         {active.messages.map((msg, i) => (
           <div key={i} data-index={i} className={`message ${msg.role}${msg.error ? ' errored' : ''}${msg.note ? ' is-note' : ''}`}>
+            {msg.role === 'user' && !msg.note && !msg.shell && (
+              // Rewind: the thread is cut before this message and its words
+              // come back to the box, so a turn can be re-asked differently.
+              <button
+                type="button"
+                className="message-rewind"
+                title="Edit and resend from here (the replies after it are dropped)"
+                aria-label="Edit and resend from here"
+                disabled={sending}
+                onClick={() => {
+                  const back = turnLib.rewindTo(active.messages, i);
+                  if (back.draft === null) return;
+                  patchSession(active.id, { messages: back.messages, draft: back.draft });
+                  inputRef.current?.focus();
+                }}
+              >
+                <Icon name="refresh" size={12} />
+              </button>
+            )}
             <div className="message-role">
               {msg.shell ? 'You · command' : msg.role === 'user'
                 ? 'You'
@@ -2243,7 +2296,15 @@ _${done.notes.join(' · ')}_` : said,
                 ? <pre className="message-content shell-output">{msg.shell}</pre>
                 : <div className="message-content">{msg.content}</div>}
             {msg.role === 'assistant' && msg.tools && msg.tools.length > 0 && (
-              <ToolCards events={msg.tools} expandAll={cardsOpen} onDecide={sending && i === active.messages.length - 1 ? decide : undefined} />
+              <StepsFold events={msg.tools} expandAll={cardsOpen} onDecide={sending && i === active.messages.length - 1 ? decide : undefined} />
+            )}
+            {msg.stopped && !(sending && i === active.messages.length - 1) && (
+              <div className="stopped-card" role="status">
+                <span className="stopped-text">Stopped here.</span>
+                <button type="button" className="raised" onClick={() => retry()} disabled={sending}>
+                  <Icon name="refresh" size={12} /> Retry
+                </button>
+              </div>
             )}
             {msg.research && msg.content && !msg.error && !(sending && i === active.messages.length - 1) && (
               <div className="research-footer">
@@ -2320,6 +2381,22 @@ _${done.notes.join(' · ')}_` : said,
             <div className="message-content typing shimmer">Thinking…</div>
           </div>
         )}
+        {/* Skill chips under the last answer: the next move, one click away.
+            They fill the box rather than send, so a free tier is never spent
+            by a slip of the pointer. */}
+        {(() => {
+          const rows = turnLib.chips(active.messages, { sending });
+          if (!rows.length) return null;
+          return (
+            <div className="message assistant reply-chips" aria-label="Suggested next steps">
+              {rows.map((chip) => (
+                <button key={chip.id} type="button" className="reply-chip" onClick={() => { patchSession(active.id, { draft: chip.text }); inputRef.current?.focus(); }}>
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* No error bar down here any more. A failure is about one turn, and it
@@ -2420,8 +2497,57 @@ _${done.notes.join(' · ')}_` : said,
             )}
           </>
         )}
+        leading={(
+          <>
+            <button
+              type="button"
+              className="composer-pill"
+              onClick={() => {
+                const order: Array<NonNullable<ChatSession['reasoning']>> = ['off', 'low', 'medium', 'high'];
+                const at = order.indexOf(active.reasoning || 'off');
+                patchSession(active.id, { reasoning: order[(at + 1) % order.length] });
+              }}
+              title="How hard the model thinks (/reasoning) — click to cycle"
+            >
+              Reasoning · {active.reasoning || 'off'}
+            </button>
+            <button
+              type="button"
+              className="composer-pill"
+              onClick={() => { patchSession(active.id, { draft: '/' }); inputRef.current?.focus(); }}
+              title="Skills and commands — type / in the box"
+            >
+              Skills <kbd>/</kbd>
+            </button>
+            <button
+              type="button"
+              className={`composer-pill ${active.goal ? 'is-set' : ''}`}
+              onClick={() => setGoalOpen((v) => !v)}
+              aria-pressed={goalOpen}
+              title={active.goal ? `Goal: ${active.goal}` : 'Pin a goal for the whole conversation'}
+            >
+              Goal{active.goal ? ' · set' : ''}
+            </button>
+          </>
+        )}
         above={(
           <>
+            {(goalOpen || active.goal) && (
+              <div className="goal-row">
+                <span className="goal-label">Goal</span>
+                <input
+                  value={active.goal || ''}
+                  onChange={(e) => patchSession(active.id, { goal: e.target.value.slice(0, 500) })}
+                  placeholder="What this whole conversation is for — sent with every message"
+                  aria-label="Goal for this conversation"
+                  autoFocus={goalOpen && !active.goal}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setGoalOpen(false); }}
+                />
+                {active.goal && (
+                  <button type="button" onClick={() => { patchSession(active.id, { goal: '' }); setGoalOpen(false); }} aria-label="Drop the goal" title="Drop the goal"><Icon name="close" size={12} /></button>
+                )}
+              </div>
+            )}
             {nextUp && (
               <div className="follow-chip-row">
                 <button className="follow-chip" onClick={() => onCommand(nextUp, '')} title={nextUp.hint}>
@@ -2475,6 +2601,22 @@ _${done.notes.join(' · ')}_` : said,
           </>
         )}
       />
+      </div>
+      {(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && (
+        <ChatOutput
+          messages={active.messages}
+          tab={outputTab}
+          onTab={setOutputTab}
+          onClose={() => setOutputOpen((o) => ({ ...o, [active.id]: false }))}
+          onOpenFile={() => window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { view: 'local' } }))}
+          onSavePicture={(url) => imageRun.savePicture(url)}
+        />
+      )}
+      {!(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && turnLib.outputOf(active.messages).any && (
+        <button type="button" className="raised chat-output-toggle" onClick={() => setOutputOpen((o) => ({ ...o, [active.id]: true }))} title="Show the output panel (preview and changes)">
+          <Icon name="activity" size={13} /> Output
+        </button>
+      )}
     </div>
   );
 }

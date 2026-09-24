@@ -359,6 +359,7 @@ fn main() {
             engine::engine_stop,
             engine::engine_status,
             local::local_pick_folder,
+            local::local_project_home,
             local::local_list_dir,
             local::local_read_file,
             local::local_write_file,

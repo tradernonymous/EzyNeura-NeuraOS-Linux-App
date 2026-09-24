@@ -219,8 +219,9 @@ test('a file row knows what it is', () => {
 
 test('the sidebar offers the local surfaces, not the engine ones', () => {
   const sidebar = read('desktop', 'src', 'Sidebar.tsx');
-  assert.match(sidebar, /id: 'local', label: 'Local'/);
-  assert.match(sidebar, /key: 'folder', label: 'Folder'/);
+  assert.match(sidebar, /id: 'local', label: 'Local folder'/);
+  assert.match(sidebar, /onTogglePanel\('folder'\)/);
+  assert.match(sidebar, /onTogglePanel\('terminal'\)/);
   // The engine's tree and terminal are no longer a sidebar row: they only
   // answer with WORKSPACE_RUN=1 on a signed-in engine.
   assert.ok(!/label: 'Workspace'/.test(sidebar), 'the engine workspace is not a main panel');

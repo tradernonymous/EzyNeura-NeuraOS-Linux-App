@@ -43,48 +43,44 @@ if [ -n "${NEURAOS_ENGINE_URL:-}" ]; then
   sleep 8
 fi
 
-shot() { # name [x y]...  -- clicks, then a capture
-  local name="$1"; shift
-  while [ "$#" -ge 2 ]; do xdotool mousemove "$1" "$2" click 1; sleep 0.8; shift 2; done
-  # A click on the empty end of the tab bar takes focus off the rail button,
-  # or the rail stays expanded over the screen; then the pointer parks away.
-  xdotool mousemove 1100 26 click 1; sleep 0.3
+shot() { # name [key]  -- a key chord (the top bar's own shortcut), then a capture
+  local name="$1"; local key="${2:-}"
+  if [ -n "$key" ]; then xdotool key --clearmodifiers "$key"; sleep 0.8; fi
+  # The pointer parks in the far corner so no hover menu is open in the capture.
   xdotool mousemove 1330 880; sleep 2.5
   scrot -o "$OUT/$name.png"
   echo "wrote $OUT/$name.png"
 }
 
-# The rail's icons, top to bottom (Sidebar.tsx NAV_ITEMS), at the window's
-# default 1360x900 placed at the top-left of the virtual screen.
-RAIL_X=20
-# Chat, then "New chat" on a fresh profile (the button sits where the
-# empty state's centre is; on a profile with chats the click lands on
-# nothing).
-xdotool mousemove $RAIL_X 117 click 1; sleep 1
-xdotool mousemove 679 525 click 1; sleep 1.5
-# A chip may have taken that click once the new chat rendered: empty the composer.
-xdotool mousemove 679 766 click 1; sleep 0.3
-xdotool key --clearmodifiers ctrl+a BackSpace; sleep 0.3
+# A page the top bar reaches through Ctrl+K: type its name, Return.
+go() { xdotool key --clearmodifiers ctrl+k; sleep 0.8; xdotool type --delay 20 -- "$1"; sleep 0.6; xdotool key --clearmodifiers Return; sleep 1.2; }
+
+# The spaces are Alt+1..4 (Sidebar.tsx NAV_ITEMS); the window sits at the
+# top-left of the virtual screen at its default 1360x900. Chat first, with
+# a new chat in the home folder so the screen is not an empty state.
+xdotool key --clearmodifiers alt+1; sleep 1
+xdotool key --clearmodifiers ctrl+n; sleep 1.2
+# The picker asks where the chat lives: the first row is NeuraOS home.
+xdotool key --clearmodifiers Return; sleep 1.5
 shot chat
-# A first message, so the chat is not an empty state: "New chat", the
-# composer, Return, and time for an answer from the engine's free router.
+# A first message, so the chat is not an empty state: the composer, Return,
+# and time for an answer from the engine's free router.
 if [ -n "${NEURAOS_TOUR_CHAT:-}" ]; then
-  xdotool mousemove 679 501 click 1; sleep 2
-  xdotool mousemove 679 766 click 1; sleep 0.8
   xdotool type --delay 10 -- "In three short lines, what makes Linux Mint a good home for local AI?"; sleep 0.5
   xdotool key --clearmodifiers Return
   xdotool mousemove 1330 880
   sleep 30
   scrot -o "$OUT/chat-reply.png"; echo "wrote $OUT/chat-reply.png"
 fi
-shot code     $RAIL_X 155
-shot create   $RAIL_X 193
-shot agents   $RAIL_X 231
-shot activity $RAIL_X 270
-shot settings $RAIL_X 777
+shot code alt+2
+shot create alt+3
+shot agents alt+4
+go "Runs"; shot activity
+shot settings ctrl+comma
 xdotool key --clearmodifiers ctrl+k; sleep 2
 scrot -o "$OUT/palette.png"; echo "wrote $OUT/palette.png"
 xdotool key --clearmodifiers Escape; sleep 1
-# The light theme: the rail's footer toggle, Chat, and back.
-shot chat-light $RAIL_X 853 $RAIL_X 117
-xdotool mousemove $RAIL_X 853 click 1; sleep 1
+# The light theme: the palette's toggle, Chat, and back.
+go "Toggle theme"; xdotool key --clearmodifiers alt+1; sleep 1
+shot chat-light
+go "Toggle theme"; sleep 1

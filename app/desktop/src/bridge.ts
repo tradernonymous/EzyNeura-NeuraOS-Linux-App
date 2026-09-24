@@ -144,6 +144,11 @@ export interface LocalRunChunk {
   done?: boolean;
 }
 
+/** `~/NeuraOS`, made if missing: the folder chats about nothing in particular belong to. */
+export async function projectHome(): Promise<string> {
+  return call<string>('local_project_home');
+}
+
 /** The native folder picker; null when it is cancelled. */
 export async function pickFolder(): Promise<string | null> {
   return (await call<string | null>('local_pick_folder')) ?? null;

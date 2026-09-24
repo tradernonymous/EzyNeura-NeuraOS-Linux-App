@@ -19,6 +19,180 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
+## UI plan, phase 6: Agents, one space
+
+- **One space with a switch** (`components/SpaceSwitch.tsx`, the Create
+  strip's shape): Library · Agents · Recipes · Runs · Evals, with the
+  approvals badge on Runs. Activity is "Runs" now; Evals and Builds are
+  buttons on it.
+- **Cards with hover actions** on Agents and Recipes: Run, Edit,
+  Duplicate. A duplicated recipe starts with its schedule off, so a copy
+  never runs before it is looked at.
+- **Runs as a list or a board** (`runs.js`, remembered): Queued (scheduled
+  recipes, next run first) → Running (chats answering) → Needs review
+  (approvals, answered in place) → Done (the last twenty recipe runs, ok
+  or failed, newest first). Every card is fed by the module that already
+  owns the fact; a card opens its chat or its recipe.
+- Not built: dragging a card between columns (the columns are states the
+  app reports, not a to-do list the person orders) and evals rows on the
+  board (Evals has its own screen with history).
+
+Verified here: `tsc`, `vite build`, `node --test` (84), and headless
+Chromium screenshots of the board with seeded recipes and of the Recipes
+cards.
+
+## UI plan, phase 5: Settings in four groups
+
+- **Four groups instead of thirteen rows** (`settings-groups.js`): General
+  (Appearance, Startup and desktop, Shortcuts), AI & Models (Engine,
+  Providers, Local models, Limits, Memory), Tools (Connectors, Dictation,
+  Desktop control), System (Diagnostics, Advanced). The nav lists the
+  groups with a hint each; a card added later lands in System. There is
+  no Account group: the app has no account of its own (the engine sign-in
+  is in Engine, Hugging Face in Library).
+- **A grid of cards** for the open group; list-shaped sections (Local
+  models, Connectors, Diagnostics, Shortcuts, Providers, Advanced, Engine)
+  span the row. Search jumps to the group holding the first hit and
+  outlines every hit.
+- **Shortcuts as category cards:** Navigation, Chat, Global (from any
+  app), Tools, and In the box. A card shows its top three; "All N ·
+  change" unfolds it with the Change and Reset buttons.
+- **A cheat sheet on any screen** (`components/CheatSheet.tsx`, `Ctrl+/`,
+  also in the palette and a button under the nav): every shortcut by
+  category, read from the same table Settings edits.
+- **The Mica row is gone on Linux** (it is a Windows 11 material).
+- Not built: pop-over editing of a single value (the cards' own controls
+  stay in the card, which reads well at 340px and up).
+
+Verified here: `tsc`, `vite build`, `node --test` (81), and headless
+Chromium screenshots of General with a card unfolded and of the sheet.
+
+## UI plan, phase 4: Create, one screen
+
+- **One Create screen** (`screens/CreateScreen.tsx`, `create.js`): a mode
+  switch at the top — Page · Deck · Post · Image · Edit image. The first
+  three open the design studio with that frame (desktop, deck, phone); the
+  last two open the picture tools with that task. Both halves keep their
+  own state and lazy-load as before.
+- **An Engine pill** in place of "Service": two sections, This PC and
+  Cloud, a status dot per row, and for a local server that is not running
+  the note says where to start it (Settings → Local models).
+  `SelectPill` learned `group` and `dot`.
+- **The studio's toolbar shrinks:** the five frame buttons are one
+  **Frame ▾** pill; HTML, PDF, the export pill and Handoff to Code are one
+  **Export ▾** pill; a fold button for the inspector.
+- **The three pickers** (project, template, system + service, model) fold
+  into one **Project ▾** disclosure, open until a project exists.
+- **The inspector** is absent until there is a page or a draft, and folds
+  to a 44px column of vertical tabs on request.
+- **The empty stage is a gallery of starts:** Landing page, Dashboard,
+  Deck, Social post, Logo, Photo, Edit a photo. A card fills the brief and
+  sets the frame, or switches the mode; hovering lifts it and tints its
+  sketch.
+- Not built: a live preview thumbnail on hover (the sketches are drawn in
+  CSS) and a "Templates" page of its own (the gallery is that).
+
+Verified here: `tsc`, `vite build`, `node --test` (77), and headless
+Chromium screenshots of both halves with the Engine pill open.
+
+## UI plan, phase 3: Code with decks
+
+- **One compact toolbar** in place of the header, the model row and the
+  Docker paragraph: a project chip (folder · git branch, read from
+  `.git/HEAD`), the model pill, then Tests, Review, Terminal, Git and a
+  Docker toggle (its image in a small field when on).
+- **Task decks under the box** (`tasks.js`, `components/TaskDecks.tsx`):
+  Build · Fix · Refactor · Test · Review · Docs · Git & Ops, five to seven
+  common tasks each. Pointing at a deck for 150 ms, clicking it or ↓ opens
+  its card; a pick fills the box with a template and selects its first
+  `{{blank}}`, so typing replaces it.
+- **`/` opens the same list** in the box, filtered as you type, ↑↓ Enter.
+- **Your own tasks** live in the project as `.neuraos/commands/<name>.md`
+  (`# Title`, an optional `> hint`, then the template) and show as a
+  "Mine" deck; **Save as task** writes the box's text there.
+- **The empty state** offers the recent folders and Open a folder instead
+  of a large centred icon; picking one sets the working folder for every
+  local surface (`freeai4u:open-project`).
+- Not built: a "changed files" count on the project chip (it needs
+  `git status` and the app does not run commands unasked) and a task list
+  before the edit (the agent's own plan/steps already show as they run).
+
+Verified here: `tsc`, `vite build`, `node --test` (73), and a headless
+Chromium screenshot with a folder set and the Fix deck open.
+
+## UI plan, phase 2: Chat in the Freebuff anatomy
+
+- **One centred column.** The thread and the composer share
+  `--workspace-max`; the composer is a raised card, not a bar.
+- **Your message is a card with a rewind** (`turn.rewindTo`): the thread
+  is cut before it and its words come back to the box, minus the
+  attachment text.
+- **"Worked N steps ›"** (`components/StepsFold.tsx`, `turn.stepsOf`): a
+  reply's tool calls fold into one line with a badge per step (DONE,
+  RUNNING, NEEDS OK, FAILED, DECLINED); a turn still running or asking
+  starts open, a finished one folds. `Ctrl+T` still opens every card.
+- **A stopped turn says so** (`Msg.stopped`, set when Stop cuts a reply
+  with words in it) with its own Retry.
+- **Chips under the last answer** (`turn.chips`): Continue, Shorter,
+  Explain, and Turn into code when the reply had no code, Review changes
+  and Run tests when the chat changed files. A chip fills the box; it does
+  not send, so a free tier is never spent by a slip.
+- **A Goal row** (`ChatSession.goal`, `turn.goalPrompt`): pinned above the
+  box and sent as a system line with every turn.
+- **One bar under the box:** model · Reasoning (click to cycle) · Skills
+  (`/`) · Goal · approvals · tool chips on the left; attach, mic and a
+  round send on the right. The hint line moved into the send button's
+  title.
+- **The output panel** (`components/ChatOutput.tsx`, `turn.outputOf`) sits
+  at the right only when a turn produced something: Preview (the newest
+  picture) and Changes (every file a reply wrote or edited, once, the
+  latest touch last, `W`/`E`, opens the Local folder). It opens by itself
+  the first time and remembers being closed per chat; an "Output" button
+  brings it back.
+
+Verified here: `tsc`, `vite build`, `node --test` (68), and headless
+Chromium screenshots of the built bundle against a mock engine with a
+seeded chat (fold, stop card, chips, goal, bar, Changes panel all drawn).
+Not verified: a live turn on Mint hardware.
+
+## UI plan, phase 1: the app frame
+
+The approved UI/UX plan (six phases, one PR each). Phase 1 is the frame every
+later phase sits in:
+
+- **A top bar instead of two rails.** `components/TopNav.tsx`: Chat, Code,
+  Create, Agents (`Alt+1`–`Alt+4`); pointing at one for 150 ms, clicking it
+  a second time, or pressing ↓ opens a deck of its pages with a one-line
+  hint each. The open page's name follows the label ("Code · Files"), so
+  the strip of sub-tabs is gone. The right end: Search (`Ctrl+K`), the
+  engine dot (the status bar's own tones), Settings, theme.
+- **The right rail is gone** (`Workbench.tsx`, `workbench.js`, the docked
+  Builds/Knowledge panel). Design and Builds are pages; Files is Code ▾
+  Files; the folder tree and the terminal are toggles in the sidebar's
+  tool row. Changes comes back inside Chat in phase 2.
+- **A project sidebar** (`Sidebar.tsx`, `Ctrl+B` hides it) in place of the
+  icon rail and the History drawer: "+ New chat", a row of small raised
+  buttons (search, commands, folder tree, terminal, runs), All / Running /
+  Pinned, then history **grouped by folder** with a status dot per chat,
+  "Show N more" per group, and the orb, export/import, theme and Settings
+  at the foot. Activity is a tab under Agents ("Runs").
+- **Every chat lives in a folder** (the Claude Code flow). `New chat` opens
+  `components/ProjectPicker.tsx`: NeuraOS home (`~/NeuraOS`, made by
+  `local_project_home`), recent folders, or any folder. The chat saves it
+  (`ChatSession.project`), the sidebar groups by it, and the chat on screen
+  sets the working folder (`ACTIVE_CHAT_EVENT` → `localRoot`), so the
+  terminal, the tree and the local tools follow the chat. Existing chats
+  land in the home group; nothing moves on disk.
+- The grouping, the filters and the storage cases are `shell.js`, pinned by
+  `test/desktop-shell.test.js` together with the frame's shape.
+
+Verified here: `tsc --noEmit`, `vite build`, `node --test` (62), `cargo test
+local::`, and a headless Chromium screenshot of the built bundle (the frame
+renders; the connect screen is what a browser build without an engine
+shows). Not verified: the Tauri window on Mint hardware; "Clone a
+repository…" in the picker is not built (no git clone command in the
+shell yet) — Open a folder covers a cloned repo.
+
 ## L4: FLUX.2 on this PC (make and change a picture)
 
 The Images space's "This PC" row runs the user's own `sd-server`

@@ -12,6 +12,9 @@ import StartupCard from '../components/StartupCard';
 import DesktopControlCard from '../components/DesktopControlCard';
 import FileTree from '../components/FileTree';
 import Terminal from '../components/Terminal';
+import '../settings-groups.js';
+
+const groupsLib: typeof import('../settings-groups.js') = (globalThis as any).FreeAI4USettingsGroups;
 
 // Settings: everything the engine can tell us about itself.
 //
@@ -42,26 +45,38 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
   // One searchable surface: the query hides every section that does not
   // mention it, and the rail lists what is left to jump to. It reads the
   // rendered text, so a card added later is searchable without registering.
+  //
+  // Four groups instead of thirteen rows (UI plan, phase 5): the nav lists
+  // the groups, the main is a grid of cards for the open one. A search
+  // jumps to the group holding the first hit and lights every hit up.
   const [query, setQuery] = useState('');
+  const [group, setGroup] = useState('general');
   const [titles, setTitles] = useState<string[]>([]);
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = mainRef.current;
     if (!root) return;
     const q = query.trim().toLowerCase();
-    const found: string[] = [];
-    root.querySelectorAll<HTMLElement>(':scope > .settings-section').forEach((section) => {
-      const hit = !q || (section.textContent || '').toLowerCase().includes(q);
-      section.hidden = !hit;
+    const hits: string[] = [];
+    const sections = Array.from(root.querySelectorAll<HTMLElement>(':scope > .settings-section'));
+    sections.forEach((section) => {
       const title = section.querySelector('h2')?.textContent || '';
-      if (hit && title) found.push(title);
+      const hit = !!q && (section.textContent || '').toLowerCase().includes(q);
+      if (hit && title) hits.push(title);
     });
-    setTitles((prev) => (prev.join('|') === found.join('|') ? prev : found));
-  }, [query, providers.length, memory.length]);
-  const jump = (title: string) => {
-    const heading = Array.from(mainRef.current?.querySelectorAll('h2') || []).find((h) => h.textContent === title);
-    heading?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+    const shownGroup = q ? groupsLib.groupForSearch(hits, group) : group;
+    if (q && shownGroup !== group) setGroup(shownGroup);
+    sections.forEach((section) => {
+      const title = section.querySelector('h2')?.textContent || '';
+      const inGroup = groupsLib.groupOf(title) === shownGroup;
+      const hit = !q || hits.includes(title);
+      section.hidden = !inGroup || (!!q && !hit);
+      section.classList.toggle('is-hit', !!q && hit);
+      section.classList.toggle('is-wide', groupsLib.isWide(title));
+    });
+    setTitles((prev) => (prev.join('|') === hits.join('|') ? prev : hits));
+  }, [query, group, providers.length, memory.length]);
+  const counts = groupsLib.counts(query.trim() ? titles : groupsLib.GROUPS.flatMap((g) => g.sections));
 
   const forget = async (id: string) => {
     try {
@@ -89,10 +104,23 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
             aria-label="Search settings"
             autoFocus
           />
-          {titles.map((title) => (
-            <button key={title} className="settings-nav-btn" type="button" onClick={() => jump(title)}>{title}</button>
+          {counts.map((g) => (
+            <button
+              key={g.id}
+              className={`settings-nav-btn ${group === g.id ? 'active' : ''}`}
+              type="button"
+              aria-current={group === g.id ? 'page' : undefined}
+              onClick={() => { setGroup(g.id); if (query) setQuery(''); }}
+              title={g.hint}
+            >
+              <span>{g.label}</span>
+              <span className="settings-nav-hint">{query.trim() ? `${g.count} match${g.count === 1 ? '' : 'es'}` : g.hint}</span>
+            </button>
           ))}
-          {!titles.length && <div className="settings-hint">Nothing matches “{query}”.</div>}
+          {query.trim() && !titles.length && <div className="settings-hint">Nothing matches “{query}”.</div>}
+          <button type="button" className="raised settings-cheat" onClick={() => window.dispatchEvent(new CustomEvent('freeai4u:cheat-sheet'))} title="Every shortcut, on top of any screen — Ctrl+/">
+            Cheat sheet <kbd>Ctrl+/</kbd>
+          </button>
         </aside>
         <main className="settings-main" ref={mainRef}>
           <section className="settings-section">

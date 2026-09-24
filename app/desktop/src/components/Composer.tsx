@@ -47,6 +47,8 @@ interface Props {
   toolsOn: boolean;
   /** Chips that sit above the box only while they mean something. */
   above?: ReactNode;
+  /** The bottom bar's left cluster after the model: reasoning, skills, goal. */
+  leading?: ReactNode;
   /** The last thing sent, for Up in an empty box. */
   recall: () => string;
   /** The paperclip: attach a file (PDF, Word, Excel, PowerPoint, text). */
@@ -61,7 +63,7 @@ interface Props {
 }
 
 export default function Composer(props: Props) {
-  const { value, onChange, mode, onMode, sending, onSend, onStop, onCommand, slashExtra, mentionSources, onMention, modelChip, toolsOn, above, recall, onAttach, onDictate, dictation, inputRef, onToolGroups } = props;
+  const { value, onChange, mode, onMode, sending, onSend, onStop, onCommand, slashExtra, mentionSources, onMention, modelChip, toolsOn, above, leading, recall, onAttach, onDictate, dictation, inputRef, onToolGroups } = props;
   const [cursor, setCursor] = useState(0);
   const [caret, setCaret] = useState(0);
   const [dismissed, setDismissed] = useState('');
@@ -201,51 +203,59 @@ export default function Composer(props: Props) {
           aria-label="Message"
         />
       </div>
+      {/* One bar under the box, read left to right: who answers and how
+          (model, reasoning, skills, goal), what the agent may do (approvals,
+          tool chips), then -- at the far end -- what goes with the message
+          (attach, mic) and the round send button. */}
       <div className="composer-foot">
-        {onAttach && (
-          <button className="composer-icon" onClick={onAttach} title="Attach a file (PDF, Word, Excel, PowerPoint, text)" aria-label="Attach a file">
-            <Icon name="paperclip" size={14} />
-          </button>
-        )}
-        <ApprovalMenu />
-        <div className="composer-tools">
-          {approval.GROUPS.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              className="tool-chip"
-              aria-pressed={toolsOn && groups.includes(group.id)}
-              disabled={!toolsOn}
-              onClick={() => toggleGroup(group.id)}
-              title={toolsOn ? group.hint : 'Tools are off for this chat — /tools turns them back on'}
-            >
-              {group.label}
-            </button>
-          ))}
+        <div className="composer-foot-left">
+          {modelChip}
+          {leading}
+          <ApprovalMenu />
+          <div className="composer-tools">
+            {approval.GROUPS.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                className="tool-chip"
+                aria-pressed={toolsOn && groups.includes(group.id)}
+                disabled={!toolsOn}
+                onClick={() => toggleGroup(group.id)}
+                title={toolsOn ? group.hint : 'Tools are off for this chat — /tools turns them back on'}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <span className="composer-hint">Tab mode · / commands · @ mention</span>
-        {modelChip}
-        {onDictate && (
+        <div className="composer-foot-right">
+          {onAttach && (
+            <button className="composer-icon" onClick={onAttach} title="Attach a file (PDF, Word, Excel, PowerPoint, text)" aria-label="Attach a file">
+              <Icon name="paperclip" size={14} />
+            </button>
+          )}
+          {onDictate && (
+            <button
+              className={`composer-icon ${dictation === 'recording' ? 'recording' : ''}`}
+              onClick={onDictate}
+              disabled={dictation === 'working'}
+              title={dictation === 'recording' ? 'Stop and type what you said' : dictation === 'working' ? 'Transcribing…' : 'Dictate (Whisper on Hugging Face; Win+H works too)'}
+              aria-label={dictation === 'recording' ? 'Stop dictation' : 'Dictate'}
+              aria-pressed={dictation === 'recording'}
+            >
+              <Icon name="mic" size={14} />
+            </button>
+          )}
           <button
-            className={`composer-icon ${dictation === 'recording' ? 'recording' : ''}`}
-            onClick={onDictate}
-            disabled={dictation === 'working'}
-            title={dictation === 'recording' ? 'Stop and type what you said' : dictation === 'working' ? 'Transcribing…' : 'Dictate (Whisper on Hugging Face; Win+H works too)'}
-            aria-label={dictation === 'recording' ? 'Stop dictation' : 'Dictate'}
-            aria-pressed={dictation === 'recording'}
+            className={`send-btn${sending ? ' is-stop' : ''}`}
+            onClick={sending ? onStop : onSend}
+            disabled={!sending && !value.trim()}
+            title={sending ? 'Stop the reply (Esc)' : 'Send (Enter) · Tab mode · / commands · @ mention'}
+            aria-label={sending ? 'Stop' : 'Send'}
           >
-            <Icon name="mic" size={14} />
+            <Icon name={sending ? 'stop' : 'arrow-up'} size={sending ? 12 : 16} />
           </button>
-        )}
-        <button
-          className={`send-btn${sending ? ' is-stop' : ''}`}
-          onClick={sending ? onStop : onSend}
-          disabled={!sending && !value.trim()}
-          title={sending ? 'Stop the reply (Esc)' : 'Send (Enter)'}
-          aria-label={sending ? 'Stop' : 'Send'}
-        >
-          <Icon name={sending ? 'stop' : 'arrow-up'} size={sending ? 12 : 16} />
-        </button>
+        </div>
       </div>
     </div>
   );

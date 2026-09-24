@@ -165,6 +165,19 @@ export default function AgentsScreen() {
     });
   };
 
+  const duplicate = (a: Agent) => {
+    let id = `${a.id}-copy`;
+    let n = 2;
+    while (agents.some((x) => x.id === id)) id = `${a.id}-copy-${n++}`;
+    const result = agentsLib.save({ ...a, id, name: `${a.name} (copy)` });
+    if (result.ok && result.agent) { setAgents(agentsLib.list()); setSelected(result.agent.id); pushToast('ok', `Duplicated as ${result.agent.name}.`); }
+    else pushToast('warn', result.errors.join(' '));
+  };
+  const runAgent = (id: string) => {
+    try { sessionStorage.setItem(PENDING_COMMAND_KEY, `/agent ${id} ${task}`.trim()); } catch { pushToast('warn', 'Could not hand the task to Chat.'); return; }
+    window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { view: 'chat' } }));
+    setTimeout(() => window.dispatchEvent(new Event(RUN_COMMAND_EVENT)), 50);
+  };
   const runInChat = () => {
     if (!current) return;
     try { sessionStorage.setItem(PENDING_COMMAND_KEY, `/agent ${current.id} ${task}`.trim()); } catch { pushToast('warn', 'Could not hand the task to Chat.'); return; }
@@ -193,10 +206,18 @@ export default function AgentsScreen() {
       <div className="ar-body">
         <nav className="ar-list" aria-label="Agents">
           {agents.map((a) => (
-            <button key={a.id} className={`ar-item ${a.id === selected ? 'active' : ''}`} onClick={() => setSelected(a.id)} aria-current={a.id === selected ? 'true' : undefined}>
-              <span className="ar-item-name">{a.name}</span>
-              <span className="ar-item-meta mono">{a.id}{agentsLib.isBuiltin(a.id) ? (agentsLib.isOverridden(a.id) ? ' · edited' : ' · built-in') : ''}</span>
-            </button>
+            <div key={a.id} className={`ar-item ar-card ${a.id === selected ? 'active' : ''}`}>
+              <button className="ar-item-open" onClick={() => setSelected(a.id)} aria-current={a.id === selected ? 'true' : undefined}>
+                <span className="ar-item-name">{a.name}</span>
+                <span className="ar-item-meta mono">{a.id}{agentsLib.isBuiltin(a.id) ? (agentsLib.isOverridden(a.id) ? ' · edited' : ' · built-in') : ''}</span>
+              </button>
+              {/* Hovering a card shows Run / Edit / Duplicate. */}
+              <div className="ar-card-actions">
+                <button type="button" onClick={() => { setSelected(a.id); runAgent(a.id); }} title="Run in chat">Run</button>
+                <button type="button" onClick={() => setSelected(a.id)} title="Open the definition">Edit</button>
+                <button type="button" onClick={() => duplicate(a)} title="A copy you can change">Duplicate</button>
+              </div>
+            </div>
           ))}
           <label className="toggle ar-always" title="spawn_agent normally shows an Allow / Deny card. The agent's own tools still ask either way.">
             <input type="checkbox" checked={always} onChange={(e) => { setSpawnAlways(e.target.checked); setAlways(e.target.checked); }} />

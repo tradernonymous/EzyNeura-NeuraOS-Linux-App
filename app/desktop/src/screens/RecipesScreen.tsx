@@ -402,6 +402,14 @@ export default function RecipesScreen() {
     setTimeout(() => window.dispatchEvent(new Event(RUN_COMMAND_EVENT)), 50);
   };
 
+  const duplicate = (r: Recipe) => {
+    let id = `${r.id}-copy`;
+    let n = 2;
+    while (recipes.some((x) => x.id === id)) id = `${r.id}-copy-${n++}`;
+    const result = recipesLib.save({ ...r, id, name: `${r.name} (copy)`, schedule: r.schedule ? { ...r.schedule, enabled: false } : undefined });
+    if (result.ok && result.recipe) { const next = recipesLib.list(); setRecipes(next); pick(result.recipe); pushToast('ok', `Duplicated as ${result.recipe.name} (schedule off).`); }
+    else pushToast('warn', result.errors.join(' '));
+  };
   const remove = (r: Recipe) => {
     recipesLib.remove(r.id);
     const next = recipesLib.list();
@@ -458,11 +466,16 @@ export default function RecipesScreen() {
       <div className="ar-body">
         <nav className="ar-list" aria-label="Recipes">
           {recipes.map((r) => (
-            <div key={r.id} className={`ar-item ar-recipe ${r.id === selected ? 'active' : ''}`}>
+            <div key={r.id} className={`ar-item ar-recipe ar-card ${r.id === selected ? 'active' : ''}`}>
               <button className="ar-item-open" onClick={() => pick(r)} aria-current={r.id === selected ? 'true' : undefined}>
                 <span className="ar-item-name">{r.name}</span>
                 <span className="ar-item-meta">{recipesLib.scheduleLabel(r)} · {lastRunText(r.id)}</span>
               </button>
+              <div className="ar-card-actions">
+                <button type="button" onClick={() => runInChat(r)} title="Run in chat, with its servers' tools">Run</button>
+                <button type="button" onClick={() => pick(r)} title="Open the form">Edit</button>
+                <button type="button" onClick={() => duplicate(r)} title="A copy you can change">Duplicate</button>
+              </div>
               <label className="toggle ar-sched" title={r.schedule ? 'Run on its schedule while the app is open' : 'No schedule set'}>
                 <input type="checkbox" checked={!!r.schedule && r.schedule.enabled !== false} onChange={() => toggleSchedule(r)} aria-label={`Schedule ${r.name}`} />
               </label>

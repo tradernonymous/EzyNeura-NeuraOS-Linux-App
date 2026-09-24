@@ -287,6 +287,21 @@ pub fn local_pick_folder() -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
+/// The folder plain chats live in: `~/NeuraOS`, made on first use. Every
+/// chat belongs to a folder (the project sidebar groups history by it), and
+/// this is the one for chats about nothing in particular. Returns the path;
+/// a home directory the platform cannot name is an error, not a panic.
+#[tauri::command(async)]
+pub fn local_project_home(app: tauri::AppHandle) -> Result<String, String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("no home directory: {e}"))?;
+    let dir = home.join("NeuraOS");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not make {}: {e}", dir.display()))?;
+    Ok(dir.display().to_string())
+}
+
 /// One level of the real filesystem. Dirs first, then names, case-insensitively
 /// -- so the tree reads the same way in every folder.
 #[tauri::command(async)]

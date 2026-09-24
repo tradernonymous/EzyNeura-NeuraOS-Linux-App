@@ -23,10 +23,12 @@
     { id: 'palette', keys: 'Ctrl+K', label: 'Command palette', when: 'always' },
     { id: 'escape', keys: 'Escape', label: 'Close the palette or menu', when: 'always', fixed: true },
     { id: 'zen', keys: 'Ctrl+Shift+Z', label: 'Zen mode', when: 'always' },
+    { id: 'cheatsheet', keys: 'Ctrl+/', label: 'Keyboard cheat sheet', when: 'always' },
     { id: 'new-chat', keys: 'Ctrl+N', label: 'New chat', when: 'app' },
     { id: 'model', keys: 'Ctrl+M', label: 'Pick the model', when: 'app' },
     { id: 'tool-cards', keys: 'Ctrl+T', label: 'Open or fold every tool card', when: 'app' },
-    { id: 'history', keys: 'Ctrl+H', label: 'History panel', when: 'app' },
+    { id: 'history', keys: 'Ctrl+H', label: 'History (the sidebar)', when: 'app' },
+    { id: 'sidebar', keys: 'Ctrl+B', label: 'Show or hide the sidebar', when: 'app' },
     { id: 'terminal', keys: 'Ctrl+`', label: 'Terminal dock', when: 'app' },
     { id: 'settings', keys: 'Ctrl+,', label: 'Settings', when: 'app' },
   ];

@@ -19,6 +19,13 @@ import '../project-config.js';
 // reason, and this screen owns the open folder, so it is the one that can
 // answer the Rebuild button in Agents.
 import '../project-scout.js';
+import '../tasks.js';
+import '../shell.js';
+import TaskDecks from '../components/TaskDecks';
+import { NAVIGATE_EVENT } from '../Sidebar';
+
+const tasksLib: typeof import('../tasks.js') = (globalThis as any).FreeAI4UTasks;
+const shellLib: typeof import('../shell.js') = (globalThis as any).FreeAI4UShell;
 
 const agent: typeof import('../coding-agent.js') = (globalThis as any).FreeAI4UCodingAgent;
 const scout: typeof import('../project-scout.js') = (globalThis as any).FreeAI4UProjectScout;
@@ -105,6 +112,56 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
     } catch { /* nothing handed over */ }
   }, []);
   const [steps, setSteps] = useState<Step[]>([]);
+  // The toolbar's project chip: the folder's name and its git branch, read
+  // from .git/HEAD (readable, never written). The project's own tasks come
+  // from .neuraos/commands/*.md, the Zed / Warp pattern.
+  const [branch, setBranch] = useState('');
+  const [customTasks, setCustomTasks] = useState<import('../tasks.js').Task[]>([]);
+  const requestRef = useRef<HTMLTextAreaElement | null>(null);
+  const [slashCursor, setSlashCursor] = useState(0);
+  const loadCustom = useCallback(() => {
+    if (!localRoot || !hasShell()) { setCustomTasks([]); return; }
+    listLocalDir(localRoot, tasksLib.DIR)
+      .then(async (listing) => {
+        const files = listing.entries.filter((e: any) => !e.dir && /\.md$/i.test(e.name)).slice(0, 40);
+        const rows = await Promise.all(files.map(async (e: any) => {
+          try { const f = await readLocalFile(localRoot, `${tasksLib.DIR}/${e.name}`); return tasksLib.parseCustom(e.name, f.text || ''); } catch { return null; }
+        }));
+        setCustomTasks(rows.filter(Boolean) as import('../tasks.js').Task[]);
+      })
+      .catch(() => setCustomTasks([]));
+  }, [localRoot]);
+  useEffect(() => {
+    if (!localRoot || !hasShell()) { setBranch(''); setCustomTasks([]); return; }
+    readLocalFile(localRoot, '.git/HEAD')
+      .then((f) => { const m = /ref: refs\/heads\/(.+)/.exec(f.text || ''); setBranch(m ? m[1].trim() : (f.text || '').trim().slice(0, 7)); })
+      .catch(() => setBranch(''));
+    loadCustom();
+  }, [localRoot, loadCustom]);
+  // A template lands in the box with its first {{blank}} selected, so typing
+  // replaces it: the Freebuff "fill in the blanks" feel without a form.
+  const fillRequest = (template: string) => {
+    setRequest(template);
+    requestAnimationFrame(() => {
+      const box = requestRef.current;
+      const at = tasksLib.firstBlank(template);
+      if (!box) return;
+      box.focus();
+      if (at) box.setSelectionRange(at.start, at.end);
+    });
+  };
+  const saveTask = async (label: string, template: string) => {
+    const file = tasksLib.customFile(label, template);
+    await writeLocalFile(localRoot, file.path, file.text);
+    loadCustom();
+  };
+  const slashRows = tasksLib.isSlash(request) ? tasksLib.slashRows(request, customTasks) : [];
+  // The native picker, then the shell is told: the folder becomes the working
+  // folder for every local surface, not only this screen.
+  const openAnother = () => {
+    if (!hasShell()) return;
+    pickFolder().then((p) => { if (p) window.dispatchEvent(new CustomEvent('freeai4u:open-project', { detail: { project: p } })); }).catch(() => {});
+  };
   const [approval, setApproval] = useState<Approval | null>(null);
   const [status, setStatus] = useState<string>('idle');
   const [message, setMessage] = useState('');
@@ -360,75 +417,100 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
 
   return (
     <div className="screen code-screen">
-      <header className="screen-header">
-        <h1>Code Agent</h1>
-        <div className="header-actions">
-          {!localRoot && (
-            <button className="primary" onClick={() => hasShell() && pickFolder()}>
-              Open a folder
-            </button>
-          )}
-          {localRoot && (
-            <span className="code-root" title={localRoot}>
-              <Icon name="folder" size={13} />
-              {localRoot.split(/[/\\]/).pop()}
-            </span>
-          )}
-        </div>
-      </header>
+      {/* One compact toolbar: where you are, who answers, and the switches.
+          The Docker choice is a pressed button with its image in a title; the
+          long explanation lives in Settings → Advanced. */}
+      <div className="code-toolbar">
+        {localRoot ? (
+          <button type="button" className="raised code-project-chip" onClick={openAnother} title={`${localRoot}${branch ? ` · ${branch}` : ''} — click to open another folder`}>
+            <Icon name="folder" size={13} />
+            <span className="code-project-name">{localRoot.split(/[/\\]/).pop()}</span>
+            {branch && <span className="code-project-branch">{branch}</span>}
+          </button>
+        ) : (
+          <button className="raised" onClick={openAnother}>
+            <Icon name="folder" size={13} /> Open a folder
+          </button>
+        )}
+        <SelectPill
+          label="Model"
+          title="Model the coding agent uses"
+          value={provider && model ? `${provider}|${model}` : ''}
+          options={modelChoices.map((c) => ({ value: `${c.provider}|${c.model}`, label: c.label }))}
+          onPick={(value) => { const [p, ...rest] = value.split('|'); setProvider(p || ''); setModel(rest.join('|')); }}
+        />
+        <span className="code-toolbar-gap" />
+        <button type="button" className="raised icon-btn" title="Run the tests (fills the box)" aria-label="Run the tests" onClick={() => fillRequest(tasksLib.deckAt('test')?.tasks[0].template || '')}><Icon name="check" size={13} /></button>
+        <button type="button" className="raised icon-btn" title="Review my changes (fills the box)" aria-label="Review my changes" onClick={() => fillRequest(tasksLib.deckAt('review')?.tasks[0].template || '')}><Icon name="search" size={13} /></button>
+        <button type="button" className="raised icon-btn" title="Terminal — Ctrl+`" aria-label="Terminal" onClick={() => window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { panel: 'terminal' } }))}><Icon name="terminal" size={13} /></button>
+        <button type="button" className="raised icon-btn" title="Commit my changes (fills the box)" aria-label="Git" onClick={() => fillRequest(tasksLib.deckAt('git')?.tasks[0].template || '')}><Icon name="activity" size={13} /></button>
+        <button
+          type="button"
+          className="raised icon-btn"
+          aria-pressed={docker.enabled}
+          onClick={() => updateDocker({ ...docker, enabled: !docker.enabled })}
+          title={docker.enabled
+            ? `Commands run in Docker (${docker.image || dockerSandbox.DEFAULT_IMAGE}), this folder mounted at /work — click to run them on this PC`
+            : 'Run the agent\'s commands in a throwaway Docker container (needs Docker running) — click to turn on'}
+          aria-label="Docker sandbox"
+        >
+          <Icon name="shield" size={13} />
+        </button>
+        {docker.enabled && (
+          <input
+            className="code-docker-image"
+            value={docker.image}
+            onChange={(e) => updateDocker({ ...docker, image: e.target.value })}
+            placeholder={dockerSandbox.DEFAULT_IMAGE}
+            spellCheck={false}
+            aria-label="Docker image"
+          />
+        )}
+      </div>
 
       <div className="code-layout">
-        <div className="code-request-bar">
-          <SelectPill
-            label="Model"
-            title="Model the coding agent uses"
-            value={provider && model ? `${provider}|${model}` : ''}
-            options={modelChoices.map((c) => ({ value: `${c.provider}|${c.model}`, label: c.label }))}
-            onPick={(value) => { const [p, ...rest] = value.split('|'); setProvider(p || ''); setModel(rest.join('|')); }}
-          />
-          <input
-            value={request}
-            onChange={(e) => setRequest(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startAgent(); } }}
-            placeholder={localRoot ? 'Describe what you want to change…' : 'Open a folder first'}
-            disabled={!canRun}
-          />
-          {status === 'running' || status === 'planning' ? (
-            <button className="danger" onClick={stopAgent}>
-              <Icon name="close" size={13} /> Stop
-            </button>
-          ) : (
-            <button className="primary" onClick={startAgent} disabled={!canRun || !request.trim()}>
-              <Icon name="check" size={13} /> Run
-            </button>
+        <div className="code-request">
+          {slashRows.length > 0 && (
+            <div className="deck code-slash" role="listbox" aria-label="Tasks">
+              {slashRows.map((row, i) => (
+                <button key={row.id} type="button" role="option" aria-selected={i === slashCursor} className={`task-row ${i === slashCursor ? 'is-active' : ''}`} onMouseDown={(e) => { e.preventDefault(); fillRequest(row.template); }} onMouseEnter={() => setSlashCursor(i)}>
+                  <span className="task-row-deck">{row.deck}</span>
+                  <span className="task-row-label">{row.label}</span>
+                  <span className="task-row-hint">{row.hint}</span>
+                </button>
+              ))}
+            </div>
           )}
-        </div>
-
-        <div className="code-docker" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={docker.enabled}
-              onChange={(e) => updateDocker({ ...docker, enabled: e.target.checked })}
+          <div className="code-request-bar">
+            <textarea
+              ref={requestRef}
+              value={request}
+              rows={1}
+              onChange={(e) => { setRequest(e.target.value); setSlashCursor(0); }}
+              onKeyDown={(e) => {
+                if (slashRows.length) {
+                  if (e.key === 'ArrowDown') { e.preventDefault(); setSlashCursor((c) => (c + 1) % slashRows.length); return; }
+                  if (e.key === 'ArrowUp') { e.preventDefault(); setSlashCursor((c) => (c - 1 + slashRows.length) % slashRows.length); return; }
+                  if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); fillRequest(slashRows[Math.min(slashCursor, slashRows.length - 1)].template); return; }
+                  if (e.key === 'Escape') { e.preventDefault(); setRequest(''); return; }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startAgent(); }
+              }}
+              placeholder={localRoot ? 'Describe what to change — / for tasks, Shift+Enter for a new line' : 'Open a folder first'}
+              disabled={!canRun}
+              aria-label="What to change"
             />
-            Run agent commands in Docker
-          </label>
-          {docker.enabled && (
-            <input
-              value={docker.image}
-              onChange={(e) => updateDocker({ ...docker, image: e.target.value })}
-              placeholder={dockerSandbox.DEFAULT_IMAGE}
-              spellCheck={false}
-              aria-label="Docker image"
-              style={{ maxWidth: 220 }}
-            />
-          )}
-          {docker.enabled && (
-            <span className="settings-hint">
-              Commands run in a throwaway container with this folder mounted read-write at /work. The rest of
-              your disk is out of reach; the project's own files are not protected. Needs Docker Desktop running.
-            </span>
-          )}
+            {status === 'running' || status === 'planning' ? (
+              <button className="danger" onClick={stopAgent}>
+                <Icon name="close" size={13} /> Stop
+              </button>
+            ) : (
+              <button className="primary" onClick={startAgent} disabled={!canRun || !request.trim()}>
+                <Icon name="check" size={13} /> Run
+              </button>
+            )}
+          </div>
+          <TaskDecks custom={customTasks} onPick={fillRequest} draft={request} onSave={localRoot && hasShell() ? saveTask : undefined} />
         </div>
 
         {indexNote && (
@@ -506,19 +588,23 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
             </div>
           ))}
           {steps.length === 0 && status === 'idle' && (
-            <div className="empty-state">
-              <div className="empty-icon"><Icon name="terminal" size={28} /></div>
-              <h2>Local Code Agent</h2>
+            <div className="code-empty">
+              <h2>{localRoot ? 'What should change?' : 'Open a project'}</h2>
               <p>
-                Open a project folder, describe what you want to change, and the agent
-                will plan the edit, show you the diff, and wait for your approval
-                before touching any file.
+                {localRoot
+                  ? 'Pick a task from a deck above, or type / for the list. The agent plans the edit, shows the diff, and waits for your OK before touching a file.'
+                  : 'The agent works in one folder at a time: it plans the edit, shows the diff, and waits for your OK before touching a file.'}
               </p>
-              {!localRoot && (
-                <p className="code-hint">
-                  Pick a folder from the Local screen to get started.
-                </p>
-              )}
+              <div className="code-empty-projects">
+                {shellLib.readRecent().filter((p) => p !== localRoot).slice(0, 5).map((p) => (
+                  <button key={p} type="button" className="raised" onClick={() => window.dispatchEvent(new CustomEvent('freeai4u:open-project', { detail: { project: p } }))} title={p}>
+                    <Icon name="folder" size={12} /> {shellLib.projectName(p)}
+                  </button>
+                ))}
+                {hasShell() && (
+                  <button type="button" className="raised" onClick={openAnother}><Icon name="plus" size={12} /> Open a folder…</button>
+                )}
+              </div>
             </div>
           )}
           {steps.length === 0 && status !== 'idle' && (
