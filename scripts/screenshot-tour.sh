@@ -74,9 +74,11 @@ if [ -n "${NEURAOS_TOUR_CHAT:-}" ]; then
   sleep 30
   scrot -o "$OUT/chat-reply.png"; echo "wrote $OUT/chat-reply.png"
 fi
-shot code alt+2
-shot create alt+3
-shot agents alt+4
+# Alt+N is the app's own key, but xdotool's alt chords do not reach
+# WebKitGTK on a virtual display, so the pages are opened through Ctrl+K.
+go "Code"; shot code
+go "Design"; shot create
+go "Library"; shot agents
 go "Runs"; shot activity
 shot settings ctrl+comma
 xdotool key --clearmodifiers ctrl+k; sleep 2
