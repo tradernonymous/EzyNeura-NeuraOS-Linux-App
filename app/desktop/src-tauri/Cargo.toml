@@ -68,6 +68,14 @@ keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 # instead, and never touches the CLIPBOARD selection.
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
 notify-rust = "4"
+# xdg-desktop-portal (portal.rs, L8/L9): the Screenshot, GlobalShortcuts
+# and RemoteDesktop portals, so screenshots, the global hotkeys and typing
+# into other apps work on a Wayland session too. `async-std` is the feature
+# rfd already compiles ashpd with (the two runtimes cannot both be on), and
+# its futures run on any executor, Tauri's tokio included. Nothing new in
+# Cargo.lock: both crates were already in the tree.
+ashpd = { version = "0.11", default-features = false, features = ["async-std"] }
+futures-util = "0.3"
 
 [features]
 default = ["custom-protocol"]

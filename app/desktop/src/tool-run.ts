@@ -16,7 +16,7 @@
 // itself said no -- a model can do something useful with a sentence.
 import { api, ApiError } from './api';
 import {
-  editLocalFile, hasShell, listLocalDir, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
+  desktopAct, desktopScreenshot, editLocalFile, hasShell, listLocalDir, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
 } from './bridge';
 import './tools.js';
 
@@ -298,6 +298,38 @@ async function mcp(name: string, a: Args, callId = ''): Promise<string> {
   return data?.isError ? `Error: ${text}` : text;
 }
 
+// ---- the desktop (L9) --------------------------------------------------------
+
+// A screenshot is a picture, and a tool result is text: the picture waits
+// here under the call's id, and agent-turn.ts attaches it to the
+// conversation right after the tool message (takeToolImages).
+const toolImages = new Map<string, string[]>();
+
+/** The pictures a tool call produced, once. */
+export function takeToolImages(callId: string): string[] {
+  const list = toolImages.get(callId) || [];
+  toolImages.delete(callId);
+  return list;
+}
+
+async function desktop(name: string, a: Args, callId: string): Promise<string> {
+  if (!hasShell()) return 'Error: the desktop can only be reached from the NeuraOS app.';
+  if (name === 'screen_capture') {
+    const shot = await desktopScreenshot();
+    toolImages.set(callId, [shot.dataUrl]);
+    return `Screenshot taken (${shot.width}×${shot.height} pixels, via ${shot.tool}). It is attached as a picture; coordinates for desktop_click are pixels from the top-left of it.`;
+  }
+  const done = (via: string) => `Done (via ${via}).`;
+  if (name === 'desktop_click') {
+    const r = await desktopAct({ kind: 'click', x: Number(a.x), y: Number(a.y), button: a.button ? Number(a.button) : undefined });
+    return done(r.via);
+  }
+  if (name === 'desktop_type') return done((await desktopAct({ kind: 'type', text: String(a.text ?? '') })).via);
+  if (name === 'desktop_key') return done((await desktopAct({ kind: 'key', key: String(a.key ?? '') })).via);
+  if (name === 'desktop_scroll') return done((await desktopAct({ kind: 'scroll', steps: Number(a.steps) })).via);
+  return `Error: ${name} is not a desktop tool.`;
+}
+
 /** Run one allowed call and return what the model should be told. */
 export async function executeTool(call: ToolCall, args: Args, context: ToolContext): Promise<string> {
   const name = call.name;
@@ -306,5 +338,6 @@ export async function executeTool(call: ToolCall, args: Args, context: ToolConte
   if (name.startsWith('github_')) return github(name, args);
   if (name.startsWith('mcp__')) return mcp(name, args, call.id);
   if (tools.LOCAL.some((t) => t.function.name === name)) return local(name, args, context.localRoot);
+  if (tools.DESKTOP_NAMES.includes(name)) return desktop(name, args, call.id);
   return `Error: ${name} is not a tool this app has.`;
 }

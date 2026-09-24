@@ -2,6 +2,9 @@
 // same thing -- a JPEG/PNG data URL small enough to send. Vision models read
 // ~1.5k px at most, so anything bigger is scaled down here rather than
 // shipping megabytes the provider would shrink anyway.
+import { desktopScreenshot, hasShell } from './bridge';
+import { isLinux } from './platform';
+
 export const MAX_SIDE = 1568;
 export const MAX_IMAGES = 4;
 
@@ -26,8 +29,19 @@ export async function imageFileToDataUrl(file: File): Promise<string> {
   }
 }
 
-/** One frame of a screen or window the person picks, via the system picker. */
+/**
+ * One frame of the screen. In the Linux app the shell takes it (the portal
+ * or scrot: WebKitGTK has no getDisplayMedia picker); elsewhere the
+ * browser's own picker.
+ */
 export async function captureScreen(): Promise<string> {
+  if (hasShell() && isLinux()) {
+    const shot = await desktopScreenshot();
+    const image = new Image();
+    image.src = shot.dataUrl;
+    await image.decode();
+    return drawScaled(image, image.naturalWidth, image.naturalHeight, true);
+  }
   const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
   try {
     const video = document.createElement('video');

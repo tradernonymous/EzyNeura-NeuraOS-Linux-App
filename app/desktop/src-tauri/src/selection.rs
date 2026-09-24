@@ -120,8 +120,24 @@ fn copy_selection() -> Option<String> {
 #[cfg(target_os = "linux")]
 fn copy_selection() -> Option<String> {
     use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind};
-    let mut clipboard = Clipboard::new().ok()?;
-    let text = clipboard.get().clipboard(LinuxClipboardKind::Primary).text().ok()?;
+    let via_arboard = Clipboard::new()
+        .ok()
+        .and_then(|mut clipboard| clipboard.get().clipboard(LinuxClipboardKind::Primary).text().ok());
+    // A Wayland compositor without the data-control protocol (Cinnamon,
+    // GNOME) gives arboard nothing; wl-paste (wl-clipboard) reads PRIMARY
+    // through the standard protocol instead.
+    let text = via_arboard.or_else(|| {
+        let tool: &[&str] = if crate::linux::dmabuf::session_type() == "wayland" {
+            &["wl-paste", "--primary", "--no-newline"]
+        } else {
+            &["xclip", "-o", "-selection", "primary"]
+        };
+        let out = std::process::Command::new(tool[0]).args(&tool[1..]).output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&out.stdout).to_string())
+    })?;
     // The same cap the Windows path applies: a whole selected file must not
     // flood the Quick window.
     let capped: Vec<u16> = text.encode_utf16().take(MAX_UNITS).collect();

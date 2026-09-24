@@ -1075,6 +1075,68 @@ export async function rendererModeSet(mode: string): Promise<RendererMode> {
   return call<RendererMode>('renderer_mode_set', { mode });
 }
 
+// ---- Screenshots and desktop control (desktop.rs, portal.rs; L8/L9) --------
+
+export interface DesktopCapabilities {
+  available: boolean;
+  session: string;
+  xdotool?: boolean;
+  wtype?: boolean;
+  wlPaste?: boolean;
+  screenshotTool?: string | null;
+  portalScreenshot?: boolean;
+  portalShortcuts?: boolean;
+  portalRemoteDesktop?: boolean;
+  /** 'xdotool' (X11), 'portal' (Wayland) or 'none'. */
+  control: string;
+}
+
+export async function desktopCapabilities(): Promise<DesktopCapabilities> {
+  if (!hasShell()) return { available: false, session: '', control: 'none' };
+  return call<DesktopCapabilities>('desktop_capabilities');
+}
+
+export interface DesktopShot {
+  path: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  tool: string;
+}
+
+/** One frame of the screen through the shell (portal, or scrot & co.). */
+export async function desktopScreenshot(): Promise<DesktopShot> {
+  return call<DesktopShot>('desktop_screenshot');
+}
+
+export type DesktopAction =
+  | { kind: 'type'; text: string }
+  | { kind: 'key'; key: string }
+  | { kind: 'move'; x: number; y: number }
+  | { kind: 'click'; x: number; y: number; button?: number }
+  | { kind: 'scroll'; steps: number };
+
+/** Do one thing on the desktop; the caller has asked the person first. */
+export async function desktopAct(action: DesktopAction): Promise<{ ok: boolean; via: string }> {
+  return call<{ ok: boolean; via: string }>('desktop_act', { action });
+}
+
+export async function screenHotkeySet(combo: string): Promise<string> {
+  if (!hasShell()) return '';
+  return call<string>('screen_hotkey_set', { combo });
+}
+
+/** The screen-ask chord fired (quick.rs on X11, portal.rs on Wayland). */
+export function onScreenAsk(handler: () => void): Promise<() => void> {
+  return subscribe<unknown>('screen-ask', () => handler());
+}
+
+/** Wayland: bind the global chords through the GlobalShortcuts portal. */
+export async function portalShortcutsBind(combos: { quick: string; selection: string; voice: string; screen: string }): Promise<{ bound: number; via: string }> {
+  if (!hasShell()) return { bound: 0, via: 'none' };
+  return call<{ bound: number; via: string }>('portal_shortcuts_bind', combos);
+}
+
 // ---- One-click runtimes (runtimes.rs): Node 24 and llama.cpp ----------------
 export interface GpuFacts {
   vendor: string;

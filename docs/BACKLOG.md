@@ -16,8 +16,8 @@ not merely once its code is green in CI.
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; NeuraOS as an MCP server and the Activity-board compare not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
-| L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); Wayland portals, WebDriver e2e and the performance budget not started |
-| L9 | Desktop control (optional) | Not started |
+| L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
+| L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
 
 ## L1: the W1–W12 audit, applied
 
@@ -279,6 +279,54 @@ Verified: cargo test 125/125, node --test 42/42, tsc, build, and the debug
 binary still starts under Xvfb with no panic. Not verified: any of it on a
 real Cinnamon session (the chord, xdotool typing, libnotify buttons, Nemo
 picking the actions up, the tray dot in the XApp applet).
+
+## L8/L9: the Wayland portals, and desktop control
+
+`portal.rs` (Linux only) talks to xdg-desktop-portal through `ashpd`, the
+crate `rfd` already compiled in (its `async-std` feature; nothing new in
+`Cargo.lock`):
+
+- **Screenshot**: `desktop_screenshot` takes one frame into the app's cache
+  folder and answers a PNG data URL with its size. X11 tries the plain tools
+  first (`gnome-screenshot`, `scrot`, ImageMagick's `import`; no dialog),
+  then the portal; Wayland the portal first, then `grim`. The chat's
+  `/screenshot` command and `captureScreen()` use it in the Linux app
+  (WebKitGTK has no `getDisplayMedia` picker).
+- **GlobalShortcuts**: on a Wayland session the Quick, selection, Voice
+  Type and screen-ask chords are bound through the portal
+  (`portal_shortcuts_bind`, sent by App.tsx at start with the saved
+  combos; a no-op on X11 where the plugin's grab works). The portal's
+  spelling of a chord (`CTRL+ALT+space`) is a tested pure function. A
+  rebind closes the old session first so a chord fires once.
+- **RemoteDesktop**: Voice Type falls back to the portal when `wtype` is
+  missing or refused (Cinnamon and GNOME have no virtual-keyboard
+  protocol); desktop control uses it for typing, key chords (keysyms, a
+  tested table), and, when the desktop also shares a monitor stream in
+  the same session, absolute pointer moves and clicks. One session per
+  app run, opened on first use with the restore token kept beside the
+  renderer-mode file, so the desktop asks once.
+- **Selection on Wayland**: `wl-paste --primary` when arboard's
+  data-control protocol is not offered (Cinnamon, GNOME); `xclip` on X11.
+
+Desktop control (L9), off by default in Settings → Desktop control: five
+tools a model may call, every one behind an Allow / Deny card
+(`tools.js` ASKS), executed by `desktop_act` -- xdotool on X11, the portal
+on Wayland -- after `plan()` checks every number and string (bounded text,
+a chord of key names only, on-screen coordinates, a real button, a bounded
+scroll). `screen_capture` returns text and attaches the picture as a user
+turn with image parts right after the tool message (`imagesFor` in
+agent-turn.ts), the one shape every vision model reads. Screen-ask
+(`Ctrl+Alt+S` from any app, remappable in Shortcuts; the palette's "Ask
+about the screen"; the button in Settings) shows the window, goes to Chat
+and attaches a screenshot.
+
+Verified here: `cargo test` (plan, xdotool arguments, tool choice per
+session, PNG header, chord spelling, keysyms), a real screenshot under
+Xvfb through `scrot` (`cargo test -- --ignored a_real_screenshot` under
+`xvfb-run`), `node --test` (the tools are offered only with the toggle and
+a shell, all ask, summaries), `tsc`, `npm run build`. Not verified: any
+portal (this container has no xdg-desktop-portal), a Wayland session,
+xdotool clicks landing in a real app, the Settings card on Mint.
 
 ## First Mint machine: the renderer guard becomes the default
 

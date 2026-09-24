@@ -64,6 +64,8 @@ An installed copy checks the [latest release](https://github.com/tradernonymous/
 **Linux-native.**
 - **Voice Type** (Settings → Dictation): hold `Ctrl+Alt+V` anywhere, speak, let go — the words are typed into VS Code, the terminal, the browser. Mint's answer to Win+H.
 - **Ask about the selection**: highlight text in any app, press the selection hotkey, and the Quick window opens with it.
+- **Ask about the screen**: `Ctrl+Alt+S` in any app (or the palette) takes a screenshot into the chat. Settings → Desktop control lets a model take screenshots, click, type and press keys itself, each behind an Allow card: xdotool on X11, the RemoteDesktop portal on Wayland.
+- **Wayland-ready** (Mint 23): screenshots, the global hotkeys and Voice Type go through xdg-desktop-portal when the session is Wayland; X11 stays the default path.
 - **Nemo right-click actions**: open a folder in NeuraOS Code, ask about a file, inspect a GGUF (Settings → Startup and desktop).
 - **Start at login, into the tray**; the tray icon shows a cyan dot while an agent works and an amber one when something needs your OK.
 - **Sandboxes**: bubblewrap (no daemon, no image, no network) beside Docker and Podman for the commands an agent runs.

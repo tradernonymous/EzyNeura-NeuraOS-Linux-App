@@ -17,7 +17,9 @@ import LocalTerminal from './components/LocalTerminal';
 import SessionManager from './components/SessionManager';
 import Workbench from './components/Workbench';
 import './workbench.js';
-import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine } from './bridge';
+import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
+import { askAboutScreen, readScreenHotkey } from './desktopControl';
+import { readEnabled as voiceTypeEnabled, readHotkey as voiceTypeHotkey } from './voiceType';
 import { QUICK_HANDOFF_KEY } from './screens/QuickAsk';
 import { QUICK_HOTKEY_KEY, SELECTION_HOTKEY_KEY } from './components/ShortcutsCard';
 import { PENDING_MODEL_EVENT, PENDING_MODEL_KEY } from './components/LocalModelsCard';
@@ -288,7 +290,13 @@ export default function App() {
     launchTakePath().then((p) => { if (p) open(p); }).catch(() => {});
     let stop = () => {};
     onOpenPath(open).then((unsubscribe) => { stop = unsubscribe; }).catch(() => {});
-    return () => stop();
+    let stopScreen = () => {};
+    onScreenAsk(() => {
+      mainShow().catch(() => {});
+      setView('chat');
+      setTimeout(askAboutScreen, 150);
+    }).then((unsubscribe) => { stopScreen = unsubscribe; }).catch(() => {});
+    return () => { stop(); stopScreen(); };
   }, []);
 
   // The Quick window hands a finished exchange over as a saved chat and this
@@ -312,6 +320,16 @@ export default function App() {
       let selection = '';
       try { selection = localStorage.getItem(SELECTION_HOTKEY_KEY) || ''; } catch { /* default */ }
       if (selection) selectionHotkeySet(selection.toLowerCase()).catch(() => pushToast('warn', `The selection hotkey ${selection} is taken by another app; change it in Settings -> Shortcuts.`));
+      const screen = readScreenHotkey();
+      screenHotkeySet(screen.toLowerCase()).catch(() => pushToast('warn', `The screen hotkey ${screen} is taken by another app; change it in Settings -> Shortcuts.`));
+      // Wayland: the X11 grabs above are ignored there, so the same chords
+      // go through the GlobalShortcuts portal (a no-op on X11, desktop.rs).
+      portalShortcutsBind({
+        quick: (stored || '').toLowerCase(),
+        selection: (selection || '').toLowerCase(),
+        voice: voiceTypeEnabled() ? voiceTypeHotkey() : '',
+        screen: screen.toLowerCase(),
+      }).catch(() => { /* Settings -> Desktop control says what the desktop offers */ });
     }
     return () => window.removeEventListener('storage', onStorage);
   }, []);
@@ -491,6 +509,10 @@ export default function App() {
         break;
       case 'export-chats':
         exportChats();
+        break;
+      case 'screenshot-ask':
+        setView('chat');
+        setTimeout(askAboutScreen, 50);
         break;
       case 'check-updates':
         // A person asked, so a version they dismissed earlier is still reported.

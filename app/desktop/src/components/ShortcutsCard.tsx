@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NAV_ITEMS } from '../Sidebar';
 import { pushToast } from './Toasts';
-import { hasShell, quickHotkeySet, selectionHotkeySet } from '../bridge';
+import { hasShell, quickHotkeySet, screenHotkeySet, selectionHotkeySet } from '../bridge';
+import { DEFAULT_SCREEN_HOTKEY, readScreenHotkey, SCREEN_HOTKEY_KEY } from '../desktopControl';
 import '../../../shared/keymap.js';
 
 const keymap: typeof import('../../../shared/keymap.js') = (globalThis as any).FreeAI4UKeymap;
@@ -32,6 +33,21 @@ export default function ShortcutsCard() {
   const [recording, setRecording] = useState('');
   const [quickKey, setQuickKey] = useState(() => { try { return localStorage.getItem(QUICK_HOTKEY_KEY) || QUICK_DEFAULT; } catch { return QUICK_DEFAULT; } });
   const [selectionKey, setSelectionKey] = useState(() => { try { return localStorage.getItem(SELECTION_HOTKEY_KEY) || SELECTION_DEFAULT; } catch { return SELECTION_DEFAULT; } });
+  const [screenKey, setScreenKey] = useState(readScreenHotkey);
+  const recordScreen = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    if (e.key === 'Escape') { setRecording(''); return; }
+    const combo = keymap.comboOf(e);
+    if (!combo || !/^(Ctrl|Alt)\+/.test(combo)) return;
+    screenHotkeySet(combo.toLowerCase())
+      .then(() => {
+        try { localStorage.setItem(SCREEN_HOTKEY_KEY, combo); } catch { /* this session has it */ }
+        setScreenKey(combo);
+        pushToast('ok', `${combo} now takes a screenshot into the chat, from any app.`);
+      })
+      .catch((err: unknown) => pushToast('error', ((err as Error).message || String(err)).split('\n')[0]))
+      .finally(() => setRecording(''));
+  };
 
   // A global hotkey belongs to the whole desktop, so it is taken by the shell
   // and can fail when another app owns the chord -- which is said, not hidden.
@@ -112,6 +128,13 @@ export default function ShortcutsCard() {
           {hasShell() && (recording === 'selection'
             ? <button className="primary" autoFocus onKeyDown={recordSelection} onBlur={() => setRecording('')}>Press a combo…</button>
             : <button onClick={() => setRecording('selection')}>Change</button>)}
+        </div>
+        <div className="shortcut-row">
+          <span className="shortcut-label">Ask about the screen, from any app</span>
+          <kbd className={screenKey !== DEFAULT_SCREEN_HOTKEY ? 'is-custom' : ''}>{screenKey}</kbd>
+          {hasShell() && (recording === 'screen'
+            ? <button className="primary" autoFocus onKeyDown={recordScreen} onBlur={() => setRecording('')}>Press a combo…</button>
+            : <button onClick={() => setRecording('screen')}>Change</button>)}
         </div>
         {NAV_ITEMS.map((n) => (
           <div key={n.id} className="shortcut-row">
