@@ -155,6 +155,35 @@ Chromium screenshots of the built bundle against a mock engine with a
 seeded chat (fold, stop card, chips, goal, bar, Changes panel all drawn).
 Not verified: a live turn on Mint hardware.
 
+## Git in the shell: clone, the changed count, the diff panel
+
+Three follow-ups to the UI plan (suggestions 2–4 of its report):
+
+- **`git.rs`**: `local_git_status` (branch, ahead/behind, uncommitted files
+  from `git status --porcelain=v1 -b`), `local_git_diff` (one file or all,
+  `HEAD` against the tree, an untracked file as all-new, cut at 200 KB),
+  and `local_git_clone` (into `<parent>/<name>`, never over an existing
+  folder, `GIT_TERMINAL_PROMPT=0` so it fails instead of hanging on a
+  prompt, a ten-minute cap). The URL is checked before git sees it: https
+  with a host and no password, or `git@github.com|gitlab.com|codeberg.org:`;
+  never something starting with `-`, a local path or an `ext::` helper.
+  The parsing and the check are unit tests.
+- **Clone a repository…** in the new-chat picker: the URL lands under
+  `~/NeuraOS/<repo>` and the chat starts there.
+- **The Code project chip** shows the branch and the number of uncommitted
+  files, re-read when a run ends (the `.git/HEAD` read is gone).
+- **Chat's Changes panel** reads git in the chat's folder: the branch line,
+  every uncommitted file with its status letter, and the diff of the file
+  you click (`components/DiffView.tsx`), with Refresh; outside a repository
+  it keeps listing the files the replies wrote.
+- **`.github/workflows/screenshots.yml`** (manual): builds the app, walks
+  the spaces with `scripts/screenshot-tour.sh` under Xvfb and uploads the
+  PNGs, so the README's pictures can be refreshed without a Mint machine.
+
+Verified here: `cargo test git::`, `tsc`, `node --test` (86), `vite build`,
+and the README screenshots regenerated from the debug build under Xvfb
+against a mock engine (see `docs/assets/screens`).
+
 ## UI plan, phase 1: the app frame
 
 The approved UI/UX plan (six phases, one PR each). Phase 1 is the frame every

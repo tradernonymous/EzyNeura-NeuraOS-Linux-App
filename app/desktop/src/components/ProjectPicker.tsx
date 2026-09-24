@@ -1,7 +1,7 @@
 // "New chat" asks where the chat lives first (the Claude Code flow): a recent
 // folder, a folder picked now, or the home folder for chats about nothing in
 // particular. History is then read by folder, so the choice is the filing.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import '../shell.js';
 
@@ -15,11 +15,31 @@ interface Props {
   known: string[];
   onPick: (project: string) => void;
   onBrowse: () => void;
+  /** Clone a repository into the home folder; resolves to the new folder. */
+  onClone?: (url: string) => Promise<string>;
   onClose: () => void;
 }
 
-export default function ProjectPicker({ open, home, known, onPick, onBrowse, onClose }: Props) {
+export default function ProjectPicker({ open, home, known, onPick, onBrowse, onClone, onClose }: Props) {
   const first = useRef<HTMLButtonElement | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { if (!open) { setCloning(false); setUrl(''); setBusy(false); setError(''); } }, [open]);
+  const clone = async () => {
+    if (!onClone || !url.trim() || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const folder = await onClone(url.trim());
+      onPick(folder);
+    } catch (e) {
+      setError((e as Error).message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     if (!open) return undefined;
     const handle = window.setTimeout(() => first.current?.focus(), 0);
@@ -47,9 +67,32 @@ export default function ProjectPicker({ open, home, known, onPick, onBrowse, onC
         ))}
         <button type="button" className="project-row project-row-browse" onClick={onBrowse}>
           <Icon name="plus" size={14} />
-          <span className="project-row-name">Open a folder or repository…</span>
+          <span className="project-row-name">Open a folder…</span>
           <span className="project-row-path">Pick any folder on this PC</span>
         </button>
+        {onClone && !cloning && (
+          <button type="button" className="project-row" onClick={() => setCloning(true)}>
+            <Icon name="download" size={14} />
+            <span className="project-row-name">Clone a repository…</span>
+            <span className="project-row-path">git clone into {home || 'the home folder'}</span>
+          </button>
+        )}
+        {onClone && cloning && (
+          <form className="project-clone" onSubmit={(e) => { e.preventDefault(); void clone(); }}>
+            <input
+              autoFocus
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo.git"
+              aria-label="Repository URL"
+              spellCheck={false}
+              disabled={busy}
+            />
+            <button type="submit" className="raised" disabled={busy || !url.trim()}>{busy ? 'Cloning…' : 'Clone'}</button>
+            {error && <div className="project-clone-error" role="alert">{error}</div>}
+            {busy && <div className="project-picker-hint">Cloning can take a while for a large repository. It stops by itself after ten minutes.</div>}
+          </form>
+        )}
       </div>
     </div>
   );

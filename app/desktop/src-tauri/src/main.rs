@@ -31,6 +31,7 @@ mod engine;
 mod gguf;
 mod hf_oauth;
 mod local;
+mod git;
 mod mcp;
 mod models;
 mod net;
@@ -360,6 +361,9 @@ fn main() {
             engine::engine_status,
             local::local_pick_folder,
             local::local_project_home,
+            git::local_git_status,
+            git::local_git_diff,
+            git::local_git_clone,
             local::local_list_dir,
             local::local_read_file,
             local::local_write_file,

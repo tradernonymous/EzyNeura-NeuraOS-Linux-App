@@ -1,0 +1,56 @@
+name: Screenshots
+
+# The README's screenshots, from a real build on a virtual display: run it
+# from the Actions tab (or `gh workflow run screenshots.yml`) after a UI
+# change, download the artifact, and commit docs/assets/screens. It is not
+# on every push: the tour takes minutes and the pictures are a docs asset,
+# not a gate.
+on:
+  workflow_dispatch:
+    inputs:
+      engine_url:
+        description: 'An engine to point the app at first (optional; the connect screen shows otherwise)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  tour:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/desktop/package-lock.json
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/desktop/src-tauri
+      - name: Install Tauri Linux build dependencies and the tour's tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libdbus-1-dev patchelf file xdg-utils \
+            xvfb dbus-x11 scrot xdotool
+      - name: Frontend dependencies
+        working-directory: app/desktop
+        run: npm ci
+      - name: Build the app
+        working-directory: app/desktop
+        run: npx tauri build --no-bundle
+      - name: Walk the spaces and capture each one
+        env:
+          NEURAOS_ENGINE_URL: ${{ github.event.inputs.engine_url }}
+        run: bash scripts/screenshot-tour.sh app/desktop/src-tauri/target/release/freeai4u-desktop docs/assets/screens
+      - name: Upload the screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraos-screens-${{ github.sha }}
+          path: docs/assets/screens/*.png
+          if-no-files-found: error

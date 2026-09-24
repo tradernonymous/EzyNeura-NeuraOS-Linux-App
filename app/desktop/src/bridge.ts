@@ -149,6 +149,24 @@ export async function projectHome(): Promise<string> {
   return call<string>('local_project_home');
 }
 
+export interface GitChange { path: string; status: 'M' | 'A' | 'D' | 'R' | '?' | 'C'; }
+export interface GitStatus { repo: boolean; branch: string; ahead: number; behind: number; changes: GitChange[]; }
+
+/** The folder's branch and uncommitted changes (read-only; `repo: false` outside git). */
+export async function gitStatus(root: string): Promise<GitStatus> {
+  return call<GitStatus>('local_git_status', { root });
+}
+
+/** The uncommitted diff of one file, or of everything with no path (read-only). */
+export async function gitDiff(root: string, path?: string): Promise<string> {
+  return call<string>('local_git_diff', { root, path: path || null });
+}
+
+/** `git clone <url>` into `<parent>/<repo name>`; returns the new folder. */
+export async function gitClone(url: string, parent: string): Promise<string> {
+  return call<string>('local_git_clone', { url, parent });
+}
+
 /** The native folder picker; null when it is cancelled. */
 export async function pickFolder(): Promise<string | null> {
   return (await call<string | null>('local_pick_folder')) ?? null;
