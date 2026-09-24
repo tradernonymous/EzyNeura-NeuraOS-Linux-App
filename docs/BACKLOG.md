@@ -12,12 +12,58 @@ not merely once its code is green in CI.
 | L1 | Windows→Linux port (W1–W12), NVIDIA/DMA-BUF guard, Diagnostics | Code complete + CI green; the DMA-BUF guard is now on by default with a renderer selector in Diagnostics (below, "First Mint machine"), including the `.gguf` MIME association (`tauri.linux.conf.json` + `packaging/mime/`); the 10-step hardware checklist (`docs/MASTER_PLAN.md` §7 L1) still needs a real Mint machine |
 | L2 | The APK's look on the desktop | In progress — Neural Violet default, the five spaces + the orb, the Activity space, follow-system theme, the APK's gesture keys (below); the message anatomy (Worked · n steps, folding Thought) and an Orca pass still open |
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
-| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
+| L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; **FLUX.2 on this PC** (below): the Images space draws and changes pictures with FLUX.2 [klein] / [dev] through the user's sd-server, one click from Hugging Face; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; **NeuraOS as an MCP server built** (below): `freeai4u-desktop --mcp` serves neuraos_status / neuraos_models / neuraos_chat / neuraos_image / neuraos_open over stdio, with copy-paste commands for Claude Code, Gemini CLI and a config JSON in Settings → Connectors; the Activity-board compare not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
+
+## L4: FLUX.2 on this PC (make and change a picture)
+
+The Images space's "This PC" row runs the user's own `sd-server`
+(stable-diffusion.cpp). It already read a multi-file model as one set
+(NEURA-073); what it could not do was start a FLUX.2 set, draw it right,
+or land one from Hugging Face without a hand-typed command. Now:
+
+- **The set is read right.** FLUX's autoencoder is `ae.safetensors` /
+  `flux2_ae.safetensors` (no "vae" in the name) and FLUX.2 [klein]'s text
+  encoder is a plain Qwen3 (`qwen_3_4b.safetensors`, the same size as the
+  diffusion model in bf16, so "largest file" alone picked either).
+  `sd.rs role_of` knows both; `flux2_kleins_three_files_are_one_set…` pins it.
+- **The model brings its own numbers.** `sd.rs family_of` maps the name to
+  the settings stable-diffusion.cpp's `docs/flux2.md` gives: klein → 4 steps
+  at cfg 1.0, klein base → 20 at 4.0, FLUX.2 [dev] → 20 at 1.0, FLUX.1
+  schnell → 4 at 1.0. `with_family` writes them into the job as
+  `sample_params.sample_steps` (only when the caller sent none) and
+  `sample_params.guidance.txt_cfg` (api.md's name). The frontend no longer
+  hard-codes 20 steps for every local draw (`images.localSteps`): steps
+  travel only when a caller asks for a number. An unknown model keeps
+  sd-server's defaults exactly as before.
+- **Change a picture with the same weights.** FLUX.2 draws and edits with
+  one model, and edits by reference, so `edits_by_reference` now says yes to
+  any FLUX.2 name (klein, flux2-dev, flux-2-…): the source picture goes as
+  `ref_images`, never as an `init_image` restyle. The shape follows the
+  source picture, as before.
+- **One click from Hugging Face.** Two chips under "Add from Hugging Face"
+  (FLUX.2 [klein] 4B / 9B) fill in `Comfy-Org/flux2-klein-4B|9B`, whose
+  `split_files/{diffusion_models,vae,text_encoders}` layout `hf-models.js`
+  already reads as one set. A downloaded set used to end with "run it by
+  hand"; now the set's folder is handed to `sd_use_model`, which accepts a
+  folder that forms a set, and Start passes each part under its own flag.
+
+Verified here: `cargo test sd::` (19, incl. the new family/role/reference
+tests), `node --test app/test/desktop-images.test.js` (pins both halves),
+`tsc --noEmit`, `vite build`. Not verified from this container: a real
+draw (no GPU, and huggingface.co is not reachable from here, so the
+Comfy-Org file listing is taken from stable-diffusion.cpp's own docs).
+
+Not done, and where it belongs: the hosted routes. Cloudflare Workers AI
+serves `@cf/black-forest-labs/flux-2-klein-4b` (multipart/form-data,
+`input_image_0..3` for edits) and NVIDIA `black-forest-labs/flux.2-klein-4b`
+(`{prompt, seed, steps}`), but both shapes live in the engine's
+`server.js`, which is upstream's verbatim (AGENTS.md) — a PR for
+`tradernonymous/freeopenai`, not this delta.
 
 ## L1: the W1–W12 audit, applied
 

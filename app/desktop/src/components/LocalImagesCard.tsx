@@ -48,6 +48,16 @@ type SdStatus = {
 // weights can be too, or they come from Hugging Face through "Add from
 // Hugging Face" below, which lands them in sd-models where sd_find looks.
 
+// One click to the FLUX.2 [klein] sets stable-diffusion.cpp documents
+// (docs/flux2.md): the Comfy-Org split repos carry the diffusion model, the
+// flux2 VAE and the Qwen3 text encoder under folders hf-models.js reads as
+// roles, so each lands as one set. 4B is Apache-2.0; 9B is the sharper one
+// and needs a bigger card.
+const FLUX2_SUGGESTIONS = [
+  { label: 'FLUX.2 [klein] 4B', repo: 'Comfy-Org/flux2-klein-4B', note: 'draws and edits in 4 steps; Apache-2.0' },
+  { label: 'FLUX.2 [klein] 9B', repo: 'Comfy-Org/flux2-klein-9B', note: 'sharper, needs a bigger card; non-commercial licence' },
+];
+
 function sizeOf(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
@@ -65,6 +75,8 @@ function progressLabel(p: Progress): string {
 export interface HubDownloaderProps {
   kind: 'image' | 'voice';
   placeholder: string;
+  /** Repos worth one click: shown as chips that fill the box and look up. */
+  suggestions?: { label: string; repo: string; note: string }[];
   /** A finished download: `path` is the first file (the model of a set). */
   onDownloaded: (path: string, row: HubOfferRow) => Promise<void> | void;
   disabled?: boolean;
@@ -83,7 +95,7 @@ export interface HubDownloaderProps {
  * this takes back every file of the set that this run fetched, because half
  * a set is only disk used.
  */
-export function HubDownloader({ kind, placeholder, onDownloaded, disabled }: HubDownloaderProps) {
+export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, disabled }: HubDownloaderProps) {
   const [query, setQuery] = useState('');
   const [looking, setLooking] = useState(false);
   const [offer, setOffer] = useState<{ repo: string; rows: HubOfferRow[]; gated: boolean; license: string } | null>(null);
@@ -210,6 +222,22 @@ export function HubDownloader({ kind, placeholder, onDownloaded, disabled }: Hub
         />
         <button type="submit" disabled={looking || !query.trim()}>{looking ? 'Looking…' : 'Look up'}</button>
       </form>
+      {suggestions && suggestions.length > 0 && (
+        <div className="local-suggestions">
+          {suggestions.map((s) => (
+            <button
+              key={s.repo}
+              type="button"
+              className="chip chip-button"
+              title={`${s.repo} — ${s.note}`}
+              disabled={looking}
+              onClick={() => { setQuery(s.repo); lookUp(s.repo); }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
       {note && <div className="chip-note">{note}</div>}
       {offer && offer.rows.length > 0 && (
         <div className="local-hub">
@@ -227,7 +255,7 @@ export function HubDownloader({ kind, placeholder, onDownloaded, disabled }: Hub
                     <span className="local-row-name">
                       <span className="mono">{row.label}</span>
                       {row.files.length > 1 && <span className="chip">{row.files.length} files</span>}
-                      {row.set && <span className="chip chip-warn">Start here loads single files only</span>}
+                      {row.set && <span className="chip">set: lands in its own folder</span>}
                     </span>
                     <span className="local-row-note">{row.note} · {fit.text}</span>
                   </div>
@@ -312,13 +340,15 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
   });
 
   // A single file lands in sd-models, where sd_find lists it, and becomes the
-  // model straight away. A set lands in a folder of its own: Start here
-  // passes sd-server one file (-m), and a set needs each part named with its
-  // own flag, so it is not put in a list it cannot be started from.
+  // model straight away. A set lands in a folder of its own, and that folder
+  // is the model: sd_use_model remembers it and Start passes each part to
+  // sd-server under its own flag (--diffusion-model, --vae, --llm).
   const downloaded = async (path: string, row: import('../hf-models.js').HubOfferRow) => {
     if (row.set) {
-      pushToast('info', `${row.label} and its ${row.files.length - 1} other files are in sd-models/${row.set}. `
-        + 'Start here loads one file, so run this set from sd-server with --diffusion-model, --vae and its encoder flags for now.', true);
+      const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+      const folder = cut > 0 ? path.slice(0, cut) : path;
+      await call('sd_use_model', { path: folder });
+      pushToast('ok', `${row.label} and its ${row.files.length - 1} other files are in sd-models/${row.set}. Local images will draw with the set.`);
       await onRefresh();
       return;
     }
@@ -381,13 +411,15 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
         <p className="settings-hint">
           Put weights (.safetensors, .ckpt or .gguf) in{' '}
           <span className="mono">{facts?.models_dir || '<app data>/sd-models'}</span> or beside sd-server, or pick any file.
-          A model that comes in parts (Krea2, Flux, Qwen-Image) goes in its own folder there, with its VAE and
-          text encoder beside it; it then shows up as one model marked "set of N files".
+          A model that comes in parts (FLUX.2, Krea2, Qwen-Image) goes in its own folder there, with its VAE and
+          text encoder beside it; it then shows up as one model marked "set of N files". FLUX.2 [klein] draws
+          and changes pictures with the same weights, in four steps; the app sets its steps and cfg for it.
         </p>
 
         <HubDownloader
           kind="image"
-          placeholder="Comfy-Org/stable-diffusion-v1-5-archive, a model page link, or a .safetensors or .gguf link"
+          placeholder="Comfy-Org/flux2-klein-4B, a model page link, or a .safetensors or .gguf link"
+          suggestions={FLUX2_SUGGESTIONS}
           disabled={drawing}
           onDownloaded={downloaded}
         />

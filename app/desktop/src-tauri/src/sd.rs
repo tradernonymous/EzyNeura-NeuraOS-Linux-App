@@ -216,9 +216,13 @@ pub struct SetParts {
 /// which an edit model needs to see the picture it is changing.
 fn role_of(name: &str) -> &'static str {
     let lower = name.to_lowercase();
+    // FLUX ships its VAE as an autoencoder named for it: `ae.safetensors`
+    // (FLUX.1) and `flux2_ae.safetensors` (FLUX.2), with no "vae" in the name.
+    let stem = lower.rsplit_once('.').map(|(s, _)| s).unwrap_or(&lower);
+    let autoencoder = stem == "ae" || stem.ends_with("_ae") || stem.ends_with("-ae");
     if lower.starts_with("mmproj") || lower.contains(".mmproj") {
         "llm_vision"
-    } else if lower.contains("vae") {
+    } else if lower.contains("vae") || autoencoder {
         "vae"
     } else if lower.contains("clip_l") {
         "clip_l"
@@ -235,6 +239,13 @@ fn role_of(name: &str) -> &'static str {
         "qwen3-vl",
         "qwen2.5-vl",
         "qwen2_5_vl",
+        // FLUX.2 [klein]'s text encoder is a plain Qwen3 (`qwen_3_4b`,
+        // `qwen_3_8b`, `Qwen3-8B-...`). A Qwen-Image DIFFUSION model is
+        // "qwen-image"/"qwen_image", which none of these match.
+        "qwen_3_",
+        "qwen3_",
+        "qwen3-",
+        "qwen3.",
     ]
     .iter()
     .any(|k| lower.contains(k))
@@ -497,6 +508,21 @@ pub fn sd_pick_binary(app: tauri::AppHandle) -> Result<Option<String>, String> {
 #[tauri::command(async)]
 pub fn sd_use_model(app: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
     let source = PathBuf::from(&path);
+    // A folder is a model when it forms a set (NEURA-073): the downloader
+    // lands FLUX.2 and the like as one folder, and Start passes each part
+    // under its own flag. A folder that is not a set is not a model.
+    if source.is_dir() {
+        if set_in(&source).is_none() {
+            return Err(format!(
+                "{} is not a model set: it needs a diffusion model with its VAE or text encoder beside it.",
+                path
+            ));
+        }
+        let file = model_file(&app)?;
+        std::fs::write(&file, source.display().to_string())
+            .map_err(|e| format!("Could not save the path: {}", e))?;
+        return Ok(serde_json::json!({ "path": source.display().to_string(), "set": true }));
+    }
     if !source.is_file() {
         return Err(format!("No file at {}", path));
     }
@@ -895,22 +921,89 @@ pub fn job_body(
     body
 }
 
-/// An instruction-edit model -- Krea2 edit, Qwen-Image-Edit, Flux Kontext --
-/// is named for it, in the file or, for a set, in its diffusion part. Those
-/// models read the picture as a reference and follow the words; image-to-image would
-/// instead start from the picture's pixels and mostly restyle them.
-pub fn edits_by_reference(model: &Path) -> bool {
+/// The name that says what a model is: the file's, or for a set, its
+/// diffusion part's. Lower-cased, because every rule below reads it that way.
+fn model_name_of(model: &Path) -> String {
     let named = |path: &Path| {
-        let name = path
-            .file_name()
+        path.file_name()
             .map(|n| n.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
-        name.contains("edit") || name.contains("kontext")
+            .unwrap_or_default()
     };
-    if named(model) {
-        return true;
+    if model.is_dir() {
+        if let Some(parts) = set_in(model) {
+            return named(&parts.diffusion);
+        }
     }
-    model.is_dir() && set_in(model).map(|parts| named(&parts.diffusion)).unwrap_or(false)
+    named(model)
+}
+
+/// An instruction-edit model -- Krea2 edit, Qwen-Image-Edit, Flux Kontext,
+/// and every FLUX.2 (dev and klein edit and draw with the same weights) -- is
+/// named for it, in the file or, for a set, in its diffusion part. Those
+/// models read the picture as a reference and follow the words; image-to-image
+/// would instead start from the picture's pixels and mostly restyle them.
+pub fn edits_by_reference(model: &Path) -> bool {
+    let name = model_name_of(model);
+    if name.is_empty() {
+        return false;
+    }
+    name.contains("edit") || name.contains("kontext") || is_flux2(&name)
+}
+
+/// FLUX.2 in any of its spellings: "flux2-dev", "flux-2-klein-4b", "FLUX.2".
+fn is_flux2(name: &str) -> bool {
+    name.contains("flux2") || name.contains("flux-2") || name.contains("flux.2") || name.contains("klein")
+}
+
+/// What a model family draws best with, when the caller does not say
+/// (docs/flux2.md and docs/flux.md in stable-diffusion.cpp, Sept 2026). A
+/// distilled FLUX.2 [klein] is a four-step model at cfg 1.0: sd-server's own
+/// defaults (20 steps, cfg 7) would take five times as long and wash it out.
+/// The base klein and FLUX.2-dev keep 20 steps; dev is guidance-distilled at
+/// cfg 1.0 too, the base variants take real cfg (4.0).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Family {
+    pub label: &'static str,
+    pub cfg: f64,
+    pub steps: u32,
+}
+
+pub fn family_of(model: &Path) -> Option<Family> {
+    let name = model_name_of(model);
+    let klein = name.contains("klein");
+    let base = name.contains("base");
+    let flux1 = name.contains("flux1") || name.contains("flux-1") || name.contains("flux.1");
+    if klein && base {
+        Some(Family { label: "FLUX.2 [klein] base", cfg: 4.0, steps: 20 })
+    } else if klein {
+        Some(Family { label: "FLUX.2 [klein]", cfg: 1.0, steps: 4 })
+    } else if is_flux2(&name) {
+        Some(Family { label: "FLUX.2 [dev]", cfg: 1.0, steps: 20 })
+    } else if flux1 && name.contains("schnell") {
+        Some(Family { label: "FLUX.1 [schnell]", cfg: 1.0, steps: 4 })
+    } else if flux1 {
+        Some(Family { label: "FLUX.1", cfg: 1.0, steps: 20 })
+    } else {
+        None
+    }
+}
+
+/// The job with the family's own numbers where the caller left them out:
+/// `sample_params.sample_steps` (only if absent) and `guidance.txt_cfg`
+/// (api.md's name for the classifier-free guidance scale). A model with no
+/// known family gets sd-server's defaults, exactly as before.
+pub fn with_family(mut body: serde_json::Value, family: Option<Family>) -> serde_json::Value {
+    let Some(family) = family else {
+        return body;
+    };
+    if body.get("sample_params").is_none() {
+        body["sample_params"] = serde_json::json!({});
+    }
+    if body["sample_params"].get("sample_steps").is_none() {
+        body["sample_params"]["sample_steps"] = serde_json::json!(family.steps);
+    }
+    body["sample_params"]["guidance"] = serde_json::json!({ "txt_cfg": family.cfg });
+    body
 }
 
 /// The same job with the picture moved to where an edit model reads it:
@@ -1098,6 +1191,7 @@ pub async fn sd_generate(
     if edits_by_reference(&model) {
         body = by_reference(body);
     }
+    body = with_family(body, family_of(&model));
     let body = body.to_string();
     let url = format!("{}/sdcpp/v1/img_gen", base_url(port));
     let response = client(Duration::from_secs(30))?
@@ -1198,6 +1292,35 @@ mod tests {
             "the projector is the encoder's eyes, not the encoder"
         );
         assert_eq!(parts.clip_l, None);
+    }
+
+    #[test]
+    fn flux2_kleins_three_files_are_one_set_and_the_encoder_is_not_the_model() {
+        // Comfy-Org/flux2-klein-4B: the diffusion model and the Qwen3 text
+        // encoder are the same size in bf16, so "the largest file" alone
+        // would pick either. The encoder is known by its name.
+        let files = vec![
+            (PathBuf::from("k/flux-2-klein-4b.safetensors"), 8_000_000_000),
+            (PathBuf::from("k/qwen_3_4b.safetensors"), 8_100_000_000),
+            (PathBuf::from("k/flux2-vae.safetensors"), 330_000_000),
+        ];
+        let parts = set_roles(&files).expect("a set");
+        assert_eq!(parts.diffusion, PathBuf::from("k/flux-2-klein-4b.safetensors"));
+        assert_eq!(parts.llm, Some(PathBuf::from("k/qwen_3_4b.safetensors")));
+        assert_eq!(parts.vae, Some(PathBuf::from("k/flux2-vae.safetensors")));
+        // The other spelling of the same set, from the sd.cpp docs.
+        let gguf = vec![
+            (PathBuf::from("d/flux2-dev-Q4_K_S.gguf"), 18_000_000_000),
+            (PathBuf::from("d/flux2_ae.safetensors"), 330_000_000),
+            (PathBuf::from("d/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"), 14_000_000_000),
+        ];
+        let parts = set_roles(&gguf).expect("a set");
+        assert_eq!(parts.diffusion, PathBuf::from("d/flux2-dev-Q4_K_S.gguf"));
+        assert_eq!(parts.vae, Some(PathBuf::from("d/flux2_ae.safetensors")), "flux's autoencoder is its VAE");
+        assert_eq!(parts.llm, Some(PathBuf::from("d/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf")));
+        assert_eq!(role_of("ae.safetensors"), "vae");
+        assert_eq!(role_of("qwen-image-2512-Q4_K_M.gguf"), "diffusion", "Qwen-Image is not a Qwen3 encoder");
+        assert_eq!(role_of("Qwen3-8B-Q4_K_M.gguf"), "llm");
     }
 
     #[test]
@@ -1341,6 +1464,32 @@ mod tests {
         assert!(edits_by_reference(Path::new("m/flux1-kontext-dev-Q4_0.gguf")));
         assert!(!edits_by_reference(Path::new("m/v1-5-pruned-emaonly.safetensors")));
         assert!(!edits_by_reference(Path::new("")), "no server, no edit route");
+        // FLUX.2 draws and edits with one set of weights: a reference, never img2img.
+        assert!(edits_by_reference(Path::new("m/flux-2-klein-4b.safetensors")));
+        assert!(edits_by_reference(Path::new("m/flux2-dev-Q4_K_S.gguf")));
+        assert!(!edits_by_reference(Path::new("m/flux1-schnell-Q4_0.gguf")), "FLUX.1 schnell only draws");
+    }
+
+    #[test]
+    fn a_flux_family_brings_its_own_steps_and_cfg_and_nothing_else_is_touched() {
+        let klein = family_of(Path::new("m/flux-2-klein-4b-Q8_0.gguf")).unwrap();
+        assert_eq!((klein.cfg, klein.steps), (1.0, 4));
+        let base = family_of(Path::new("m/flux-2-klein-base-9b.safetensors")).unwrap();
+        assert_eq!((base.cfg, base.steps), (4.0, 20));
+        let dev = family_of(Path::new("m/flux2-dev-Q4_K_S.gguf")).unwrap();
+        assert_eq!((dev.cfg, dev.steps), (1.0, 20));
+        let schnell = family_of(Path::new("m/flux1-schnell-Q4_0.gguf")).unwrap();
+        assert_eq!((schnell.cfg, schnell.steps), (1.0, 4));
+        assert!(family_of(Path::new("m/v1-5-pruned-emaonly.safetensors")).is_none());
+
+        // The caller's steps win; the family fills the gap and sets the cfg.
+        let asked = with_family(job_body("a cat", "", 512, 512, Some(12), None, None, None), Some(klein));
+        assert_eq!(asked["sample_params"]["sample_steps"], 12);
+        assert_eq!(asked["sample_params"]["guidance"]["txt_cfg"], 1.0);
+        let bare = with_family(job_body("a cat", "", 512, 512, None, None, None, None), Some(klein));
+        assert_eq!(bare["sample_params"]["sample_steps"], 4);
+        let plain = job_body("a cat", "", 512, 512, None, None, None, None);
+        assert_eq!(with_family(plain.clone(), None), plain, "an unknown model keeps sd-server's defaults");
     }
 
     #[test]

@@ -461,7 +461,9 @@ export default function ImagesScreen() {
               ? 'Say what to change about the picture below — for example, make the sky clear and blue.'
               : isBrowser
                 ? 'Describe the image. Puter draws it in your browser, on your account.'
-                : 'Describe the image. Free FLUX draws first; pick another service above to change that.'}
+                : isLocal
+                  ? `Describe the image. This PC draws it${choice?.model ? ` with ${choice.model}` : ''} — no account, no network.`
+                  : 'Describe the image. Free FLUX draws first; pick another service above to change that.'}
             rows={3}
           />
 

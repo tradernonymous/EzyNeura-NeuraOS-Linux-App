@@ -4146,6 +4146,22 @@ button.linkish {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+.local-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 10px;
+}
+.local-suggestions .chip-button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  background: var(--ai-dim, var(--bg-2));
+  border-color: var(--border);
+  color: var(--text-1);
+}
+.local-suggestions .chip-button:hover:not(:disabled) { border-color: var(--accent); }
+.local-suggestions .chip-button:disabled { opacity: 0.6; cursor: default; }
 .local-hub {
   margin-bottom: 8px;
 }
