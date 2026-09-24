@@ -155,6 +155,22 @@ Chromium screenshots of the built bundle against a mock engine with a
 seeded chat (fold, stop card, chips, goal, bar, Changes panel all drawn).
 Not verified: a live turn on Mint hardware.
 
+## Approved for later: the next four
+
+Approved after the "next three" merged (PR #15); not started.
+
+1. **Push and pull from the Changes panel**, with the ahead/behind count
+   already on the branch line and the remote's host checked before any
+   network call.
+2. **Amend and unstage** on the same panel: a checkbox to amend the last
+   commit, and a per-file "discard changes" behind a confirm.
+3. **A FLUX.2 first-run offer on the Chat welcome screen**, so a new user
+   meets the local image setup from the first "What are we doing today?"
+   card.
+4. **A Hugging Face token test** next to the paste field that reports
+   which Inference Providers the token can reach, so an empty Model
+   column never looks like a bug.
+
 ## The next three: FLUX.2 steps, commit from Changes, recent projects
 
 - **FLUX.2 on this PC as three steps** (`flux-setup.js`, top of the "On
