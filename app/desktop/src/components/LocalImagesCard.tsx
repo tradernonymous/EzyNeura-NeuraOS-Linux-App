@@ -117,16 +117,18 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
     onLocalDownload((event) => {
       setProgress(setRef.current ? localModels.setProgress(setRef.current, event) : event);
     }, kind).then((unsubscribe) => { stop = unsubscribe; });
-    // The setup card's "Get FLUX.2" fills the box and looks the set up at once.
+    return () => stop();
+  }, [kind]);
+
+  // The setup card's "Get FLUX.2" fills the box and looks the set up at once.
+  // (Its own hook, at the top level of the component: a hook inside another
+  // hook's callback is React error #321, which broke the whole window.)
   useEffect(() => {
     if (!autoLookup) return;
     setQuery(autoLookup);
     lookUp(autoLookup);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLookup]);
-
-  return () => stop();
-  }, [kind]);
 
   const lookUp = (text: string) => {
     const ref = localModels.parseHfRef(text);
