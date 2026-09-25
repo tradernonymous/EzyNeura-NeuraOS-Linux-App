@@ -153,42 +153,41 @@ STEP 5  Over the week
     Every session now starts knowing the machine. Re-run after a hardware
     or runtime change. Check with /memory in a session.
 
-5c  Fewer permission prompts (5 minutes)
-    Open ~/.claude/settings.json (create it as {} if missing) and merge
-    the "permissions" block from pc/settings/readonly-allowlist.json:
+5c  Fewer permission prompts (1 minute)
+    bash pc/apply-settings.sh --allowlist
+    Merges pc/settings/readonly-allowlist.json into ~/.claude/settings.json:
     read-only commands that never ask, and deny rules for ~/.ssh,
-    ~/.gnupg, .env files and destructive commands. The easiest way:
+    ~/.gnupg, .env files and destructive commands. Keeps whatever the file
+    already had and leaves a dated backup beside it. Check with
       claude
       /permissions
-    and paste the rules there, or edit the JSON by hand. After a week of
-    real use, in a session:
+    After a week of real use, in a session:
       /fewer-permission-prompts
     which reads your transcripts and proposes more allow rules.
-    pc/settings/user-settings.example.json shows every key of this file
-    in place; replace /home/YOU with your home folder.
 
-5d  The audit log (3 minutes)
+5d  The audit log (2 minutes)
     bash pc/safety/install-audit-log.sh
     Creates /var/log/claude-code/commands.log, root-owned and append-only
-    (chattr +a), and copies the hook to ~/.claude/audit-hook.sh. Then add
-    the "hooks" block the script prints to ~/.claude/settings.json (with
-    your home folder in the path). From then on every Bash command an
-    agent runs is one line in that log:
+    (chattr +a), copies the hook to ~/.claude/audit-hook.sh, and adds the
+    PostToolUse hook to ~/.claude/settings.json. From the next session on,
+    every Bash command an agent runs is one line in that log:
       sudo tail /var/log/claude-code/commands.log
     To rotate it: sudo chattr -a the file, move it, recreate, chattr +a.
 
 5e  The Bash sandbox (3 minutes)
     bash pc/safety/sandbox-setup.sh
-    Installs bubblewrap and socat and, on Mint 22, the AppArmor profile
-    that lets bwrap create user namespaces. Then in a session:
+    bash pc/apply-settings.sh --sandbox
+    The first installs bubblewrap and socat and, on Mint 22, the AppArmor
+    profile that lets bwrap create user namespaces. The second turns the
+    sandbox on in ~/.claude/settings.json with auto-allow and a list of
+    allowed network hosts (GitHub, npm, crates.io, Hugging Face, Anthropic).
+    Then in a session:
       /sandbox
-    choose the "auto-allow" mode; the Dependencies tab must be gone. From
-    then on most commands run inside the sandbox without a prompt, and a
-    command that needs a new network host asks once. To make it the
-    default everywhere, in ~/.claude/settings.json:
-      "sandbox": { "enabled": true }
-    (the example settings file has the full block with an allowed-domains
-    list for GitHub, npm, crates.io and Hugging Face).
+    The Dependencies tab must be gone and the mode must read auto-allow.
+    From then on most commands run inside the sandbox without a prompt; a
+    command that needs another network host asks once. A command that
+    fails with "Operation not permitted" inside the sandbox is the AppArmor
+    step not applied: re-run sandbox-setup.sh and paste its output.
 
 5f  Desktop control for Claude Code (1 minute, only when wanted)
     NeuraOS -> Settings -> Desktop control:

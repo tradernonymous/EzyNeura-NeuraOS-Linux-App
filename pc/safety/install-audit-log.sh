@@ -11,11 +11,4 @@ sudo chmod 0620 /var/log/claude-code/commands.log
 sudo chattr +a /var/log/claude-code/commands.log
 install -m 0755 "$(dirname "$0")/audit-hook.sh" "$HOME/.claude/audit-hook.sh"
 echo "log: /var/log/claude-code/commands.log (append-only; 'sudo chattr -a' to rotate)"
-echo "Add to ~/.claude/settings.json (pc/settings/user-settings.example.json shows it in place):"
-cat <<'JSON'
-  "hooks": {
-    "PostToolUse": [
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "/home/YOU/.claude/audit-hook.sh", "timeout": 5 } ] }
-    ]
-  }
-JSON
+bash "$(dirname "$0")/../apply-settings.sh" --audit
