@@ -29,11 +29,21 @@ const netPolicy: typeof import('./net-policy.js') = (globalThis as any).FreeAI4U
 // tooltip. update.js resolves a failure to null on purpose (a missing banner is
 // not an error), so the reason is recorded on the way through instead.
 let lastCheckFailure = '';
+// Set when the release page answered "not here" (404/403): nothing has been
+// published yet, which is an answer, not a failure to reach anything.
+let noReleaseYet = false;
+
+// The shell's error for a manifest the release does not have (net.rs,
+// fetch_text: "<url> answered HTTP 404"). A missing .sig reads "this release
+// is not signed (...)" instead, and stays a refusal.
+const MISSING_MANIFEST = /^\S+ answered HTTP (40[34])$/;
 
 /**
  * fetch() for the manifest, answered by the shell's signature-checked read.
  * A refused signature is logged and reads as "no answer": update.js then
  * reports 'unknown', and nothing unverified is ever offered for install.
+ * A missing manifest keeps its real status, so update.js stops at once
+ * instead of retrying a 404 as though it were a server error.
  */
 async function signedFetch(input: RequestInfo | URL): Promise<Response> {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -42,6 +52,8 @@ async function signedFetch(input: RequestInfo | URL): Promise<Response> {
     return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     const reason = (e as Error).message || String(e);
+    const missing = reason.match(MISSING_MANIFEST);
+    if (missing) return new Response('', { status: Number(missing[1]) });
     console.warn('update manifest refused:', reason);
     lastCheckFailure = reason;
     return new Response('', { status: 502 });
@@ -54,6 +66,7 @@ function recording(base: typeof fetch): typeof fetch {
     try {
       const res = await base(input, init);
       if (res.status === 404 || res.status === 403) {
+        noReleaseYet = true;
         lastCheckFailure = `no release is published yet (HTTP ${res.status})`;
       } else if (!res.ok && !lastCheckFailure) {
         lastCheckFailure = `the release answered HTTP ${res.status}`;
@@ -79,7 +92,8 @@ const POLL_MS = 1000 * 60 * 60;
 /** Where an in-app update has got to. 'saved' is a portable copy's finish line. */
 export type InstallState = 'idle' | 'downloading' | 'installing' | 'saved' | 'error';
 
-export type CheckResult = 'update' | 'current' | 'unknown';
+/** 'none': the release page has nothing published yet, so nothing is newer. */
+export type CheckResult = 'update' | 'current' | 'none' | 'unknown';
 
 export interface DownloadedBuild {
   name: string;
@@ -157,7 +171,12 @@ export function useUpdateCheck(): UpdateCheck {
     // signature before anything here trusts the sha256 values inside it.
     const fetchImpl = hasShell() ? signedFetch : fetch;
     lastCheckFailure = '';
+    noReleaseYet = false;
     const found = await update.fetchVersion({ fetchImpl: recording(fetchImpl), repo: release.repo, tag: release.tag });
+    if (!found && noReleaseYet) {
+      setCheckError('');
+      return 'none';
+    }
     if (!found) {
       setCheckError(lastCheckFailure || 'the release could not be reached');
       return 'unknown';

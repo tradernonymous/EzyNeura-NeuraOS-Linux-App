@@ -94,3 +94,33 @@ test('the release workflow and the app agree on the stable names and the key var
   assert.match(net, /option_env!\("NEURAOS_UPDATER_PUBKEY"\)/);
   assert.match(workflow, /tauri signer sign/);
 });
+
+// "Check for updates" before any release is published: the manifest URL
+// answers 404, and the app must say so instead of reporting a server error.
+test('a missing release is one attempt and no answer, not a retried failure', async () => {
+  let calls = 0;
+  const found = await update.fetchVersion({
+    repo: LINUX_REPO,
+    tag: update.LATEST_TAG,
+    fetchImpl: async () => { calls += 1; return { status: 404, ok: false }; },
+    sleep: async () => {},
+  });
+  assert.equal(found, null);
+  assert.equal(calls, 1);
+});
+
+test("the page recognises the shell's own wording for a missing manifest", () => {
+  const hook = fs.readFileSync(path.join(ROOT, 'app/desktop/src/useUpdateCheck.ts'), 'utf8');
+  const net = fs.readFileSync(path.join(ROOT, 'app/desktop/src-tauri/src/net.rs'), 'utf8');
+  // net.rs, fetch_text: the message a 404 comes back as.
+  assert.match(net, /format!\("\{\} answered HTTP \{\}", url, status\)/);
+  const source = hook.match(/const MISSING_MANIFEST = \/(.+)\/;/);
+  assert.ok(source, 'useUpdateCheck.ts defines MISSING_MANIFEST');
+  const missing = new RegExp(source[1]);
+  const url = update.versionUrl(LINUX_REPO, update.LATEST_TAG);
+  assert.equal(`${url} answered HTTP 404`.match(missing)[1], '404');
+  assert.equal(`${url} answered HTTP 403`.match(missing)[1], '403');
+  // A real server fault, and a release that is there but unsigned, are not "missing".
+  assert.equal(`${url} answered HTTP 502`.match(missing), null);
+  assert.equal(`this release is not signed (${url}.sig answered HTTP 404); refusing to update from it`.match(missing), null);
+});

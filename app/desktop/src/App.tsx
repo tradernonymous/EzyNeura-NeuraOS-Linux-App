@@ -565,9 +565,10 @@ export default function App() {
         break;
       case 'check-updates':
         // A person asked, so a version they dismissed earlier is still reported.
-        checkNow(true).then((result: 'update' | 'current' | 'unknown') => {
+        checkNow(true).then((result) => {
           if (result === 'update') pushToast('info', 'A newer build is available — see the banner at the top.');
           else if (result === 'current') pushToast('ok', 'This is the newest build.');
+          else if (result === 'none') pushToast('info', 'No release has been published yet, so there is nothing newer to install.');
           else pushToast('warn', 'Could not reach the release page to check.');
         });
         break;
