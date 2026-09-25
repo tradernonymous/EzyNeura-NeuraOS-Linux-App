@@ -1,6 +1,6 @@
 ---
 name: run-app
-description: Launch the NeuraOS desktop build on a virtual X server against the mock engine and take screenshots, to see a UI change working rather than only passing tests. Use when asked to run, start, or screenshot the app.
+description: Launch the NeuraOS desktop build on a virtual X server against the bundled engine and take screenshots, to see a UI change working rather than only passing tests. Use when asked to run, start, or screenshot the app.
 allowed-tools: Bash(bash scripts/dev/*) Bash(node scripts/dev/*)
 ---
 
