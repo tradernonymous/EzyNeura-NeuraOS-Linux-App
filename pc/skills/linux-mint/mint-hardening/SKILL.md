@@ -1,6 +1,6 @@
 ---
 name: mint-hardening
-description: Harden a Linux Mint desktop that also runs AI agents - firewall, SSH keys only, automatic security updates, fail2ban, AppArmor, keyring for secrets, an audit trail - without locking yourself out. Triggers on "harden", "firewall", "ufw", "ssh hardening", "fail2ban", "unattended-upgrades", "apparmor", "security audit", "lynis".
+description: Harden a Linux Mint desktop that also runs AI agents - firewall, SSH keys only, automatic security updates, fail2ban, AppArmor, keyring for secrets, an audit trail - without locking yourself out. Triggers on "harden", "firewall", "ufw", "ssh hardening", "fail2ban", "apparmor", "lock down", "keyring for secrets".
 ---
 
 # Hardening a Mint desktop

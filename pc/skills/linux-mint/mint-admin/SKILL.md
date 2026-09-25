@@ -1,6 +1,6 @@
 ---
 name: mint-admin
-description: Everyday administration of a Linux Mint PC - packages with apt and Flatpak, users and groups, permissions, cron and timers, logs, mounts, Timeshift. Triggers on "apt install", "PPA", "flatpak", "add user to group", "chmod", "chown", "fstab", "mount a drive", "timeshift", "update manager".
+description: Everyday administration of a Linux Mint PC - packages with apt and Flatpak, users and groups, permissions, cron and timers, logs, mounts, Timeshift. Triggers on "apt install", "PPA", "flatpak", "add user to group", "chmod", "chown", "fstab", "mount a drive", "crontab", "dpkg".
 ---
 
 # Administering Mint

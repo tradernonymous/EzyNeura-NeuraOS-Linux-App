@@ -1,6 +1,6 @@
 ---
 name: pc-patch
-description: Update this Linux Mint PC safely - apt, Flatpak, firmware, kernels, the NeuraOS app and Claude Code - with a Timeshift snapshot first and a clear list of what changed. Triggers on "update the system", "apt upgrade", "patch", "install updates", "update everything", "kernel update", "is a reboot needed".
+description: Update this Linux Mint PC safely - apt, Flatpak, firmware, kernels, the NeuraOS app and Claude Code - with a Timeshift snapshot first and a clear list of what changed. Triggers on "upgrade the system", "apt upgrade", "patch tuesday", "pending upgrades", "kernel upgrade", "is a reboot needed", "unattended-upgrades".
 ---
 
 # Patching Mint
