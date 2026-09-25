@@ -49,7 +49,7 @@ export interface StatusBarProps {
   onOpenPalette: () => void;
 }
 
-type CheckPhase = 'idle' | 'checking' | 'current' | 'failed';
+type CheckPhase = 'idle' | 'checking' | 'current' | 'none' | 'failed';
 
 interface UpdateButtonProps {
   available?: string;
@@ -81,9 +81,11 @@ function UpdateButton({ available, onCheckUpdates, checkError, onInstallUpdate, 
           return;
         }
         // An update found is shown by `available` from here on; "Up to date"
-        // is the brief answer, then the button offers a check again.
-        setPhase(result === 'current' ? 'current' : 'idle');
-        if (result === 'current') timer.current = setTimeout(() => setPhase('idle'), UP_TO_DATE_MS);
+        // (or "No release yet") is the brief answer, then the button offers a
+        // check again.
+        const settled = result === 'current' || result === 'none';
+        setPhase(settled ? result : 'idle');
+        if (settled) timer.current = setTimeout(() => setPhase('idle'), UP_TO_DATE_MS);
       })
       .catch(() => setPhase('failed'));
   };
@@ -128,6 +130,15 @@ function UpdateButton({ available, onCheckUpdates, checkError, onInstallUpdate, 
       <span className="status-item status-ok" role="status">
         <Icon name="check" size={13} />
         Up to date
+      </span>
+    );
+  }
+  if (phase === 'none') {
+    return (
+      <span className="status-item status-muted" role="status"
+        title="The release page has nothing published yet, so there is nothing newer to install.">
+        <Icon name="check" size={13} />
+        No release yet
       </span>
     );
   }
