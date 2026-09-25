@@ -19,6 +19,19 @@ not merely once its code is green in CI.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland; **the same over MCP** (below, "The PC plan, built"): `neuraos_screenshot` and `neuraos_desktop` on the `--mcp` server behind a second toggle in Settings → Desktop control |
 
+## Check for updates: "no release yet" is an answer (2026-09-25)
+
+Found on the first Mint machine: "Check for updates" ended on a server
+error. This repository had published no release, so the manifest URL
+answered 404; the shell reported that as an error string and
+`signedFetch` (`useUpdateCheck.ts`) turned every shell error into a fake
+502, which `update.js` retried three times as a server fault. A missing
+manifest now keeps its 404/403 (matched on `net.rs`'s own wording; a
+missing `.sig` stays a refusal), and the check returns `'none'`: the status
+bar says "No release yet". Pinned in `app/test/desktop-update.test.js`.
+The check finds real updates once a `v*` tag publishes the first release
+(L7 row above).
+
 ## The PC plan, built (docs/PC_UPGRADE_PLAN.md)
 
 Everything in the PC plan that can live in a repository now does; what
