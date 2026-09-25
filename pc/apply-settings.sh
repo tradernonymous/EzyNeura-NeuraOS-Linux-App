@@ -47,7 +47,10 @@ if "--sandbox" in flags:
     sb.setdefault("autoAllowBashIfSandboxed", True)
     net = sb.setdefault("network", {})
     domains = net.setdefault("allowedDomains", [])
-    for d in ["github.com", "*.github.com", "registry.npmjs.org", "crates.io", "static.crates.io", "index.crates.io", "huggingface.co", "*.huggingface.co", "claude.ai", "*.anthropic.com"]:
+    # GitHub Releases (Electron, prebuilt native modules, one-click runtimes)
+    # redirect to *.githubusercontent.com; without it the sandbox proxy
+    # refuses the download and npm install fails half-way.
+    for d in ["github.com", "*.github.com", "*.githubusercontent.com", "registry.npmjs.org", "nodejs.org", "crates.io", "static.crates.io", "index.crates.io", "huggingface.co", "*.huggingface.co", "*.hf.co", "claude.ai", "*.anthropic.com", "pypi.org", "files.pythonhosted.org"]:
         if d not in domains: domains.append(d); changed.append(f"sandbox.network.allowedDomains: +{d}")
 
 json.dump(s, open(settings_path, "w"), indent=2)
