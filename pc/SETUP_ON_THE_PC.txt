@@ -1,0 +1,229 @@
+NEURAOS + CLAUDE CODE ON THIS LINUX MINT PC
+Step-by-step, in the order to do them. Every command is typed in a
+terminal (Ctrl+Alt+T) from the repository folder unless it says otherwise.
+None of this can run from a cloud session; the first run on the PC is the
+verification, so keep what each script prints and report it back.
+
+Before you start
+----------------
+  cd ~/EzyNeura-NeuraOS-Linux-App        # or wherever the clone is
+  git pull
+  ls pc                                    # the scripts named below are here
+
+  You need: sudo rights, an internet connection, a claude.ai account with
+  Claude Code access (Pro, Max, Team, Enterprise or a Console API key),
+  and Node 22 or newer for the web UI (step 2). Check Node with
+    node --version
+  If it is missing or older than 22: NeuraOS Settings -> Engine installs
+  Node 24 with one click, or
+    sudo apt install nodejs npm
+  on Mint 22 (Mint 21's apt Node is too old; use the NeuraOS one-click).
+
+============================================================================
+STEP 1  Claude Code (about 5 minutes)
+============================================================================
+  bash pc/install-claude-code.sh
+
+  What it does: apt installs ripgrep, bubblewrap, socat, libsecret-tools,
+  curl and git; runs the official installer (curl -fsSL
+  https://claude.ai/install.sh | bash) which puts `claude` in
+  ~/.local/bin and keeps it updated in the background; then runs
+  `claude doctor`.
+
+  Then, in a NEW terminal (so ~/.local/bin is on the PATH):
+    cd ~/EzyNeura-NeuraOS-Linux-App
+    claude
+  A browser tab opens for sign-in. Sign in, come back, answer the
+  first-run questions (theme, trust this folder: yes). Type /status to
+  confirm the account, then /exit.
+
+  If `claude` is "command not found":
+    export PATH="$HOME/.local/bin:$PATH"
+  and add that line to the end of ~/.bashrc.
+
+  Expected output to report: the `claude doctor` block, and the version
+  from `claude --version`.
+
+============================================================================
+STEP 2  The web GUI (claudecodeui) on localhost:3001 (about 5 minutes)
+============================================================================
+  bash pc/install-web-ui.sh
+
+  What it does: sets a per-user npm prefix (~/.npm-global, no sudo npm),
+  installs the npm package @cloudcli-ai/cloudcli with the flag that lets
+  its native modules build, copies pc/web-ui.service to
+  ~/.config/systemd/user/neuraos-claude-ui.service with HOST=127.0.0.1
+  and SERVER_PORT=3001, enables and starts it, then checks which address
+  it is listening on.
+
+  The last lines must say:
+    bound to 127.0.0.1:3001: localhost only, as intended
+  If they say "bound to 0.0.0.0" or "*:3001", stop it at once:
+    systemctl --user stop neuraos-claude-ui
+  and report it: the package's HOST variable did not take, and the unit
+  needs a different setting (I will fix the unit from what you paste).
+
+  Then open in Firefox:
+    http://127.0.0.1:3001
+  The first visit creates the UI's own login (a username and password of
+  your choosing; this is the web UI's account, not claude.ai). Open the
+  repository folder in it, start a chat, confirm it answers.
+
+  For a desktop window: Firefox menu -> Install as web app (or right-click
+  the tab), or:
+    xdg-open http://127.0.0.1:3001
+
+  Useful:
+    systemctl --user status neuraos-claude-ui       # is it running
+    journalctl --user -u neuraos-claude-ui -f       # its log
+    systemctl --user restart neuraos-claude-ui      # after an npm update
+  It starts at login. To stop it for good:
+    systemctl --user disable --now neuraos-claude-ui
+
+  From another device on the LAN: never open the port. Use an SSH tunnel:
+    ssh -L 3001:127.0.0.1:3001 you@this-pc
+  then open http://127.0.0.1:3001 on that device.
+
+============================================================================
+STEP 3  Two plugin bundles (about 3 minutes)
+============================================================================
+  Inside a Claude Code session (`claude` in the terminal, or the web UI):
+
+    /plugin marketplace add khalilbenaz/claude-skills-collection
+    /plugin install claude-skills-cloud-ops@claude-skills-collection
+    /plugin install claude-skills-security@claude-skills-collection
+
+  Each /plugin install opens the plugin panel: choose Install, scope
+  "user" (all projects). Then /plugin shows both as enabled.
+
+  Why these two and not everything: every installed skill's name and
+  description sit in the context of every session. These two cost about
+  7,700 tokens together; the whole collection costs about 56,000. Add
+  claude-skills-dev (about 18,600) only on a day of heavy multi-language
+  work, and remove it after:
+    /plugin uninstall claude-skills-dev@claude-skills-collection
+
+  The skills are written in French with English triggers; they work from
+  English prompts. Try one:  /linux-troubleshooter
+
+============================================================================
+STEP 4  NeuraOS as an MCP server for Claude Code (2 minutes)
+============================================================================
+  NeuraOS must be installed (the .deb or the AppImage). Open NeuraOS ->
+  Settings -> Connectors: it shows the exact command for the installed
+  path and copies it. For the .deb it is:
+
+    claude mcp add neuraos -- freeai4u-desktop --mcp
+
+  For an AppImage, use its full path instead of freeai4u-desktop.
+  Then in a session:
+    /mcp
+  neuraos must show as connected with five tools plus two desktop ones:
+  neuraos_status, neuraos_models, neuraos_chat, neuraos_image,
+  neuraos_open, neuraos_screenshot, neuraos_desktop.
+
+  Try it: "use neuraos_status to tell me what this PC is running".
+  The two desktop tools answer "desktop control over MCP is off" until
+  step 5f.
+
+============================================================================
+STEP 5  Over the week
+============================================================================
+
+5a  The two skill packs (1 minute)
+    bash pc/install-skills.sh
+    Copies pc/skills/linux-mint (5 skills) and pc/skills/pc-ops (7 skills)
+    into ~/.claude/skills. No restart needed. In a session try:
+      /pc-triage
+      /pc-vitals
+    Re-run the script after a `git pull` that changed the packs.
+
+5b  The capability catalogue (1 minute)
+    bash pc/pc-md.sh
+    Writes ~/.claude/pc.md: GPU and VRAM, runtimes, model folders, the
+    local servers' ports, the rules of this box. Then add one line to
+    ~/.claude/CLAUDE.md (create the file if it does not exist):
+      @~/.claude/pc.md
+    Every session now starts knowing the machine. Re-run after a hardware
+    or runtime change. Check with /memory in a session.
+
+5c  Fewer permission prompts (5 minutes)
+    Open ~/.claude/settings.json (create it as {} if missing) and merge
+    the "permissions" block from pc/settings/readonly-allowlist.json:
+    read-only commands that never ask, and deny rules for ~/.ssh,
+    ~/.gnupg, .env files and destructive commands. The easiest way:
+      claude
+      /permissions
+    and paste the rules there, or edit the JSON by hand. After a week of
+    real use, in a session:
+      /fewer-permission-prompts
+    which reads your transcripts and proposes more allow rules.
+    pc/settings/user-settings.example.json shows every key of this file
+    in place; replace /home/YOU with your home folder.
+
+5d  The audit log (3 minutes)
+    bash pc/safety/install-audit-log.sh
+    Creates /var/log/claude-code/commands.log, root-owned and append-only
+    (chattr +a), and copies the hook to ~/.claude/audit-hook.sh. Then add
+    the "hooks" block the script prints to ~/.claude/settings.json (with
+    your home folder in the path). From then on every Bash command an
+    agent runs is one line in that log:
+      sudo tail /var/log/claude-code/commands.log
+    To rotate it: sudo chattr -a the file, move it, recreate, chattr +a.
+
+5e  The Bash sandbox (3 minutes)
+    bash pc/safety/sandbox-setup.sh
+    Installs bubblewrap and socat and, on Mint 22, the AppArmor profile
+    that lets bwrap create user namespaces. Then in a session:
+      /sandbox
+    choose the "auto-allow" mode; the Dependencies tab must be gone. From
+    then on most commands run inside the sandbox without a prompt, and a
+    command that needs a new network host asks once. To make it the
+    default everywhere, in ~/.claude/settings.json:
+      "sandbox": { "enabled": true }
+    (the example settings file has the full block with an allowed-domains
+    list for GitHub, npm, crates.io and Hugging Face).
+
+5f  Desktop control for Claude Code (1 minute, only when wanted)
+    NeuraOS -> Settings -> Desktop control:
+      [x] Let a model in Chat see the screen and act on the desktop
+      [x] Also let agents connected over MCP see the screen and act on
+          the desktop
+    The second toggle turns on neuraos_screenshot and neuraos_desktop
+    for step 4's server. Claude Code asks you before each of those calls
+    on its side. Needs xdotool on X11 (sudo apt install xdotool) or the
+    RemoteDesktop portal on Wayland; the card says which it found.
+    Turn it off when not in use.
+
+5g  API key from the keyring (only if you use an API key or a gateway
+    instead of the claude.ai login; otherwise skip)
+      secret-tool store --label="Anthropic API key" service anthropic account claude-code
+    (it prompts; nothing is echoed), then
+      cp pc/safety/api-key-helper.sh ~/.claude/ && chmod +x ~/.claude/api-key-helper.sh
+    and in ~/.claude/settings.json:
+      "apiKeyHelper": "/home/YOU/.claude/api-key-helper.sh"
+    With a key set, the claude.ai subscription is not used for that
+    session; the key's owner is billed.
+
+============================================================================
+What to report back
+============================================================================
+  - Step 1: the `claude doctor` output and `claude --version`.
+  - Step 2: the last three lines of install-web-ui.sh, and whether the
+    page loaded.
+  - Step 3: the /plugin list.
+  - Step 4: the /mcp line for neuraos.
+  - 5a-5g: anything that printed an error, verbatim.
+  Anything unexpected: paste the terminal output; that is enough for a fix.
+
+Undo
+----
+  Web UI:      systemctl --user disable --now neuraos-claude-ui;
+               rm ~/.config/systemd/user/neuraos-claude-ui.service;
+               npm uninstall -g @cloudcli-ai/cloudcli
+  Skills:      rm -rf ~/.claude/skills/<name>
+  Plugins:     /plugin uninstall <name>@claude-skills-collection
+  MCP server:  claude mcp remove neuraos
+  Audit log:   sudo chattr -a /var/log/claude-code/commands.log;
+               sudo rm -r /var/log/claude-code; remove the hooks block
+  Claude Code: rm -f ~/.local/bin/claude; rm -rf ~/.local/share/claude
