@@ -189,6 +189,19 @@ STEP 5  Over the week
     fails with "Operation not permitted" inside the sandbox is the AppArmor
     step not applied: re-run sandbox-setup.sh and paste its output.
 
+5e-bis  Git push from a Claude Code session (2 minutes)
+    Git on the PC needs a stored GitHub login before anything Claude runs
+    can push. The GitHub CLI stores the token in your keyring and registers
+    itself as git's credential helper:
+      sudo apt install -y gh
+      gh auth login            # GitHub.com, HTTPS, login with a web browser
+      gh auth setup-git
+      gh auth status
+    The token file (~/.config/gh/hosts.yml) is on the 5c deny list, so
+    Claude's file reads never see it; git uses it. A push still asks you
+    once per session unless you add "Bash(git push *)" to
+    permissions.allow in ~/.claude/settings.json.
+
 5f  Desktop control for Claude Code (1 minute, only when wanted)
     NeuraOS -> Settings -> Desktop control:
       [x] Let a model in Chat see the screen and act on the desktop
