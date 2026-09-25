@@ -56,6 +56,12 @@ STEP 2  The web GUI (claudecodeui) on localhost:3001 (about 5 minutes)
   and SERVER_PORT=3001, enables and starts it, then checks which address
   it is listening on.
 
+  If it stops with "cloudcli did not install into ...": run
+    npm prefix -g
+  It must print /home/you/.npm-global; if it prints something else, run
+    npm config set prefix ~/.npm-global
+  and the script again.
+
   The last lines must say:
     bound to 127.0.0.1:3001: localhost only, as intended
   If they say "bound to 0.0.0.0" or "*:3001", stop it at once:

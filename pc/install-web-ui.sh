@@ -20,7 +20,11 @@ mkdir -p "$PREFIX"
 npm config set prefix "$PREFIX"
 echo "== npm install -g @cloudcli-ai/cloudcli (native modules allowed to build)"
 npm install -g --allow-scripts=@cloudcli-ai/cloudcli,better-sqlite3,node-pty,bcrypt @cloudcli-ai/cloudcli
-[ -x "$PREFIX/bin/cloudcli" ] || { echo "cloudcli did not install into $PREFIX/bin" >&2; exit 1; }
+# npm's launcher is a symlink to a .js file that is not always marked
+# executable (seen on Mint 22 with NodeSource's npm): check it exists, then
+# make the target runnable, since systemd's ExecStart needs that.
+[ -e "$PREFIX/bin/cloudcli" ] || { echo "cloudcli did not install into $PREFIX/bin (npm prefix -g says: $(npm prefix -g))" >&2; exit 1; }
+chmod +x "$(readlink -f "$PREFIX/bin/cloudcli")" 2>/dev/null || true
 
 UNIT_DIR="$HOME/.config/systemd/user"
 mkdir -p "$UNIT_DIR"
