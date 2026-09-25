@@ -130,7 +130,7 @@ Settings → Engine downloads Node 24 (sha256-checked from nodejs.org) if Mint's
 Code → Agents (ACP) runs Gemini CLI, Claude Code, Codex or any ACP agent inside the open folder. Every file it wants to write and every permission it asks for is a card, and a desktop notification with **Allow / Reject** buttons, so you can keep working in another window.
 
 ### 🔌 NeuraOS as an MCP server
-`freeai4u-desktop --mcp` lets Claude Code, Gemini CLI, Codex or any MCP client ask the models running on this machine (`neuraos_chat`), draw with the image server, list what the PC has and open a folder in NeuraOS. Settings → Connectors copies the `claude mcp add` line.
+`freeai4u-desktop --mcp` lets Claude Code, Gemini CLI, Codex or any MCP client ask the models running on this machine (`neuraos_chat`), draw with the image server, list what the PC has, open a folder in NeuraOS, and, with a second toggle in Settings → Desktop control, see the screen and click, type and scroll on the desktop (`neuraos_screenshot`, `neuraos_desktop`). Settings → Connectors copies the `claude mcp add` line. `pc/` holds this PC's whole Claude Code setup as scripts and skill packs (`docs/PC_UPGRADE_PLAN.md`).
 
 </td>
 <td width="50%" valign="top">

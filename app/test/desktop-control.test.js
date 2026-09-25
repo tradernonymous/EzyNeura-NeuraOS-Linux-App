@@ -43,3 +43,22 @@ test('the click coordinates and the screenshot size share a coordinate space, an
   const click = tools.DESKTOP.find((t) => t.function.name === 'desktop_click');
   assert.deepEqual(click.function.parameters.required, ['x', 'y']);
 });
+
+// P6.2 (docs/PC_UPGRADE_PLAN.md): the same desktop actions over MCP, behind a
+// second opt-in the `--mcp` process can read (a marker file, not localStorage).
+const fs = require('node:fs');
+const path = require('node:path');
+const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+
+test('desktop control over MCP is a separate opt-in with its own toggle', () => {
+  const card = read('desktop/src/components/DesktopControlCard.tsx');
+  assert.match(card, /Also let agents connected over MCP see the screen and act on the desktop/);
+  assert.match(card, /desktopMcpSet\(on\)/);
+  const bridge = read('desktop/src/bridge.ts');
+  assert.match(bridge, /call<\{ on: boolean \}>\('desktop_mcp_set', \{ on \}\)/);
+  const server = read('desktop/src-tauri/src/mcp_server.rs');
+  assert.match(server, /"neuraos_screenshot"/);
+  assert.match(server, /"neuraos_desktop"/);
+  assert.match(server, /desktop_allowed\(desktop_mcp_marker\(\)\.is_file\(\)\)\?;/);
+  assert.match(server, /"type": "image", "data": png_b64, "mimeType": "image\/png"/);
+});

@@ -1,0 +1,22 @@
+{
+  "_comment": "P3.5 of docs/PC_UPGRADE_PLAN.md: read-only commands Claude Code may run without asking, the way HomelabHero's ops brain allows only its read-only hh commands. Merge into ~/.claude/settings.json permissions.allow, then grow it from real transcripts with /fewer-permission-prompts.",
+  "permissions": {
+    "allow": [
+      "Bash(git status *)", "Bash(git log *)", "Bash(git diff *)", "Bash(git show *)", "Bash(git branch *)", "Bash(git remote -v)",
+      "Bash(ls *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(find *)", "Bash(rg *)", "Bash(grep *)", "Bash(tree *)",
+      "Bash(uname *)", "Bash(hostnamectl)", "Bash(lscpu)", "Bash(free *)", "Bash(df *)", "Bash(du *)", "Bash(uptime)", "Bash(nproc)",
+      "Bash(lsblk *)", "Bash(lspci *)", "Bash(lsusb)", "Bash(nvidia-smi *)", "Bash(vulkaninfo --summary)", "Bash(glxinfo -B)",
+      "Bash(systemctl status *)", "Bash(systemctl --user status *)", "Bash(systemctl list-units *)", "Bash(systemctl --failed)", "Bash(systemctl list-timers *)",
+      "Bash(journalctl *)", "Bash(dmesg *)", "Bash(ip addr)", "Bash(ip route)", "Bash(ss -tulpn)", "Bash(resolvectl status)",
+      "Bash(apt list *)", "Bash(apt-cache *)", "Bash(apt policy *)", "Bash(dpkg -l *)", "Bash(apt-get --simulate *)",
+      "Bash(docker ps *)", "Bash(docker images *)", "Bash(docker compose ps *)", "Bash(docker logs *)",
+      "Bash(node --version)", "Bash(npm --version)", "Bash(cargo --version)", "Bash(rustc --version)", "Bash(python3 --version)",
+      "Bash(npx tsc --noEmit *)", "Bash(node --test *)", "Bash(cargo test *)", "Bash(cargo clippy *)", "Bash(cargo check *)",
+      "Read(~/.claude/pc.md)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)", "Read(~/.gnupg/**)", "Read(~/.aws/**)", "Read(**/.env)", "Read(**/.env.*)", "Read(~/.config/gh/hosts.yml)",
+      "Bash(sudo rm *)", "Bash(rm -rf /*)", "Bash(dd *)", "Bash(mkfs*)", "Bash(chattr -a *)"
+    ]
+  }
+}

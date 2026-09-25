@@ -730,3 +730,40 @@ pub fn mcp_server_command() -> serde_json::Value {
 pub fn mcp_server_command() -> serde_json::Value {
     serde_json::json!({ "available": false, "command": "", "args": [] })
 }
+
+/// Whether agents connected over MCP may see and act on the desktop
+/// (docs/PC_UPGRADE_PLAN.md P6.2): a marker file the `--mcp` process
+/// checks on every desktop call, since it has no window to ask from.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn desktop_mcp_get() -> serde_json::Value {
+    serde_json::json!({ "on": crate::mcp_server::desktop_mcp_marker().is_file() })
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn desktop_mcp_set(on: bool) -> Result<serde_json::Value, String> {
+    let marker = crate::mcp_server::desktop_mcp_marker();
+    if on {
+        if let Some(dir) = marker.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+        }
+        std::fs::write(&marker, b"on\n").map_err(|e| format!("cannot write {}: {}", marker.display(), e))?;
+    } else if marker.exists() {
+        std::fs::remove_file(&marker).map_err(|e| format!("cannot remove {}: {}", marker.display(), e))?;
+    }
+    Ok(serde_json::json!({ "on": on }))
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn desktop_mcp_get() -> serde_json::Value {
+    serde_json::json!({ "on": false })
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn desktop_mcp_set(on: bool) -> Result<serde_json::Value, String> {
+    let _ = on;
+    Err("desktop control over MCP is a Linux feature".to_string())
+}

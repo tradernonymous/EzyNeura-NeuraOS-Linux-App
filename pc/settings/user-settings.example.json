@@ -1,0 +1,34 @@
+{
+  "_comment": "docs/PC_UPGRADE_PLAN.md: a ~/.claude/settings.json for this PC with every piece in place. Copy what applies; replace /home/YOU. Keys verified against the Claude Code settings reference on 2026-09-25.",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": ["see readonly-allowlist.json"],
+    "deny": ["see readonly-allowlist.json"]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowedDomains": ["github.com", "*.github.com", "registry.npmjs.org", "crates.io", "static.crates.io", "index.crates.io", "huggingface.co", "*.huggingface.co"]
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "/home/YOU/.claude/audit-hook.sh", "timeout": 5 } ] }
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0"
+  },
+  "promptCacheTtl": "1h",
+  "autoUpdatesChannel": "stable",
+  "cleanupPeriodDays": 30,
+  "_apiKeyHelper_only_with_an_API_key_or_gateway": "/home/YOU/.claude/api-key-helper.sh",
+  "extraKnownMarketplaces": {
+    "claude-skills-collection": { "source": { "source": "github", "repo": "khalilbenaz/claude-skills-collection" } }
+  },
+  "enabledPlugins": {
+    "claude-skills-cloud-ops@claude-skills-collection": true,
+    "claude-skills-security@claude-skills-collection": true
+  }
+}

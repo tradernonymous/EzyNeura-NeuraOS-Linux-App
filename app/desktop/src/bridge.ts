@@ -1167,6 +1167,16 @@ export interface McpServerCommand {
   error?: string;
 }
 
+/** Settings → Desktop control: whether agents over MCP may see and act on the desktop (P6.2). */
+export async function desktopMcpGet(): Promise<{ on: boolean }> {
+  if (!hasShell()) return { on: false };
+  return call<{ on: boolean }>('desktop_mcp_get');
+}
+
+export async function desktopMcpSet(on: boolean): Promise<{ on: boolean }> {
+  return call<{ on: boolean }>('desktop_mcp_set', { on });
+}
+
 export async function mcpServerCommand(): Promise<McpServerCommand> {
   if (!hasShell()) return { available: false, command: '', args: [] };
   return call<McpServerCommand>('mcp_server_command');
