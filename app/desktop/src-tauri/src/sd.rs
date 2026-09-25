@@ -462,7 +462,7 @@ fn use_binary(app: &tauri::AppHandle, path: String) -> Result<serde_json::Value,
                 path
             ));
         }
-        let file = model_file(&app)?;
+        let file = model_file(app)?;
         std::fs::write(&file, source.display().to_string())
             .map_err(|e| format!("Could not save the path: {}", e))?;
         return Ok(serde_json::json!({ "path": source.display().to_string(), "set": true }));

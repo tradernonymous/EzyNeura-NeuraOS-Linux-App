@@ -15,6 +15,12 @@
 // open a console window (the "black terminal flash" on launch).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// This crate is largely a thin command surface: a Tauri command's parameters
+// ARE the frontend's call signature, so bundling them into a struct to satisfy
+// a 7-argument rule would only hide the contract the page depends on. Every
+// other clippy lint is a real gate (.github/workflows/linux.yml, NEURA-104).
+#![allow(clippy::too_many_arguments)]
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -603,36 +609,33 @@ fn main() {
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                // Only the main window lives in the tray. A sign-in window
-                // that is closed is simply closed.
-                if window.label() != "main" {
-                    return;
-                }
-                // Closing the window hides it (the app lives in the tray) --
-                // except while quitting, when the close must go through so
-                // Tauri's own shutdown can run.
-                if QUITTING.load(Ordering::SeqCst) {
-                    return;
-                }
-                // No tray to come back from: the close is a real close, and
-                // the same clean quit the tray's Quit does.
-                if !TRAY_OK.load(Ordering::SeqCst) {
-                    if QUITTING.swap(true, Ordering::SeqCst) {
-                        return;
-                    }
-                    models::shutdown();
-                    sd::shutdown();
-                    engine::shutdown();
-                    mcp::shutdown();
-                    acp::shutdown();
-                    return;
-                }
-                let _ = window.hide();
-                api.prevent_close();
+        .on_window_event(|window, event| if let WindowEvent::CloseRequested { api, .. } = event {
+            // Only the main window lives in the tray. A sign-in window
+            // that is closed is simply closed.
+            if window.label() != "main" {
+                return;
             }
-            _ => {}
+            // Closing the window hides it (the app lives in the tray) --
+            // except while quitting, when the close must go through so
+            // Tauri's own shutdown can run.
+            if QUITTING.load(Ordering::SeqCst) {
+                return;
+            }
+            // No tray to come back from: the close is a real close, and
+            // the same clean quit the tray's Quit does.
+            if !TRAY_OK.load(Ordering::SeqCst) {
+                if QUITTING.swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                models::shutdown();
+                sd::shutdown();
+                engine::shutdown();
+                mcp::shutdown();
+                acp::shutdown();
+                return;
+            }
+            let _ = window.hide();
+            api.prevent_close();
         })
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_error(&e.to_string()));
@@ -646,7 +649,7 @@ fn fatal_error(msg: &str) {
     let _ = rfd::MessageDialog::new()
         .set_title("NeuraOS Desktop")
         .set_level(rfd::MessageLevel::Error)
-        .set_description(&format!(
+        .set_description(format!(
             "NeuraOS failed to start: {}\n\nA note was appended to:\n{}\n\nInclude it if you report this.",
             msg,
             crash::hint()

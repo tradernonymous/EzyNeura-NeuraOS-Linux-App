@@ -385,7 +385,7 @@ pub fn local_read_file(root: String, path: String) -> Result<serde_json::Value, 
         "absolute": file.display().to_string(),
         "bytes": meta.len(),
         "binary": binary,
-        "truncated": meta.len() > MAX_READ_BYTES as u64,
+        "truncated": meta.len() > MAX_READ_BYTES,
         "text": if binary { String::new() } else { String::from_utf8_lossy(&buffer).to_string() },
     }))
 }
@@ -894,7 +894,7 @@ mod tests {
         // A sibling folder whose name merely starts with the root's must not pass.
         let sibling = PathBuf::from(if cfg!(windows) { "C:\\work\\app-secrets" } else { "/work/app-secrets" });
         assert!(!under(&sibling, &r));
-        assert!(!under(&r.parent().unwrap(), &r));
+        assert!(!under(r.parent().unwrap(), &r));
     }
 
     #[test]

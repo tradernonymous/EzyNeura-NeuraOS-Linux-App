@@ -92,8 +92,8 @@ fn scalar_size(ty: u32) -> Option<u64> {
     match ty {
         0 | 1 | 7 => Some(1),
         2 | 3 => Some(2),
-        4 | 5 | 6 => Some(4),
-        10 | 11 | 12 => Some(8),
+        4..=6 => Some(4),
+        10..=12 => Some(8),
         _ => None,
     }
 }

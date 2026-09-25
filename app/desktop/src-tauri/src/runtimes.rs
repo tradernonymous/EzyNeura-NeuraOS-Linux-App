@@ -67,7 +67,7 @@ pub fn node_dir_name(tarball: &str) -> String {
 /// Which llama.cpp release asset to take. The Vulkan build is the GPU route
 /// for every vendor; the plain build is the CPU one. Matched by substring
 /// so a rename of the prefix does not break it.
-pub fn pick_llama_asset<'a>(names: &'a [String], vulkan: bool) -> Option<&'a String> {
+pub fn pick_llama_asset(names: &[String], vulkan: bool) -> Option<&String> {
     let want = if vulkan { "ubuntu-vulkan-x64" } else { "ubuntu-x64" };
     names.iter().find(|n| n.contains(want) && n.ends_with(".zip") && !n.contains("cuda"))
 }

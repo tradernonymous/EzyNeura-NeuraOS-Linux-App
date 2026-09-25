@@ -1,0 +1,172 @@
+# The one build of the desktop app, as a reusable workflow.
+#
+# linux.yml (the gate, on every push and PR) and release.yml (on a tag) both
+# used to carry their own verbatim copy of: checkout, node, rust, the Tauri
+# apt dependencies, npm ci, tsc, the node tests, the skills lint, the frontend
+# build, cargo test, clippy and the bundles. They had already drifted -- only
+# the push workflow ran check-skills and clippy -- so a change could be green
+# on the gate and untested on the release path, or the reverse. One
+# implementation, called by both, cannot drift.
+#
+# Callers pass `bundle: true` to also produce the .deb/AppImage and the Xvfb
+# smoke test; `bundle: false` is a compile-and-test-only build, which is what
+# the forward-compatibility matrix job uses.
+#
+# Actions are pinned to commit SHAs (the comment on each line is the tag), so
+# a compromised or force-moved tag cannot change what a release build runs.
+# The toolchain itself is deliberately still a moving selector (`stable`):
+# pinning the Rust version would freeze out security fixes, which is the one
+# thing a build chain should not do.
+
+name: Desktop build
+
+on:
+  workflow_call:
+    inputs:
+      bundle:
+        description: 'Build the .deb/AppImage and run the headless smoke test'
+        type: boolean
+        required: false
+        default: true
+      neuraos_updater_pubkey:
+        description: 'The minisign public key compiled into the app (empty = unsigned manifest)'
+        type: string
+        required: false
+        default: ''
+    outputs:
+      version:
+        description: 'The app version from package.json'
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # 22.04 so the glibc and WebKitGTK 4.1 baseline covers Mint 21.x, 22.x
+    # and 23 (docs/MASTER_PLAN.md section 8) -- building on a newer distro
+    # would raise the minimum glibc these bundles need.
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    env:
+      # Compiled in by net.rs at build time; empty means "unsigned manifest".
+      NEURAOS_UPDATER_PUBKEY: ${{ inputs.neuraos_updater_pubkey || vars.NEURAOS_UPDATER_PUBKEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: app/desktop/src-tauri
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libdbus-1-dev patchelf file xdg-utils
+
+      - name: The app version, from one file
+        id: meta
+        run: echo "version=$(node -p \"require('./app/desktop/package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Frontend dependencies
+        working-directory: app/desktop
+        run: npm ci
+
+      - name: Dependency audit (npm)
+        working-directory: app/desktop
+        run: npm audit --audit-level=high
+
+      - name: Type-check
+        working-directory: app/desktop
+        run: npx tsc --noEmit
+
+      - name: Frontend tests (theme, accent hue, contrast sweep, local-fs lockstep)
+        run: node --test 'app/test/*.test.js'
+
+      - name: Skill files (.claude/skills, pc/skills) are well-formed
+        run: node scripts/check-skills.mjs
+
+      - name: Build the frontend (generate_context! embeds it)
+        working-directory: app/desktop
+        run: npm run build
+
+      - name: Dependency audit (cargo)
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file app/desktop/src-tauri/Cargo.lock
+
+      # --locked: the lockfile is committed (see .gitignore), so the manifest
+      # and the lock cannot drift and a build is reproducible from the tree.
+      - name: Rust tests
+        run: cargo test --locked --manifest-path app/desktop/src-tauri/Cargo.toml
+
+      # A real gate now, not `continue-on-error`: the tree is clean under
+      # -D warnings (only `too_many_arguments` is allowed crate-wide, because a
+      # Tauri command's parameters are the frontend's call signature).
+      - name: Rust lints
+        run: cargo clippy --locked --manifest-path app/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      # Informational, not a gate: the imported tree is not rustfmt-formatted
+      # and reformatting it wholesale would fight every `sync-upstream.sh`.
+      # It reports so the drift stays visible until it is worth doing.
+      - name: Rust formatting (reported, not enforced)
+        run: |
+          cargo fmt --manifest-path app/desktop/src-tauri/Cargo.toml --check \
+            && echo "rustfmt: clean" \
+            || echo "::notice title=rustfmt::The tree is not rustfmt-formatted. Not a gate yet (docs/BACKLOG.md)."
+
+      - name: Bundle budget (the frontend is not getting quietly bigger)
+        run: node scripts/check-bundle-size.mjs
+
+      - name: Build the .deb and AppImage
+        if: inputs.bundle
+        working-directory: app/desktop
+        run: npx tauri build --bundles deb,appimage
+
+      # L8: the built binary must actually start a window, not just link. A
+      # virtual X server and a session bus are enough for WebKitGTK to
+      # create the webview; a PANIC or FATAL line in the app's own log, or
+      # a process that is gone after the wait, fails the job. The screenshot
+      # is uploaded so a UI change can be looked at from the run page.
+      - name: Headless smoke test (Xvfb) of the built binary
+        if: inputs.bundle
+        run: |
+          sudo apt-get install -y xvfb dbus-x11 scrot
+          bash scripts/screenshot-smoke-test.sh \
+            app/desktop/src-tauri/target/release/freeai4u-desktop \
+            "$RUNNER_TEMP/neuraos-smoke.png" 12
+          if grep -E 'PANIC|FATAL' /tmp/screenshot-smoke-test.log; then
+            echo "the app logged a panic or a fatal error" >&2
+            exit 1
+          fi
+
+      - name: Upload the smoke-test screenshot
+        if: inputs.bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: neuraos-smoke-screenshot-${{ github.sha }}
+          path: ${{ runner.temp }}/neuraos-smoke.png
+          if-no-files-found: error
+
+      - name: Upload the bundles
+        if: inputs.bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: neuraos-linux-${{ github.sha }}
+          path: |
+            app/desktop/src-tauri/target/release/bundle/deb/*.deb
+            app/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error

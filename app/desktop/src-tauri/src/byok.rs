@@ -39,7 +39,7 @@ pub fn check_base(base: &str) -> Result<String, String> {
         Some((scheme, rest)) if !rest.is_empty() => scheme.to_string(),
         _ => return Err(format!("{} is not a full address; it must start with https://", trimmed)),
     };
-    let rest = trimmed.splitn(2, "://").nth(1).unwrap_or("");
+    let rest = trimmed.split_once("://").map(|x| x.1).unwrap_or("");
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     if authority.contains('@') {
         return Err("leave the user:password out of the address; the key is read from the credential store".to_string());
