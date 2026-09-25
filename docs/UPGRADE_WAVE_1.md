@@ -94,30 +94,61 @@ than a constant someone edits in place.
 | `node --test 'app/test/*.test.js'` | 105 passed, 0 failed (98 before) |
 | `node scripts/check-skills.mjs` | 15 skills, 0 findings |
 | all four workflows parse | ok |
-| `app/test/desktop-ci.test.js` | 7 new tests, covering the items below |
+| `app/test/desktop-ci.test.js` | 9 new tests, covering the items below |
+| CI (`Linux / build`, PR #27) | **green**, 11m39s, end to end: audits, tsc, 107 node tests, skill lint, frontend build, `cargo test --locked`, clippy `-D warnings`, size gate, `.deb` + AppImage, Xvfb smoke test |
 
 The new test pins the one-build rule, the real gates, SHA pinning, the
 committed lockfile, the size ceiling and the heap flag — and exercises the
 size checker against a temporary `dist` in both directions, so the gate is
 tested rather than merely present.
 
+### The first CI run failed, on a bug this test class should have caught
+
+The shared build's version step read the version with an inline
+`run:` one-liner whose escaped quotes sat in a plain YAML scalar, where `\"`
+has no meaning. The backslashes reached the shell literally, and bash only
+discovered the problem when it performed the command substitution at run
+time — `syntax error near unexpected token '('`, on the runner, a minute into
+every build. It is now a block scalar.
+
+Worth recording *how* the guard was built, because the obvious one did not
+work. `bash -n` rejects a `run:` block that is not shell at all and is happy
+with `${{ }}` expressions, but it **defers command substitutions**, so it
+passes the broken line. Verified rather than assumed: the guard was written,
+the workflow deliberately re-broken, and the test still passed. The second
+test therefore checks the *shape* instead — a `run:` that interpolates `$(`
+must be a block scalar — and that one does fail, naming `file:line`. Both
+tests were then re-confirmed against the broken workflow before being
+trusted.
+
 ## Not verified here, and said plainly
 
 `npm run build` could not complete in this 2 GB sandbox — it needs the heap
-the fix now requests — so the size gate has never run against a *real*
-`dist`. The initial budget (30 MB total, 12 MB largest asset) is an estimate
-derived from the dependency sizes, not a measurement, and the budget file
-says so in its own note.
+the fix now requests — so the size gate had never run against a *real*
+`dist` when this was written. The first draft of the budget (30 MB total,
+12 MB largest asset) was therefore an estimate derived from the dependency
+sizes, not a measurement, and the budget file said so in its own note.
 
-**The first CI run on this branch should be treated as the measurement.** If
-the real `dist` is much smaller than the estimate, tighten the ceiling with
-`node scripts/check-bundle-size.mjs --write` and say so in a follow-up: a
-budget set at 2× the truth catches nothing.
+**That is now resolved, and the estimate was as bad as predicted.** The
+first CI run of this branch measured `dist` at **16.79 MiB in 188 files**
+(js 16.23 MiB, css 0.27 MiB), largest asset **5.74 MiB** — monaco's
+`ts.worker`, with `editor.main` at 3.18 MiB, `index` at 1.03 MiB and
+`mermaid.core` at 0.66 MiB behind it. The 30 MB estimate was 1.8× the truth,
+which is exactly the ceiling that catches nothing, so the budget is now
+**19 MiB total / 6.5 MiB largest** — about 13% headroom, enough for ordinary
+churn and tight enough that a statically imported dependency or a stray
+source map fails the build. The budget file records where the number came
+from.
 
-Whether the OOM was *only* the default heap is also unproven. The
+The memory fix itself is confirmed on a 7 GB CI runner: the frontend build
+and the rest of the chain are green.
+
+What is still unproven is the *low-memory* case. The
 `--max-old-space-size=4096` build has not been watched succeed on a 2 GB
 machine, and 4 GB is more than such a machine has. On an ordinary machine
-(16 GB, or a 7 GB CI runner) the flag is comfortably within reach.
+(16 GB, or a 7 GB CI runner) the flag is comfortably within reach. A
+contributor on a small machine may still hit the ceiling; if that shows up,
+the honest fix is to cut the monaco language set, not to raise the flag.
 
 ## Worth an upstream PR
 

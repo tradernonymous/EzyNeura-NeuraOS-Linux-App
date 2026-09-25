@@ -1,5 +1,5 @@
 {
-  "totalBytes": 31457280,
-  "largestAssetBytes": 12582912,
-  "note": "Ceiling for app/desktop/dist, the frontend embedded in the binary (30 MB total, 12 MB largest asset). Set from the dependency sizes rather than a measured build; tighten it with \"node scripts/check-bundle-size.mjs --write\" once a real build is measured. Monaco and mermaid are the two large lazy chunks (they load only when a file is opened for editing, or a diagram is drawn) and together are most of this budget by design -- see app/desktop/src/components/CodeEditor.tsx and src/diagram.ts."
+  "totalBytes": 19922944,
+  "largestAssetBytes": 6815744,
+  "note": "Ceiling for app/desktop/dist, the frontend embedded in the binary: 19 MiB total, 6.5 MiB largest asset. Measured, not guessed -- the first CI run of the build chain put dist at 16.79 MiB in 188 files (js 16.23 MiB, css 0.27 MiB), largest asset 5.74 MiB (monaco's ts.worker), so this is roughly 13% headroom: enough for ordinary churn, tight enough that a statically imported dependency or a source map fails the build. The first draft of this file was a 30 MB estimate from dependency sizes alone, which at 1.8x the truth would have caught nothing. Re-record with \"node scripts/check-bundle-size.mjs --write\" and say in the PR which dependency earned the bytes; see docs/UPGRADE_WAVE_1.md."
 }
