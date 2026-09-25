@@ -1,5 +1,31 @@
 {
-  "totalBytes": 19922944,
-  "largestAssetBytes": 6815744,
-  "note": "Ceiling for app/desktop/dist, the frontend embedded in the binary: 19 MiB total, 6.5 MiB largest asset. Measured, not guessed -- the first CI run of the build chain put dist at 16.79 MiB in 188 files (js 16.23 MiB, css 0.27 MiB), largest asset 5.74 MiB (monaco's ts.worker), so this is roughly 13% headroom: enough for ordinary churn, tight enough that a statically imported dependency or a source map fails the build. The first draft of this file was a 30 MB estimate from dependency sizes alone, which at 1.8x the truth would have caught nothing. Re-record with \"node scripts/check-bundle-size.mjs --write\" and say in the PR which dependency earned the bytes; see docs/UPGRADE_WAVE_1.md."
+  "totalBytes": 19892033,
+  "largestAssetBytes": 6806525,
+  "entryBytes": 1387595,
+  "assetGrowth": {
+    "ratio": 0.25,
+    "bytes": 524288
+  },
+  "assets": {
+    "ts.worker.js": 6023589,
+    "editor.main.js": 3331050,
+    "index.js": 1077344,
+    "css.worker.js": 1012028,
+    "mermaid.core.js": 696303,
+    "cynefin.js": 690855,
+    "html.worker.js": 674613,
+    "cytoscape.esm.js": 443834,
+    "json.worker.js": 364889,
+    "katex.js": 261329,
+    "editor.worker.js": 232471,
+    "inter.woff2": 218512,
+    "architectureDiagram.js": 152020,
+    "index.css": 149958,
+    "editor.css": 133000,
+    "DesignScreen.js": 121130,
+    "sequenceDiagram.js": 117452,
+    "swimlanes.js": 117117,
+    "chunk.js": 107129
+  },
+  "note": "Ceiling for app/desktop/dist, the frontend embedded in the binary: the measurement plus 13% headroom, so ordinary churn passes and the difference is what a PR eats into. Re-record with \"node scripts/check-bundle-size.mjs --write\" and say in the PR which dependency earned the bytes. assets/ holds per-chunk sizes keyed by the chunk name with Vite's hash groups stripped; a chunk may grow by the larger of assetGrowth.ratio or assetGrowth.bytes before the gate asks for a deliberate re-record."
 }

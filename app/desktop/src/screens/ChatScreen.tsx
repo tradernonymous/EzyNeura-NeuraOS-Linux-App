@@ -35,6 +35,7 @@ import { isSavedProvider, streamSaved } from '../run-model';
 import '../saved-models.js';
 import '../byok.js';
 import '../chats.js';
+import '../persist.js';
 import '../failure.js';
 import '../fallback.js';
 import '../local-models.js';
@@ -50,6 +51,7 @@ import { call } from '../bridge';
 import { saveFile } from '../files/save';
 
 const chats: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
+const persistLib: typeof import('../persist.js') = (globalThis as any).FreeAI4UPersist;
 // /image, /edit, /redo: the Images screen's rules (images.js) and its runner
 // (image-run.js) -- the same calls, so a picture drawn here is the one the
 // Images screen would have drawn.
@@ -239,6 +241,17 @@ function saveSessions(sessions: ChatSession[]) {
       ? `Storage is full: ${report.dropped} oldest chat(s) were dropped. Export your chats to keep them.`
       : 'Storage is full and this chat could not be saved. Export your chats, then delete some.');
   }
+}
+
+// Typing is one {draft} patch per keystroke, and saveSessions rewrites the
+// whole encrypted store each time -- so a keystroke must not mean a disk
+// write. A draft-only patch waits for the typing to pause; every other patch
+// is an event worth writing at once (writeNow, which drops the older queued
+// copy rather than letting it land after the newer one). flushSave() is the
+// promise that the words are on disk before the window can go away.
+const typingSaver = persistLib.createDebouncedWrite({ write: (next: ChatSession[]) => saveSessions(next), delay: 300 });
+export function flushSave() {
+  typingSaver.flush();
 }
 
 export function newSession(provider = '', model = '', project = ''): ChatSession {
@@ -490,9 +503,21 @@ export default function ChatScreen() {
   const patchSession = useCallback((id: string, patch: Partial<ChatSession>) => {
     setSessions((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...patch, updatedAt: Date.now() } : s));
-      saveSessions(next);
+      if (persistLib.isTypingPatch(patch)) typingSaver.schedule(next);
+      else typingSaver.writeNow(next);
       return next;
     });
+  }, []);
+
+  // A scheduled save is owed before the window can go away, and on a reload
+  // there is no later turn to flush it from.
+  useEffect(() => {
+    const flush = () => typingSaver.flush();
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      typingSaver.flush();
+    };
   }, []);
 
   // ---- load engine catalogue ------------------------------------------------

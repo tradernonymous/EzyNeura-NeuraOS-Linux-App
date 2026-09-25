@@ -185,6 +185,24 @@ test('the frontend has a size ceiling, and the build checks it', () => {
   assert.ok(typeof budget.note === 'string' && budget.note.length > 0, 'the ceiling says why it is what it is');
 });
 
+test('the budget holds an entry ceiling and per-chunk baselines, both from a real build', () => {
+  // The entry (index.html + the entry chunk + its CSS) is what the first
+  // window needs; the per-chunk baselines are what catches a lazy dependency
+  // quietly doubling while the total still fits. Both are measured, and both
+  // are keyed by the chunk name with Vite's hash groups stripped.
+  const budget = JSON.parse(read('scripts', 'bundle-budget.json'));
+  assert.ok(budget.entryBytes > 0, 'the first window has its own ceiling');
+  assert.ok(budget.entryBytes < budget.totalBytes, 'the entry is a slice of the total');
+  assert.equal(typeof budget.assetGrowth, 'object', 'growth tolerance is stated, not implied');
+  assert.ok(budget.assetGrowth.ratio > 0 && budget.assetGrowth.bytes > 0);
+  const assets = budget.assets || {};
+  assert.ok(Object.keys(assets).length >= 5, `${Object.keys(assets).length} chunks recorded`);
+  for (const key of Object.keys(assets)) {
+    assert.doesNotMatch(key, /-[A-Za-z0-9_-]{6,}\.[a-z]+$/, `${key} is a stem, not a hashed filename`);
+    assert.ok(assets[key] > 0, `${key} has a size`);
+  }
+});
+
 test('the build asks for the heap it needs, instead of dying at Node’s default', () => {
   // Monaco (986 ESM modules) and mermaid are both lazy at runtime but must be
   // transformed at build time, which overruns Node's default heap on a small
@@ -221,5 +239,86 @@ test('the bundle checker passes a tree in budget and fails one over it', () => {
     assert.match(String(failed.stderr), /over budget/);
   } finally {
     fs.rmSync(dist, { recursive: true, force: true });
+  }
+});
+
+test('a chunk that quietly doubles fails the gate; ordinary churn passes it', () => {
+  // The per-chunk rule: a chunk may grow by the larger of 25% or 512 KB
+  // before the gate asks for a deliberate re-record. The budget this runs
+  // against is written by --write into a temp file (so the repo's own budget
+  // is never clobbered by a test), then its total/asset ceilings are raised
+  // so this test is about the growth rule alone and not the ceilings.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neuraos-growth-'));
+  const dist = path.join(dir, 'dist');
+  const budgetFile = path.join(dir, 'budget.json');
+  const run = (extra = []) =>
+    execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'check-bundle-size.mjs'), '--dist', dist, '--budget', budgetFile, ...extra], { encoding: 'utf8' });
+  try {
+    fs.mkdirSync(path.join(dist, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html>');
+    // A real-shaped entry chunk and one lazy chunk, both above the 100 KB
+    // recording floor. Vite's hash on each name must not survive into keys.
+    fs.writeFileSync(path.join(dist, 'assets', 'index-DMM81zh4.js'), Buffer.alloc(200 * 1024, 0x61));
+    fs.writeFileSync(path.join(dist, 'assets', 'lazy-Zz99Yy88.js'), Buffer.alloc(150 * 1024, 0x62));
+    run(['--write']);
+    let recorded = JSON.parse(fs.readFileSync(budgetFile, 'utf8'));
+    assert.deepEqual(Object.keys(recorded.assets).sort(), ['index.js', 'lazy.js'], 'keys are hash-free stems');
+    assert.ok(recorded.entryBytes > 200 * 1024, 'the entry is measured (html + entry chunk)');
+    recorded.totalBytes = 64 * 1024 * 1024; // ceilings out of the way
+    recorded.largestAssetBytes = 64 * 1024 * 1024;
+    recorded.entryBytes = 64 * 1024 * 1024;
+    fs.writeFileSync(budgetFile, JSON.stringify(recorded, null, 2));
+
+    // Churn within tolerance: +200 KB on a 150 KB chunk is under the 512 KB floor.
+    fs.writeFileSync(path.join(dist, 'assets', 'lazy-Zz99Yy88.js'), Buffer.alloc(350 * 1024, 0x62));
+    assert.match(run(), /within budget/, 'ordinary churn passes');
+
+    // Doubling: +600 KB is past the floor, so the growth rule fails and names it.
+    fs.writeFileSync(path.join(dist, 'assets', 'lazy-Zz99Yy88.js'), Buffer.alloc(750 * 1024, 0x62));
+    let failed = null;
+    try {
+      run();
+    } catch (e) {
+      failed = e;
+    }
+    assert.ok(failed, 'a chunk that doubles fails the gate');
+    assert.match(String(failed.stderr), /the lazy\.js chunk grew from/, 'and says which chunk grew');
+
+    // A deliberate re-record is the way out, and the gate passes after it.
+    run(['--write']);
+    assert.match(run(), /within budget/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the entry ceiling fails when the first window outgrows it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neuraos-entry-'));
+  const dist = path.join(dir, 'dist');
+  const budgetFile = path.join(dir, 'budget.json');
+  const run = (extra = []) =>
+    execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'check-bundle-size.mjs'), '--dist', dist, '--budget', budgetFile, ...extra], { encoding: 'utf8' });
+  try {
+    fs.mkdirSync(path.join(dist, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html>');
+    fs.writeFileSync(path.join(dist, 'assets', 'index-DMM81zh4.js'), Buffer.alloc(100 * 1024, 0x61));
+    run(['--write']);
+    const recorded = JSON.parse(fs.readFileSync(budgetFile, 'utf8'));
+    // Grow only the entry chunk; the per-chunk rule is loosened so the entry
+    // check is the one this test is about.
+    recorded.assetGrowth = { ratio: 10, bytes: 64 * 1024 * 1024 };
+    fs.writeFileSync(budgetFile, JSON.stringify(recorded, null, 2));
+    fs.writeFileSync(path.join(dist, 'assets', 'index-DMM81zh4.js'), Buffer.alloc(1024 * 1024, 0x61));
+    let failed = null;
+    try {
+      run();
+    } catch (e) {
+      failed = e;
+    }
+    assert.ok(failed, 'an oversized entry fails the gate');
+    assert.match(String(failed.stderr), /the entry \(first window\)/);
+    assert.ok(recorded.entryBytes < 1024 * 1024, 'the ceiling it broke was the recorded one');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
