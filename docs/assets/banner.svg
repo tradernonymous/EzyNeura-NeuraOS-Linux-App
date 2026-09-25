@@ -1,86 +1,194 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="NeuraOS for Linux Mint">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" role="img" aria-label="NeuraOS for Linux Mint: chat, code, create and agents on your own machine; local models on your GPU, coding agents behind approvals, an MCP server, Voice Type, desktop control, Wayland-ready">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b0a16"/>
-      <stop offset="1" stop-color="#050609"/>
+      <stop offset="0" stop-color="#07061a"/><stop offset="0.5" stop-color="#0a0818"/><stop offset="1" stop-color="#030409"/>
     </linearGradient>
     <linearGradient id="neura" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0" stop-color="#8B6CFF"/>
-      <stop offset="0.5" stop-color="#8B6CFF"/>
-      <stop offset="1" stop-color="#22D3EE"/>
+      <stop offset="0" stop-color="#8B6CFF"/><stop offset="0.55" stop-color="#7C8CFF"/><stop offset="1" stop-color="#22D3EE"/>
     </linearGradient>
-    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#87CF3E"/>
-      <stop offset="1" stop-color="#22D3EE"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#8B6CFF" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#8B6CFF" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="glow2" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
-    </radialGradient>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M40 0H0V40" fill="none" stroke="#ffffff" stroke-opacity="0.045"/>
-    </pattern>
-    <filter id="soft"><feGaussianBlur stdDeviation="1.2"/></filter>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#87CF3E"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+    <linearGradient id="horizon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B6CFF" stop-opacity="0"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0.3"/></linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.4" stop-color="#fff" stop-opacity="1"/></linearGradient>
+    <linearGradient id="cardTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8B6CFF" stop-opacity="0"/><stop offset="0.5" stop-color="#22D3EE" stop-opacity="0.9"/><stop offset="1" stop-color="#8B6CFF" stop-opacity="0"/></linearGradient>
+    <radialGradient id="glowV" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#8B6CFF" stop-opacity="0.55"/><stop offset="1" stop-color="#8B6CFF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowC" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#22D3EE" stop-opacity="0.38"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowM" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#87CF3E" stop-opacity="0.2"/><stop offset="1" stop-color="#87CF3E" stop-opacity="0"/></radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#fff" fill-opacity="0.07"/></pattern>
+    <mask id="floorMask"><rect width="1200" height="720" fill="url(#fade)"/></mask>
+    <clipPath id="frame"><rect width="1200" height="720" rx="28"/></clipPath>
+    <filter id="neon" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <filter id="textGlow" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="6" result="b"/><feComponentTransfer in="b" result="c"><feFuncA type="linear" slope="0.5"/></feComponentTransfer><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <path id="e1" d="M760 60 L880 96 L1010 62 L1130 110"/>
+    <path id="e2" d="M880 96 L940 170 L1060 150 L1130 110"/>
+    <path id="e3" d="M760 60 L700 130 L790 190 L940 170"/>
+    <path id="e4" d="M1010 62 L1060 150"/>
+    <path id="e5" d="M700 130 L620 84"/>
+    <path id="e6" d="M1130 110 L1160 200 L1060 150"/>
   </defs>
-
-  <rect width="1200" height="340" rx="24" fill="url(#bg)"/>
-  <rect width="1200" height="340" rx="24" fill="url(#grid)"/>
-  <ellipse cx="220" cy="170" rx="360" ry="220" fill="url(#glow)">
-    <animate attributeName="rx" values="340;380;340" dur="9s" repeatCount="indefinite"/>
-  </ellipse>
-  <ellipse cx="980" cy="120" rx="300" ry="200" fill="url(#glow2)">
-    <animate attributeName="cx" values="980;940;980" dur="11s" repeatCount="indefinite"/>
-  </ellipse>
-
-  <!-- the emblem: four nodes drawing an N, violet to cyan -->
-  <g transform="translate(96 66) scale(3.3)">
-    <path d="M12 52V12L52 52V12" fill="none" stroke="url(#neura)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-    <g fill="#0b0a16" stroke="url(#neura)" stroke-width="4">
-      <circle cx="12" cy="12" r="6"/>
-      <circle cx="12" cy="52" r="6"/>
-      <circle cx="52" cy="12" r="6"/>
-      <circle cx="52" cy="52" r="6"/>
-    </g>
-    <circle cx="52" cy="12" r="2.6" fill="#22D3EE">
-      <animate attributeName="r" values="2.6;3.6;2.6" dur="2.4s" repeatCount="indefinite"/>
-    </circle>
-  </g>
-
-  <g font-family="Inter, 'Segoe UI', Ubuntu, Cantarell, sans-serif" fill="#e8ecf5">
-    <text x="330" y="140" font-size="72" font-weight="700" letter-spacing="-2">Neura<tspan fill="url(#neura)">OS</tspan></text>
-    <text x="334" y="186" font-size="26" font-weight="500" fill="#a9b1c6">for <tspan fill="url(#mint)" font-weight="700">Linux Mint</tspan> · chat, code, create, agents — on your own machine</text>
-
-    <g font-size="15" fill="#c9d0e0">
-      <g transform="translate(334 228)">
-        <rect width="196" height="36" rx="18" fill="#141428" stroke="#2a2a4a"/>
-        <circle cx="20" cy="18" r="5" fill="#22D3EE"/>
-        <text x="34" y="23">Local models on your GPU</text>
-      </g>
-      <g transform="translate(542 228)">
-        <rect width="216" height="36" rx="18" fill="#141428" stroke="#2a2a4a"/>
-        <circle cx="20" cy="18" r="5" fill="#8B6CFF"/>
-        <text x="34" y="23">Coding agents, approval-gated</text>
-      </g>
-      <g transform="translate(770 228)">
-        <rect width="150" height="36" rx="18" fill="#141428" stroke="#2a2a4a"/>
-        <circle cx="20" cy="18" r="5" fill="#87CF3E"/>
-        <text x="34" y="23">.deb · AppImage</text>
-      </g>
-      <g transform="translate(932 228)">
-        <rect width="170" height="36" rx="18" fill="#141428" stroke="#2a2a4a"/>
-        <circle cx="20" cy="18" r="5" fill="#FFB02E"/>
-        <text x="34" y="23">Nothing leaves the PC</text>
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="720" fill="url(#bg)"/>
+    <rect width="1200" height="720" fill="url(#dots)"/>
+    <g mask="url(#floorMask)" stroke="#8B6CFF" stroke-opacity="0.16" fill="none" stroke-width="1">
+      <path d="M600 300 L-400 720"/><path d="M600 300 L-100 720"/><path d="M600 300 L200 720"/><path d="M600 300 L450 720"/><path d="M600 300 L600 720"/>
+      <path d="M600 300 L750 720"/><path d="M600 300 L1000 720"/><path d="M600 300 L1300 720"/><path d="M600 300 L1600 720"/>
+      <g stroke="#22D3EE" stroke-opacity="0.16"><path d="M0 380 H1200"/><path d="M0 430 H1200"/><path d="M0 500 H1200"/><path d="M0 600 H1200"/>
+        <path d="M0 340 H1200" stroke-opacity="0.6"><animate attributeName="d" values="M0 340 H1200;M0 720 H1200" dur="7s" repeatCount="indefinite"/><animate attributeName="stroke-opacity" values="0.6;0" dur="7s" repeatCount="indefinite"/></path>
       </g>
     </g>
-  </g>
+    <rect y="300" width="1200" height="420" fill="url(#horizon)" opacity="0.35"/>
+    <ellipse cx="200" cy="160" rx="400" ry="240" fill="url(#glowV)"><animate attributeName="rx" values="380;420;380" dur="9s" repeatCount="indefinite"/></ellipse>
+    <ellipse cx="960" cy="120" rx="340" ry="220" fill="url(#glowC)"><animate attributeName="cx" values="960;920;960" dur="11s" repeatCount="indefinite"/></ellipse>
+    <ellipse cx="600" cy="720" rx="520" ry="120" fill="url(#glowM)"/>
 
-  <!-- an activity line, the orb's pulse -->
-  <path d="M40 300 H1160" stroke="#ffffff" stroke-opacity="0.06"/>
-  <path d="M40 300 L300 300 L320 280 L340 320 L360 300 L1160 300" fill="none" stroke="url(#neura)" stroke-width="2" filter="url(#soft)">
-    <animateTransform attributeName="transform" type="translate" values="0 0;760 0;0 0" dur="14s" repeatCount="indefinite"/>
-  </path>
+    <g stroke="#fff" stroke-opacity="0.14" fill="none" stroke-width="1"><use href="#e1"/><use href="#e2"/><use href="#e3"/><use href="#e4"/><use href="#e5"/><use href="#e6"/></g>
+    <g fill="#0a0818" stroke="url(#neura)" stroke-width="1.6">
+      <circle cx="760" cy="60" r="4"/><circle cx="880" cy="96" r="5"/><circle cx="1010" cy="62" r="4"/><circle cx="1130" cy="110" r="5"/>
+      <circle cx="940" cy="170" r="4"/><circle cx="1060" cy="150" r="4"/><circle cx="700" cy="130" r="4"/><circle cx="790" cy="190" r="3"/><circle cx="620" cy="84" r="3"/><circle cx="1160" cy="200" r="3"/>
+    </g>
+    <g fill="#22D3EE" filter="url(#soft)">
+      <circle r="2.6"><animateMotion dur="5s" repeatCount="indefinite"><mpath href="#e1"/></animateMotion></circle>
+      <circle r="2.6" fill="#8B6CFF"><animateMotion dur="7s" begin="1.5s" repeatCount="indefinite"><mpath href="#e2"/></animateMotion></circle>
+      <circle r="2.6"><animateMotion dur="6s" begin="0.8s" repeatCount="indefinite"><mpath href="#e3"/></animateMotion></circle>
+      <circle r="2.2" fill="#87CF3E"><animateMotion dur="3.5s" begin="2s" repeatCount="indefinite"><mpath href="#e4"/></animateMotion></circle>
+      <circle r="2.2" fill="#FFB02E"><animateMotion dur="4.5s" begin="1s" repeatCount="indefinite"><mpath href="#e6"/></animateMotion></circle>
+    </g>
+
+    <g fill="none" stroke="#22D3EE" stroke-opacity="0.55" stroke-width="1.5">
+      <path d="M28 52 V28 H52"/><path d="M1172 52 V28 H1148"/><path d="M28 668 V692 H52"/><path d="M1172 668 V692 H1148"/>
+    </g>
+    <g font-family="ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, monospace" font-size="10" fill="#22D3EE" fill-opacity="0.6" letter-spacing="2">
+      <text x="62" y="36">SYS · LOCAL</text>
+      <text x="62" y="689">TAURI 2 · REACT 18 · RUST · NODE 24</text><text x="1138" y="689" text-anchor="end">MINT 21 · 22 · 23 · CINNAMON · X11 / WAYLAND</text>
+    </g>
+
+    <!-- the repository's owner, with the GitHub mark -->
+    <g transform="translate(1138 22)" font-family="ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, monospace">
+      <text x="-26" y="14" text-anchor="end" font-size="12" letter-spacing="1" fill="#e8ecf5" fill-opacity="0.85">tradernonymous</text>
+      <text x="-26" y="30" text-anchor="end" font-size="9" letter-spacing="1.5" fill="#22D3EE" fill-opacity="0.6">GITHUB</text>
+      <g transform="translate(-20 0) scale(1.25)" fill="#e8ecf5" fill-opacity="0.9">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </g>
+    </g>
+    <g transform="translate(160 170)">
+      <circle r="98" fill="none" stroke="url(#neura)" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 10"><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="40s" repeatCount="indefinite"/></circle>
+      <circle r="86" fill="none" stroke="#22D3EE" stroke-opacity="0.25" stroke-width="1" stroke-dasharray="140 400"><animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="16s" repeatCount="indefinite"/></circle>
+      <circle r="72" fill="#0a0818" fill-opacity="0.6"/>
+      <g transform="translate(-58 -58) scale(3.6)" filter="url(#neon)">
+        <path d="M6 26V6L26 26V6" fill="none" stroke="url(#neura)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <g fill="#0a0818" stroke="url(#neura)" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="26" r="3"/><circle cx="26" cy="6" r="3"/><circle cx="26" cy="26" r="3"/></g>
+        <circle cx="26" cy="6" r="1.3" fill="#22D3EE"><animate attributeName="r" values="1.3;2;1.3" dur="2.4s" repeatCount="indefinite"/></circle>
+      </g>
+    </g>
+
+    <g font-family="Inter, 'Segoe UI', Ubuntu, Cantarell, sans-serif" fill="#eef1fa">
+      <text x="304" y="128" font-size="76" font-weight="800" letter-spacing="-3" filter="url(#textGlow)">Neura<tspan fill="url(#neura)">OS</tspan></text>
+      <text x="308" y="168" font-size="24" font-weight="500" fill="#aab3cb">for <tspan fill="url(#mint)" font-weight="700">Linux Mint</tspan> · chat, code, create, agents — on your own machine</text>
+      <g font-size="14" fill="#d3d9e8">
+        <g transform="translate(308 200)"><rect width="204" height="34" rx="17" fill="#12102a" fill-opacity="0.85" stroke="#8B6CFF" stroke-opacity="0.45"/><circle cx="19" cy="17" r="4.5" fill="#22D3EE" filter="url(#soft)"/><text x="33" y="22">Local models on your GPU</text></g>
+        <g transform="translate(522 200)"><rect width="214" height="34" rx="17" fill="#12102a" fill-opacity="0.85" stroke="#8B6CFF" stroke-opacity="0.45"/><circle cx="19" cy="17" r="4.5" fill="#8B6CFF" filter="url(#soft)"/><text x="33" y="22">Coding agents, approval-gated</text></g>
+        <g transform="translate(746 200)"><rect width="148" height="34" rx="17" fill="#12102a" fill-opacity="0.85" stroke="#8B6CFF" stroke-opacity="0.45"/><circle cx="19" cy="17" r="4.5" fill="#87CF3E" filter="url(#soft)"/><text x="33" y="22">.deb · AppImage</text></g>
+        <g transform="translate(904 200)"><rect width="170" height="34" rx="17" fill="#12102a" fill-opacity="0.85" stroke="#8B6CFF" stroke-opacity="0.45"/><circle cx="19" cy="17" r="4.5" fill="#FFB02E" filter="url(#soft)"/><text x="33" y="22">Nothing leaves the PC</text></g>
+      </g>
+    </g>
+
+    <g font-family="Inter, 'Segoe UI', Ubuntu, Cantarell, sans-serif">
+      <text x="40" y="276" font-size="11" font-weight="700" letter-spacing="3" fill="#22D3EE" fill-opacity="0.75" font-family="ui-monospace, Menlo, monospace">FOUR SPACES · ONE ORB · CTRL+K REACHES EVERYTHING</text>
+      <g transform="translate(40 290)">
+        <rect width="274" height="118" rx="14" fill="#100e26" fill-opacity="0.82" stroke="#8B6CFF" stroke-opacity="0.35"/>
+        <rect x="16" y="0" width="242" height="1.5" fill="url(#cardTop)"/>
+        <g transform="translate(16 14)"><path d="M4 6h20a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H12l-6 5v-5H4a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" fill="none" stroke="#22D3EE" stroke-width="2" stroke-linejoin="round"/><circle cx="9" cy="13.5" r="1.4" fill="#22D3EE"/><circle cx="14" cy="13.5" r="1.4" fill="#22D3EE"/><circle cx="19" cy="13.5" r="1.4" fill="#22D3EE"/></g>
+        <text x="52" y="34" font-size="20" font-weight="700" fill="#eef1fa">Chat</text>
+        <text x="258" y="32" text-anchor="end" font-size="10" letter-spacing="1.5" fill="#22D3EE" fill-opacity="0.9" font-family="ui-monospace, Menlo, monospace">Alt+1</text>
+        <text x="16" y="60" font-size="12.5" fill="#b9c1d6">Free models, your keys, or your GPU</text>
+        <text x="16" y="78" font-size="12.5" fill="#b9c1d6">Plan drafts, Build runs with approvals</text>
+        <text x="16" y="96" font-size="12.5" fill="#b9c1d6">/screenshot · /recipe · @model · @file</text>
+      </g>
+      <g transform="translate(322 290)">
+        <rect width="274" height="118" rx="14" fill="#100e26" fill-opacity="0.82" stroke="#8B6CFF" stroke-opacity="0.35"/>
+        <rect x="16" y="0" width="242" height="1.5" fill="url(#cardTop)"/>
+        <g transform="translate(16 14)"><path d="M10 8l-7 6 7 6M18 8l7 6-7 6M16 5l-4 18" fill="none" stroke="#8B6CFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <text x="52" y="34" font-size="20" font-weight="700" fill="#eef1fa">Code</text>
+        <text x="258" y="32" text-anchor="end" font-size="10" letter-spacing="1.5" fill="#8B6CFF" fill-opacity="0.9" font-family="ui-monospace, Menlo, monospace">Alt+2</text>
+        <text x="16" y="60" font-size="12.5" fill="#b9c1d6">A coding agent on the folder you open</text>
+        <text x="16" y="78" font-size="12.5" fill="#b9c1d6">Files, a real terminal, parallel worktrees</text>
+        <text x="16" y="96" font-size="12.5" fill="#b9c1d6">Agents (ACP): Claude Code, Gemini, Codex</text>
+      </g>
+      <g transform="translate(604 290)">
+        <rect width="274" height="118" rx="14" fill="#100e26" fill-opacity="0.82" stroke="#8B6CFF" stroke-opacity="0.35"/>
+        <rect x="16" y="0" width="242" height="1.5" fill="url(#cardTop)"/>
+        <g transform="translate(16 14)"><path d="M14 3l2.6 6.4L23 12l-6.4 2.6L14 21l-2.6-6.4L5 12l6.4-2.6z" fill="none" stroke="#FFB02E" stroke-width="2" stroke-linejoin="round"/><circle cx="23" cy="4" r="1.6" fill="#FFB02E"/><circle cx="4" cy="22" r="1.6" fill="#FFB02E"/></g>
+        <text x="52" y="34" font-size="20" font-weight="700" fill="#eef1fa">Create</text>
+        <text x="258" y="32" text-anchor="end" font-size="10" letter-spacing="1.5" fill="#FFB02E" fill-opacity="0.9" font-family="ui-monospace, Menlo, monospace">Alt+3</text>
+        <text x="16" y="60" font-size="12.5" fill="#b9c1d6">Design pages: tweaks, tokens, mockups</text>
+        <text x="16" y="78" font-size="12.5" fill="#b9c1d6">Pictures with SD / FLUX.2 on your GPU</text>
+        <text x="16" y="96" font-size="12.5" fill="#b9c1d6">or a cloud image model, one click</text>
+      </g>
+      <g transform="translate(886 290)">
+        <rect width="274" height="118" rx="14" fill="#100e26" fill-opacity="0.82" stroke="#8B6CFF" stroke-opacity="0.35"/>
+        <rect x="16" y="0" width="242" height="1.5" fill="url(#cardTop)"/>
+        <g transform="translate(16 14)"><rect x="3" y="7" width="22" height="16" rx="4" fill="none" stroke="#87CF3E" stroke-width="2"/><path d="M14 3v4M9 27v-4M19 27v-4" stroke="#87CF3E" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="15" r="2" fill="#87CF3E"/><circle cx="18" cy="15" r="2" fill="#87CF3E"/></g>
+        <text x="52" y="34" font-size="20" font-weight="700" fill="#eef1fa">Agents</text>
+        <text x="258" y="32" text-anchor="end" font-size="10" letter-spacing="1.5" fill="#87CF3E" fill-opacity="0.9" font-family="ui-monospace, Menlo, monospace">Alt+4</text>
+        <text x="16" y="60" font-size="12.5" fill="#b9c1d6">Skills, personas, prompts, recipes</text>
+        <text x="16" y="78" font-size="12.5" fill="#b9c1d6">Schedules and a Runs board</text>
+        <text x="16" y="96" font-size="12.5" fill="#b9c1d6">Everything waiting for your OK, in one place</text>
+      </g>
+      <text x="40" y="432" font-size="11" font-weight="700" letter-spacing="3" fill="#87CF3E" fill-opacity="0.8" font-family="ui-monospace, Menlo, monospace">WHAT LINUX MINT GETS</text>
+      <g transform="translate(40 446)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#22D3EE"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">Local models on your GPU</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">Shows your GPU and what fits, then downloads llama.cpp</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">(Vulkan or CPU). No sudo. Ollama, whisper.cpp, sd.cpp found.</text>
+      </g>
+      <g transform="translate(416 446)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#8B6CFF"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">Coding agents behind approvals</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">Every write and permission is a card and a desktop</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">notification with Allow / Reject. Keep working elsewhere.</text>
+      </g>
+      <g transform="translate(792 446)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#87CF3E"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">NeuraOS as an MCP server</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">freeai4u-desktop --mcp: local chat, images, status, open,</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">and desktop control for Claude Code and any MCP client.</text>
+      </g>
+      <g transform="translate(40 542)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#FFB02E"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">Voice Type · Ctrl+Alt+V</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">Hold, speak, let go: typed into VS Code, the terminal, the</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">browser. whisper.cpp on your machine, or Hugging Face.</text>
+      </g>
+      <g transform="translate(416 542)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#22D3EE"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">See the screen, act on the desktop</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">Ctrl+Alt+S screenshots into the chat; a model may click,</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">type and press keys, each behind an Allow card.</text>
+      </g>
+      <g transform="translate(792 542)">
+        <rect width="368" height="88" rx="12" fill="#0d0b21" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.08"/>
+        <rect x="0" y="14" width="3" height="60" rx="1.5" fill="#8B6CFF"/>
+        <text x="18" y="27" font-size="14.5" font-weight="700" fill="#eef1fa">Mint-native, Wayland-ready</text>
+        <text x="18" y="48" font-size="11.5" fill="#aab3cb">Nemo actions, tray, start at login, bubblewrap sandbox,</text>
+        <text x="18" y="64" font-size="11.5" fill="#aab3cb">login keyring for secrets, portals on Mint 23.</text>
+      </g>
+      <g transform="translate(40 652)">
+        <rect width="1120" height="26" rx="13" fill="#0a0818" fill-opacity="0.9" stroke="url(#neura)" stroke-opacity="0.5"/>
+        <text x="16" y="17" font-size="11.5" font-family="ui-monospace, Menlo, monospace" fill="#22D3EE" fill-opacity="0.9">$</text>
+        <text x="30" y="17" font-size="11.5" font-family="ui-monospace, Menlo, monospace" fill="#d3d9e8">sudo apt install ./neuraos_*.deb</text>
+        <text x="300" y="17" font-size="11.5" font-family="ui-monospace, Menlo, monospace" fill="#8B6CFF" fill-opacity="0.9">·</text>
+        <text x="316" y="17" font-size="11.5" font-family="ui-monospace, Menlo, monospace" fill="#aab3cb">or the AppImage · or the apt repo for Update Manager</text>
+        <text x="1104" y="17" text-anchor="end" font-size="11.5" font-family="ui-monospace, Menlo, monospace" fill="#87CF3E">claude mcp add neuraos -- freeai4u-desktop --mcp</text>
+        <rect x="1" y="1" width="120" height="24" rx="12" fill="url(#neura)" opacity="0.18"><animate attributeName="x" values="1;998;1" dur="10s" repeatCount="indefinite"/></rect>
+      </g>
+    </g>
+    <path d="M300 250 H1160" stroke="#fff" stroke-opacity="0.08"/>
+    <path d="M300 250 L420 250 L436 232 L452 268 L468 250 L1160 250" fill="none" stroke="url(#neura)" stroke-width="2" filter="url(#soft)"><animateTransform attributeName="transform" type="translate" values="0 0;690 0;0 0" dur="12s" repeatCount="indefinite"/></path>
+  </g>
+  <rect x="0.5" y="0.5" width="1199" height="719" rx="28" fill="none" stroke="url(#neura)" stroke-opacity="0.35"/>
 </svg>
