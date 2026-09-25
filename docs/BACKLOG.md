@@ -157,7 +157,9 @@ Not verified: a live turn on Mint hardware.
 
 ## Approved for later: the next four
 
-Approved after the "next three" merged (PR #15); not started.
+Approved after the "next three" merged (PR #15); not started. On hold,
+folded into `docs/APP_UPGRADE_PLAN.md` as phase E (the PC side is
+`docs/PC_UPGRADE_PLAN.md`).
 
 1. **Push and pull from the Changes panel**, with the ahead/behind count
    already on the branch line and the remote's host checked before any
