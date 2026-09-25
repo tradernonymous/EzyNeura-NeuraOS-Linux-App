@@ -25,6 +25,39 @@ const ROOT = path.join(__dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 const workflows = path.join(ROOT, '.github', 'workflows');
 
+/**
+ * Every `run:` body in a workflow, as the shell will see it. A `run:` one-liner
+ * is its own body; a `run: |` block is the lines indented under it.
+ */
+function runBlocks(text) {
+  const lines = text.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = lines[i].match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
+    if (!m) continue;
+    const indent = m[1].length;
+    const inline = m[2].trim();
+    if (inline && !inline.startsWith('|') && !inline.startsWith('>')) {
+      out.push({ line: i + 1, body: inline, inline: true });
+      continue;
+    }
+    const body = [];
+    let j = i + 1;
+    for (; j < lines.length; j += 1) {
+      const line = lines[j];
+      if (line.trim() === '') {
+        body.push('');
+        continue;
+      }
+      if (line.length - line.trimStart().length <= indent) break;
+      body.push(line);
+    }
+    out.push({ line: i + 1, body: body.join('\n'), inline: false });
+    i = j - 1;
+  }
+  return out;
+}
+
 test('the gate and the release build the app the same way, in one place', () => {
   const gate = fs.readFileSync(path.join(workflows, 'linux.yml'), 'utf8');
   const release = fs.readFileSync(path.join(workflows, 'release.yml'), 'utf8');
@@ -69,6 +102,49 @@ test('the checks that were reported instead of enforced are now gates', () => {
   assert.match(build, /cargo fmt .*--check/);
   // And the built binary has to start a window, not just link.
   assert.match(build, /scripts\/screenshot-smoke-test\.sh/);
+});
+
+test('every run: block in every workflow is valid shell', () => {
+  // Two checks, because they catch different things.
+  //
+  // `bash -n` catches a block that is not shell at all. It is happy with
+  // ${{ ... }} expressions, and it does not expand command substitutions, so
+  // on its own it is not enough (see the second check).
+  let checked = 0;
+  for (const file of fs.readdirSync(workflows).filter((f) => f.endsWith('.yml'))) {
+    for (const block of runBlocks(fs.readFileSync(path.join(workflows, file), 'utf8'))) {
+      try {
+        execFileSync('bash', ['-n'], { input: block.body, stdio: ['pipe', 'ignore', 'pipe'] });
+      } catch (e) {
+        assert.fail(`${file}:${block.line} is not valid shell:\n${block.body}\n${e.stderr || e.message}`);
+      }
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 10, `${checked} run: blocks checked`);
+});
+
+test('no run: one-liner hides a command substitution behind escaped quotes', () => {
+  // This exists because of a real CI failure, and `bash -n` did NOT catch it:
+  //
+  //   run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+  //
+  // In a plain YAML scalar `\"` has no meaning, so the backslashes reach the
+  // shell literally, and bash only discovers the syntax error when it performs
+  // the substitution at run time -- "syntax error near unexpected token '('",
+  // on the runner, about a minute into the build. `bash -n` parses the line
+  // fine because it defers substitutions, so the rule is about the shape
+  // instead: a `run:` that interpolates `$(` is written as a block scalar,
+  // where the shell sees the quoting the author actually typed.
+  for (const file of fs.readdirSync(workflows).filter((f) => f.endsWith('.yml'))) {
+    for (const block of runBlocks(fs.readFileSync(path.join(workflows, file), 'utf8'))) {
+      if (block.inline && block.body.includes('$(')) {
+        assert.fail(
+          `${file}:${block.line} interpolates $( in a one-liner; use a block scalar (run: |):\n${block.body}`,
+        );
+      }
+    }
+  }
 });
 
 test('actions are pinned to commit SHAs, so a moved tag cannot change a release build', () => {
