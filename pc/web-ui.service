@@ -1,0 +1,23 @@
+# claudecodeui (npm: @cloudcli-ai/cloudcli, AGPL-3.0) as a systemd *user*
+# service on this PC only: bound to 127.0.0.1, no new users, no sudoers rule
+# (docs/PC_UPGRADE_PLAN.md P1.2). Installed by pc/install-web-ui.sh into
+# ~/.config/systemd/user/neuraos-claude-ui.service; edit the port there.
+# The variable names are the package's own .env.example: SERVER_PORT and
+# HOST (its default HOST is 0.0.0.0, every interface; here it is not).
+[Unit]
+Description=Claude Code web UI (claudecodeui) on 127.0.0.1:3001
+After=network.target
+
+[Service]
+Type=simple
+# ~/.local/bin first: that is where the native installer puts claude.
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Environment=SERVER_PORT=3001
+Environment=PORT=3001
+Environment=HOST=127.0.0.1
+ExecStart=%h/.npm-global/bin/cloudcli start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

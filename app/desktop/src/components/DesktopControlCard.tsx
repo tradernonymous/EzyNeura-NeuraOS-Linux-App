@@ -3,18 +3,26 @@
 // the desktop, and what this desktop offers for it -- xdotool on X11, the
 // portals on Wayland. Off by default; every call still asks.
 import { useEffect, useState } from 'react';
-import { desktopCapabilities, hasShell, type DesktopCapabilities } from '../bridge';
+import { desktopCapabilities, desktopMcpGet, desktopMcpSet, hasShell, type DesktopCapabilities } from '../bridge';
 import { desktopControlOn, setDesktopControl, askAboutScreen, readScreenHotkey } from '../desktopControl';
 import { isLinux } from '../platform';
 
 export default function DesktopControlCard() {
   const [on, setOn] = useState(desktopControlOn);
   const [caps, setCaps] = useState<DesktopCapabilities | null>(null);
+  const [mcpOn, setMcpOn] = useState(false);
+  const [mcpError, setMcpError] = useState('');
 
   useEffect(() => {
     if (!hasShell() || !isLinux()) return;
     desktopCapabilities().then(setCaps).catch(() => setCaps(null));
+    desktopMcpGet().then((r) => setMcpOn(r.on)).catch(() => setMcpOn(false));
   }, []);
+
+  const toggleMcp = (on: boolean) => {
+    setMcpError('');
+    desktopMcpSet(on).then((r) => setMcpOn(r.on)).catch((e) => setMcpError(String(e)));
+  };
 
   if (!hasShell() || !isLinux()) return null;
 
@@ -40,6 +48,15 @@ export default function DesktopControlCard() {
           Adds five tools: screen_capture, desktop_click, desktop_type, desktop_key and desktop_scroll. Each one shows an
           Allow / Deny card first — a screenshot shows whatever is on screen, and a click lands in whichever app is in front.
           Best with a vision model (llava, gemma3, qwen2.5-vl, GPT-4o…).
+        </p>
+        <label className="toggle">
+          <input type="checkbox" checked={mcpOn} onChange={(e) => toggleMcp(e.target.checked)} />
+          Also let agents connected over MCP see the screen and act on the desktop
+        </label>
+        <p className="settings-hint">
+          Adds neuraos_screenshot and neuraos_desktop to the MCP server (Settings → Connectors). Claude Code and the other
+          clients ask you before each call on their side; NeuraOS has no window open to ask from when it serves MCP.
+          {mcpError ? ` — ${mcpError}` : ''}
         </p>
         <div className="setting-row">
           <button type="button" onClick={askAboutScreen}>Ask about the screen now</button>

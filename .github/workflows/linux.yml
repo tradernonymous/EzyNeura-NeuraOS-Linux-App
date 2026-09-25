@@ -49,6 +49,9 @@ jobs:
       - name: Frontend tests (theme, accent hue, contrast sweep, local-fs lockstep)
         run: node --test 'app/test/*.test.js'
 
+      - name: Skill files (.claude/skills, pc/skills) are well-formed
+        run: node scripts/check-skills.mjs
+
       - name: Build the frontend (generate_context! embeds it)
         working-directory: app/desktop
         run: npm run build

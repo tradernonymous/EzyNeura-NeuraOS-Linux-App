@@ -17,7 +17,69 @@ not merely once its code is green in CI.
 | L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; **NeuraOS as an MCP server built** (below): `freeai4u-desktop --mcp` serves neuraos_status / neuraos_models / neuraos_chat / neuraos_image / neuraos_open over stdio, with copy-paste commands for Claude Code, Gemini CLI and a config JSON in Settings → Connectors; the Activity-board compare not started |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
-| L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland |
+| L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland; **the same over MCP** (below, "The PC plan, built"): `neuraos_screenshot` and `neuraos_desktop` on the `--mcp` server behind a second toggle in Settings → Desktop control |
+
+## The PC plan, built (docs/PC_UPGRADE_PLAN.md)
+
+Everything in the PC plan that can live in a repository now does; what
+remains is the on-machine part, listed in the plan under "Pending on the
+PC". Built:
+
+- **`pc/`**: `install-claude-code.sh` (P1.1), `install-web-ui.sh` +
+  `web-ui.service` (P1.2: claudecodeui, npm `@cloudcli-ai/cloudcli`, as a
+  systemd *user* service on `127.0.0.1:3001`, `HOST` and `SERVER_PORT`
+  from the package's own `.env.example`, a post-start check of the bind),
+  `install-skills.sh` (P3.2 + P3.3), `pc-md.sh` (P3.4),
+  `settings/readonly-allowlist.json` (P3.5),
+  `settings/user-settings.example.json` (every key in one file),
+  `safety/api-key-helper.sh` (P5.1), `safety/audit-hook.sh` +
+  `install-audit-log.sh` (P5.2), `safety/sandbox-setup.sh` (P5.3).
+- **Two skill packs**: `pc/skills/linux-mint/` (systemd-manager,
+  bash-scripting, mint-troubleshooter, mint-admin, mint-hardening: English,
+  Mint-specific rewrites of five MIT skills from claude-skills-collection,
+  credited in `LICENSE-NOTICE.md`) and `pc/skills/pc-ops/` (pc-triage,
+  pc-vitals, pc-patch, pc-backup, pc-docker, pc-network,
+  pc-security-audit: written fresh, in HomelabHero's triage-first shape).
+- **This repository's own skills** (P4): `.claude/skills/verify`,
+  `run-app`, `steward`; a SessionStart hook (`.claude/settings.json` →
+  `.claude/hooks/session-start.sh`: `npm ci` and `cargo fetch`, skipped
+  when fresh); `scripts/dev/engine.sh` and `scripts/dev/screenshot.sh`
+  for run-app (the real bundled engine; no mock exists or is needed).
+- **A skill linter in CI** (P4.5): `scripts/check-skills.mjs` (frontmatter,
+  kebab-case name equal to the folder, description on one line and at
+  most 1024 characters, body at most 500 lines, links that resolve, and a
+  trigger-collision check that found three real overlaps in the pc-ops
+  pack before they shipped); a step in `linux.yml` and
+  `app/test/skills-lint.test.js`.
+- **P6.2 desktop control over MCP**: `neuraos_screenshot` (an MCP image
+  result plus the size, the coordinate space) and `neuraos_desktop`
+  (click, type, key, move, scroll through the same `plan()` checks as the
+  Chat tools) on the `--mcp` server. Off until a marker file exists
+  (`desktop-control-mcp` in the app's data folder), written by a second
+  toggle in Settings → Desktop control; the `--mcp` process has no window
+  to ask from, so the per-call Allow is the MCP client's own prompt
+  (Claude Code asks before every MCP tool call by default). Windows keeps
+  building: both commands have non-Linux stubs.
+- **P6.3 resolved as "not supported"**: the official gateway docs say
+  Anthropic does not support routing Claude Code to non-Claude models
+  through a gateway, so a local llama-server behind an Anthropic-format
+  gateway is out of the plan; the supported way to use a local model for
+  side jobs from Claude Code is the `neuraos_chat` MCP tool.
+- **Every "(confirm)" in the plan resolved** against the Claude Code docs
+  on 2026-09-25 (agent teams env var, permission modes, computer use is
+  macOS-only in the CLI, sandbox = bubblewrap + socat, `apiKeyHelper`,
+  `promptCacheTtl`, marketplace and plugin settings keys, the documented
+  slash commands).
+
+Verified here: `tsc`, `vite build`, `node --test` (94 incl. the linter's
+own test), `cargo test` (the MCP tools answer "off" through the protocol
+when the marker is absent), clippy, `bash -n` on every script,
+`node scripts/check-skills.mjs` (15 skills, 0 findings). Not verified:
+anything on a Mint machine. The scripts under `pc/` have not been run
+against a real desktop, a systemd user session, a keyring, or the
+`@cloudcli-ai/cloudcli` package (its AGPL-3.0 licence covers running it
+as a service for yourself; nothing of it is copied here); the first run on
+the PC is that verification.
 
 ## UI plan, phase 6: Agents, one space
 

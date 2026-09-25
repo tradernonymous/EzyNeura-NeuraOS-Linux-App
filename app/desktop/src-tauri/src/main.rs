@@ -314,6 +314,8 @@ fn main() {
             desktop::desktop_act,
             desktop::portal_shortcuts_bind,
             desktop::mcp_server_command,
+            desktop::desktop_mcp_get,
+            desktop::desktop_mcp_set,
             quick::screen_hotkey_set,
             acp::acp_start,
             acp::acp_prompt,
