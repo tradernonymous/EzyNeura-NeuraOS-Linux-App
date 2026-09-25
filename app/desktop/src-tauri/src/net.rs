@@ -54,9 +54,9 @@ pub fn host_of(url: &str) -> Option<String> {
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let authority = authority.rsplit('@').next().unwrap_or(authority);
     let host = if authority.starts_with('[') {
-        match authority.find(']') {
-            Some(end) => &authority[..=end],
-            None => return None,
+        {
+            let end = authority.find(']')?;
+            &authority[..=end]
         }
     } else {
         authority.split(':').next().unwrap_or("")

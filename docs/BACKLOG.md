@@ -4,6 +4,16 @@ The live tracker for `docs/MASTER_PLAN.md`'s phases (L0–L9). One row per
 phase; a phase moves to *Done* only once its own checklist has been walked,
 not merely once its code is green in CI.
 
+The upgrade work the user asked for on 2026-09-25 (performance, UI/UX and
+reliability, in phases, one PR each) is tracked separately, because it is a
+different taxonomy from L0-L9 and its first wave has already landed:
+**wave 1, the build chain** (one build instead of three drifted copies,
+clippy as a real gate, `Cargo.lock` committed and `--locked`, actions pinned
+to commit SHAs, a bundle-size ceiling, and a frontend build that no longer
+dies of memory) is written up in `docs/UPGRADE_WAVE_1.md`. Its own file
+because this backlog has grown past what a single editor can safely append
+to. Later waves follow `docs/APP_UPGRADE_PLAN.md`.
+
 ## Status
 
 | Phase | What | Status |

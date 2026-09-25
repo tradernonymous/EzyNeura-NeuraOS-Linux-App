@@ -1,3 +1,15 @@
+# The gate: every push to main and every PR runs the full desktop build.
+#
+# This file is deliberately only a caller. The build itself lives in
+# desktop-build.yml, which release.yml calls too. It used to be a third copy
+# of the same steps, and the copies had already drifted -- only this one ran
+# check-skills, and only the release one built without clippy -- so a change
+# could be green here and untested on the path that actually ships, or the
+# reverse. One implementation, called by both, cannot drift.
+#
+# `bundle: true` means the .deb and AppImage are built and the binary is
+# smoke-tested under Xvfb, not just compiled: a change that links but will not
+# open a window is a red build here.
 name: Linux
 
 on:
@@ -11,90 +23,6 @@ permissions:
 
 jobs:
   build:
-    # 22.04 so the glibc and WebKitGTK 4.1 baseline covers Mint 21.x, 22.x
-    # and 23 (docs/MASTER_PLAN.md section 8) -- building on a newer distro
-    # would raise the minimum glibc these bundles need.
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: app/desktop/package-lock.json
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: app/desktop/src-tauri
-
-      - name: Install Tauri Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
-            librsvg2-dev libsoup-3.0-dev libdbus-1-dev patchelf file xdg-utils
-
-      - name: Frontend dependencies
-        working-directory: app/desktop
-        run: npm ci
-
-      - name: Type-check
-        working-directory: app/desktop
-        run: npx tsc --noEmit
-
-      - name: Frontend tests (theme, accent hue, contrast sweep, local-fs lockstep)
-        run: node --test 'app/test/*.test.js'
-
-      - name: Skill files (.claude/skills, pc/skills) are well-formed
-        run: node scripts/check-skills.mjs
-
-      - name: Build the frontend (generate_context! embeds it)
-        working-directory: app/desktop
-        run: npm run build
-
-      - name: Rust tests
-        run: cargo test --manifest-path app/desktop/src-tauri/Cargo.toml
-
-      - name: Rust lints
-        run: cargo clippy --manifest-path app/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
-        continue-on-error: true # not yet a gate: see docs/BACKLOG.md
-
-      - name: Build the .deb and AppImage
-        working-directory: app/desktop
-        run: npx tauri build --bundles deb,appimage
-
-      # L8: the built binary must actually start a window, not just link. A
-      # virtual X server and a session bus are enough for WebKitGTK to
-      # create the webview; a PANIC or FATAL line in the app's own log, or
-      # a process that is gone after the wait, fails the job. The screenshot
-      # is uploaded so a UI change can be looked at from the run page.
-      - name: Headless smoke test (Xvfb) of the built binary
-        run: |
-          sudo apt-get install -y xvfb dbus-x11 scrot
-          bash scripts/screenshot-smoke-test.sh \
-            app/desktop/src-tauri/target/release/freeai4u-desktop \
-            "$RUNNER_TEMP/neuraos-smoke.png" 12
-          if grep -E 'PANIC|FATAL' /tmp/screenshot-smoke-test.log; then
-            echo "the app logged a panic or a fatal error" >&2
-            exit 1
-          fi
-
-      - name: Upload the smoke-test screenshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: neuraos-smoke-screenshot-${{ github.sha }}
-          path: ${{ runner.temp }}/neuraos-smoke.png
-          if-no-files-found: error
-
-      - name: Upload the bundles
-        uses: actions/upload-artifact@v4
-        with:
-          name: neuraos-linux-${{ github.sha }}
-          path: |
-            app/desktop/src-tauri/target/release/bundle/deb/*.deb
-            app/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
-          if-no-files-found: error
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      bundle: true

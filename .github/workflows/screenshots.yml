@@ -20,15 +20,15 @@ jobs:
   tour:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: app/desktop/package-lock.json
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           workspaces: app/desktop/src-tauri
       - name: Install Tauri Linux build dependencies and the tour's tools
@@ -49,7 +49,7 @@ jobs:
           NEURAOS_ENGINE_URL: ${{ github.event.inputs.engine_url }}
         run: bash scripts/screenshot-tour.sh app/desktop/src-tauri/target/release/freeai4u-desktop docs/assets/screens
       - name: Upload the screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: neuraos-screens-${{ github.sha }}
           path: docs/assets/screens/*.png

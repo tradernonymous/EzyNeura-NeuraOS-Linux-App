@@ -34,7 +34,7 @@ pub fn loopback_base(base: &str) -> Result<String, String> {
     if !crate::net::is_loopback(&host) {
         return Err(format!("{} is not this machine; only 127.0.0.1 / localhost are reached", host));
     }
-    let rest = candidate.splitn(2, "://").nth(1).unwrap_or("");
+    let rest = candidate.split_once("://").map(|x| x.1).unwrap_or("");
     if rest.contains('/') || rest.contains('?') || rest.contains('#') {
         return Err("give the address without a path, like http://127.0.0.1:11434".to_string());
     }

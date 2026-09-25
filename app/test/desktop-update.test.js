@@ -85,12 +85,19 @@ test('the staging script writes the manifest the app reads, with the stable name
 
 test('the release workflow and the app agree on the stable names and the key variable', () => {
   const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
+  const build = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'desktop-build.yml'), 'utf8');
   const stage = fs.readFileSync(path.join(ROOT, 'packaging', 'release', 'stage.sh'), 'utf8');
   const net = fs.readFileSync(path.join(ROOT, 'app', 'desktop', 'src-tauri', 'src', 'net.rs'), 'utf8');
   assert.match(stage, /neura-os-desktop_\$\{VERSION\}_amd64\.deb/);
   assert.match(stage, /NeuraOS-\$\{VERSION\}-x86_64\.AppImage/);
   assert.match(workflow, /neura-os-desktop_\$\{VERSION\}_amd64\.deb/);
-  assert.match(workflow, /NEURAOS_UPDATER_PUBKEY: \$\{\{ vars\.NEURAOS_UPDATER_PUBKEY \}\}/);
+  // The public key is compiled into the app by the shared build, so that is
+  // where the variable is read now. What still has to be true -- and what this
+  // test is really for -- is that the release path goes through that build: a
+  // release that inlined its own steps again, without the env, would publish a
+  // manifest signed by a key no installed app trusts.
+  assert.match(build, /NEURAOS_UPDATER_PUBKEY: \$\{\{ inputs\.neuraos_updater_pubkey \|\| vars\.NEURAOS_UPDATER_PUBKEY \}\}/);
+  assert.match(workflow, /uses: \.\/\.github\/workflows\/desktop-build\.yml/);
   assert.match(net, /option_env!\("NEURAOS_UPDATER_PUBKEY"\)/);
   assert.match(workflow, /tauri signer sign/);
 });

@@ -632,6 +632,10 @@ fn resolve_model_file(app: &tauri::AppHandle, file: &str) -> Result<PathBuf, Str
 /// for the split layouts, or deeper for repos that sort their weights into
 /// `split/diffusion_models/...`. Every segment is checked, so a page cannot
 /// turn this into a request for another host or another path.
+///
+/// Only the tests below use this shorthand: the app itself always names the
+/// kind through `hub_file_url_for`, so this is test-only rather than dead.
+#[cfg(test)]
 pub fn hub_file_url(repo: &str, file: &str) -> Result<String, String> {
     hub_file_url_for(Kind::Text, repo, file)
 }
@@ -1036,7 +1040,7 @@ pub fn local_models_list(app: tauri::AppHandle) -> Result<serde_json::Value, Str
     let dir = models_dir(&app)?;
     let mut files = Vec::new();
     gguf_entries(&dir, 0, &mut files, true);
-    files.sort_by(|a, b| a.file.to_ascii_lowercase().cmp(&b.file.to_ascii_lowercase()));
+    files.sort_by_key(|a| a.file.to_ascii_lowercase());
     Ok(serde_json::json!({ "dir": dir.display().to_string(), "files": files }))
 }
 
@@ -1147,7 +1151,7 @@ pub fn local_models_scan(dirs: Option<Vec<String>>) -> serde_json::Value {
         (f.bytes >= SCAN_MIN_BYTES || is_split_part(&f.file))
             && !f.file.to_ascii_lowercase().starts_with("ggml-vocab-")
     });
-    files.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    files.sort_by_key(|f| std::cmp::Reverse(f.bytes));
     serde_json::json!({
         "dirs": roots.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
         "files": files,
