@@ -68,6 +68,21 @@
     return typeof fetchImpl === 'function' ? fetchImpl : fetch;
   }
 
+  // skill-lint.js holds the lint/cost rules (upgrade plan B2/B3), shared with
+  // scripts/check-skills.mjs's rules. CommonJS requires it directly; in the
+  // browser it arrives as a side-effect import (LibraryScreen imports it).
+  var lintLib = null;
+  function skillLint() {
+    if (lintLib) return lintLib;
+    try {
+      if (typeof module === 'object' && module.exports) lintLib = require('./skill-lint.js');
+      else lintLib = (typeof globalThis !== 'undefined' && globalThis.FreeAI4USkillLint) || null;
+    } catch {
+      lintLib = null;
+    }
+    return lintLib;
+  }
+
   /**
    * fetchSkill(repo, path, token, fetchImpl)
    *
@@ -293,6 +308,9 @@
    *   opts.fetchImpl  stand-in for fetch (tests)
    *   opts.writeFile  (relativePath, text) => Promise -- the only way out to disk
    *   opts.onProgress ({ phase, file, index, total }) => void
+   *   opts.markExecutable (relativePath) => Promise -- chmod +x for bundled .sh
+   *   opts.skipPowerShell  drop .ps1 files (Linux, where they are dead weight)
+   *   opts.otherDescriptions  descriptions of installed skills (the lint's duplicate rule)
    *
    * Resolves to { dir, files, bytes }; rejects with a message that says which
    * file failed and why.
@@ -305,13 +323,40 @@
     var plan = planInstall(skill);
     if (plan.error) throw new Error(plan.error);
 
+    // B3: the lint runs before a byte is written. Its errors are the rules
+    // scripts/check-skills.mjs enforces on this repo's own packs -- a skill
+    // nobody can route to or read should not land in somebody's project.
+    var lint = skillLint();
+    if (lint) {
+      var fileNames = ['SKILL.md'].concat((Array.isArray(skill.files) ? skill.files : []).map(function (f) {
+        return String(f).replace(/^\.\//, '');
+      }));
+      var findings = lint.lintSkill({
+        name: skill.name,
+        folderName: plan.slug,
+        description: skill.description,
+        body: skill.content,
+        files: fileNames,
+        others: options.otherDescriptions,
+      });
+      if (findings.errors.length) {
+        throw new Error('Refused: ' + findings.errors[0] + '. Fix the SKILL.md before installing it.');
+      }
+    }
+
+    // Windows helpers (.ps1) are dead weight on Linux and confusing beside
+    // the .sh they mirror; the caller says which side of that it is on.
+    var files = plan.files.filter(function (f) {
+      return !(options.skipPowerShell && /\.ps1$/i.test(f.name));
+    });
+
     var report = typeof options.onProgress === 'function' ? options.onProgress : function () {};
-    var total = plan.files.length;
+    var total = files.length;
     var bytes = 0;
     var written = [];
 
     for (var i = 0; i < total; i++) {
-      var file = plan.files[i];
+      var file = files[i];
       report({ phase: 'fetch', file: file.name, index: i, total: total });
       var text = await fetchSkill(skill.repo, file.repoPath, options.token, options.fetchImpl);
       if (text == null) {
@@ -333,6 +378,11 @@
       }
       report({ phase: 'write', file: file.name, index: i, total: total });
       await options.writeFile(file.target, text);
+      // B7: a bundled .sh only works if it arrives executable (a zip unpacked
+      // by a file manager drops the bit). The caller owns the chmod.
+      if (/\.sh$/i.test(file.name) && typeof options.markExecutable === 'function') {
+        await options.markExecutable(file.target);
+      }
       written.push(file.target);
     }
 
@@ -386,6 +436,9 @@
     if (!slug) return records;
     records[slug] = {
       name: (skill || {}).name || '',
+      // The description too: the lint's duplicate rule and the context-cost
+      // total both need to know what the installed set says in every prompt.
+      description: (skill || {}).description || '',
       repo: (skill || {}).repo || '',
       dir: (result || {}).dir || '',
       stamp: contentStamp((skill || {}).content),

@@ -2,17 +2,26 @@ import { useState, useEffect, useCallback } from 'react';
 import HfSignIn from '../components/HfSignIn';
 import { api } from '../api';
 import Icon from '../components/Icon';
-import { writeLocalFile } from '../bridge';
+import { runLocal, writeLocalFile } from '../bridge';
+import { isLinux } from '../platform';
 import { OPEN_CHAT_EVENT, type ChatSession } from './ChatScreen';
 // UMD modules: loaded for their side effect, read off globalThis.
 import '../chats.js';
 import '../hf-auth.js';
 import '../hf-models.js';
+import '../skill-lint.js';
 import '../hf-skills.js';
 
 const hfAuth: typeof import('../hf-auth.js') = (globalThis as any).FreeAI4UHfAuth;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
 const hfSkills: typeof import('../hf-skills.js') = (globalThis as any).FreeAI4UHfSkills;
+const skillLint: typeof import('../skill-lint.js') = (globalThis as any).FreeAI4USkillLint;
+
+// Single-quote a path for the one shell line below (chmod). POSIX-correct for
+// anything except a name containing a single quote, which safeName refuses.
+function shellQuote(p: string): string {
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
 
 // Named for the store, not `chats`: this screen already has a `chats` state.
 const chatStore: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
@@ -127,6 +136,16 @@ export default function LibraryScreen() {
       const result = await hfSkills.installSkill(skill, {
         token: hfAuth.accessToken()?.access_token,
         writeFile: (path: string, text: string) => writeLocalFile(localRoot, path, text),
+        // B7: a bundled .sh arrives executable; .ps1 files are Windows's and
+        // are dropped here rather than installed beside their .sh twins.
+        skipPowerShell: isLinux(),
+        markExecutable: async (path: string) => {
+          await runLocal({ root: localRoot, runId: 'skill-exec-bit', command: `chmod +x ${shellQuote(path)}` });
+        },
+        otherDescriptions: Object.values(installed)
+          .filter((r: any) => r && r.name !== skill?.name)
+          .map((r: any) => r.description)
+          .filter(Boolean),
         onProgress: (p) => setInstallState((s) => ({
           ...s,
           [slug]: {
@@ -147,7 +166,7 @@ export default function LibraryScreen() {
       // hf-skills.js already chose, instead of a silent no-op.
       setInstallState((s) => ({ ...s, [slug]: { phase: 'error', text: (err as Error).message } }));
     }
-  }, [localRoot]);
+  }, [localRoot, installed]);
 
   const load = () => {
     setLoading(true);
@@ -260,6 +279,20 @@ export default function LibraryScreen() {
       <div className="library-layout">
         <section className="library-col">
           <h3 className="col-title">HF Skills ({hfCatalog.length})</h3>
+          {(() => {
+            // B2's running total: the installed skills' names and descriptions
+            // are in every prompt, and there is a point past which that is too
+            // much. A note, not a wall: the budget is skillLint.TOKEN_BUDGET.
+            const total = skillLint.catalogCost(
+              Object.values(installed).map((r: any) => ({ name: r.name, description: r.description })),
+            );
+            return total.count > 0 ? (
+              <div className="skill-src">
+                {total.count} installed skill{total.count === 1 ? '' : 's'} cost about {total.tokens} tokens of every prompt
+                {total.over ? ` — over the ${total.budget} budget; disable one or the router gets noisy` : ` (budget ${total.budget})`}
+              </div>
+            ) : null;
+          })()}
           {hfCatalogLoading && <div className="empty">Loading HF skills…</div>}
           <div className="skill-list">
             {hfCatalog.map((s: any) => {
@@ -268,6 +301,18 @@ export default function LibraryScreen() {
               const status = hfSkills.installStatus(s, installed);
               const busy = state?.phase === 'working';
               const record = installed[slug];
+              // B2/B3: what this skill costs every prompt, and whether it is
+              // worth installing at all. Errors block the button.
+              const cost = skillLint.contextCost(s);
+              const lint = skillLint.lintSkill({
+                name: s.name,
+                folderName: slug,
+                description: s.description,
+                body: s.content,
+                files: ['SKILL.md'].concat(Array.isArray(s.files) ? s.files : []),
+              });
+              const blocked = lint.errors.length > 0;
+              const prereqs = skillLint.prereqTools(s.content || '');
               return (
                 <div key={s.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <button className={`skill-item ${open?.name === s.name ? 'active' : ''}`} onClick={() => { setOpen({ name: s.name, description: s.description, source: s.repo || 'hf' }); setContent(s.content); }}>
@@ -283,19 +328,29 @@ export default function LibraryScreen() {
                   <div className="skill-src" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       onClick={() => installSkill(s)}
-                      disabled={busy || !localRoot}
-                      title={localRoot
-                        ? `Write this skill into ${hfSkills.SKILLS_DIR}/${slug} in the open folder`
-                        : 'Open a folder first — a skill installs into the folder you are working in'}
+                      disabled={busy || !localRoot || blocked}
+                      title={blocked
+                        ? `This skill does not pass the lint: ${lint.errors[0]}`
+                        : localRoot
+                          ? `Write this skill into ${hfSkills.SKILLS_DIR}/${slug} in the open folder. Costs about ${cost.tokens} tokens of context on every prompt.`
+                          : 'Open a folder first — a skill installs into the folder you are working in'}
                     >
                       <Icon name="download" size={12} />{' '}
                       {busy ? 'Installing…' : status === 'update' ? 'Update' : status === 'installed' ? 'Reinstall' : 'Install'}
                     </button>
+                    <span title={`Its name and description ride in every prompt: about ${cost.tokens} tokens.`}>~{cost.tokens} tok</span>
                     {!localRoot && <span>Open a folder to install</span>}
                     {localRoot && state?.phase === 'working' && <span>{state.text}</span>}
                     {localRoot && state?.phase === 'done' && <span>{state.text}</span>}
                     {localRoot && !state && record?.dir && <span>{record.dir}</span>}
                   </div>
+                  {blocked && <div className="stream-error">Not installable: {lint.errors.join('; ')}</div>}
+                  {!blocked && lint.warnings.map((w: string) => <div key={w} className="skill-src">{w}</div>)}
+                  {prereqs.length > 0 && (
+                    <div className="skill-src" title={prereqs.map((t: string) => skillLint.toolFix(t) || t).join('\n')}>
+                      Needs: {prereqs.join(', ')}
+                    </div>
+                  )}
                   {state?.phase === 'error' && <div className="stream-error">{state.text}</div>}
                 </div>
               );

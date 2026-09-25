@@ -65,6 +65,12 @@ export interface InstallOptions {
   /** The only way out to disk: (relativePath, text) => Promise. */
   writeFile: (path: string, text: string) => Promise<unknown>;
   onProgress?: (progress: InstallProgress) => void;
+  /** chmod +x for a bundled .sh, so a script unpacked by a file manager runs. */
+  markExecutable?: (path: string) => Promise<unknown>;
+  /** Drop .ps1 files (Linux, where they are dead weight beside their .sh twins). */
+  skipPowerShell?: boolean;
+  /** Descriptions of installed skills, for the lint's duplicate-description rule. */
+  otherDescriptions?: string[];
 }
 
 export interface InstallResult {
@@ -81,6 +87,8 @@ export declare function installSkill(
 
 export interface InstalledRecord {
   name: string;
+  /** Kept for the context-cost total and the lint's duplicate rule. */
+  description?: string;
   repo: string;
   dir: string;
   stamp: string;
