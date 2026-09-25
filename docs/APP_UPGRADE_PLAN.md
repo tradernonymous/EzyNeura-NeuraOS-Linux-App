@@ -1,9 +1,10 @@
-# Upgrade plan: skills, agents, and this PC's coding sessions
+# App upgrade plan: NeuraOS Linux
 
-Researched 2026-09-25 from three repositories, then matched against what
-NeuraOS already has. Nothing here is built yet. The five follow-ups approved
-earlier (push/pull, amend/unstage, FLUX.2 first run, HF token test,
-Qwen-Image) are folded in as phase E.
+The NeuraOS app's half of the upgrade plan. The machine-side half (Claude
+Code, its GUI, skills and safety on this PC) is `PC_UPGRADE_PLAN.md`.
+Researched 2026-09-25; nothing here is built yet. The five follow-ups
+approved earlier (push/pull, amend/unstage, FLUX.2 first run, HF token
+test, Qwen-Image) are phase E.
 
 ## What was researched, and what was taken
 
@@ -11,6 +12,7 @@ Qwen-Image) are folded in as phase E.
 | :-- | :-- | :-- |
 | `khalilbenaz/claude-skills-collection` (MIT) | 348 SKILL.md skills in 34 categories, French with English triggers, sold as seven Claude Code plugin bundles; build scripts lint every skill, lint routing between skills, estimate each bundle's context cost, and render HTML manuals | Most of the ideas below: bundles with a context cost, the skill linter, the routing linter, manuals, the Linux skills, concise mode, the agent patterns |
 | `haikow/claude-reverse-skills` | Five reverse-engineering skills (radare2, IDA, APK, JS, general) with `.sh` + `.ps1` helper scripts and an installer that copies them into `~/.claude/skills` | Structure only: prerequisite tools listed per skill, scripts made executable on install, "Do not use when…" in the description, reference files read "after triage, not before", an output contract and a task-artifacts list per job. Its notes on unpacking Tauri apps feed the release hardening in D1 |
+| `serversathome/homelabhero` (no licence file) | One command that turns an Ubuntu container into a Claude Code command centre: Claude Code plus a browser UI, ops skills, and a credential broker so the agent reaches hosts over SSH without ever reading a key | Ideas only, since there is no licence: the broker pattern (C10), read-only allowlist presets (C11), a doctor screen (D6), an audit log the agent cannot read (C12) |
 | `0Chencc/clawgod` | A patch that replaces the official Claude Code binary and removes its safety guardrails | **Nothing.** It defeats safety measures and swaps a signed binary; NeuraOS does not borrow from it |
 
 The reverse-engineering skills themselves are not adopted: APK, IDA and
@@ -22,28 +24,8 @@ upstream, never hand-edited); `hf-skills.js` installs Hugging Face skills
 into `.neuraos/skills` with size ceilings; the composer has a Skills chip;
 `.neuraos/commands/*.md` are the project's own tasks; `evals.js` exists.
 
-## Phase A — this PC's coding sessions
-
-Repo skills under `.claude/skills/` load in every Claude Code session on this
-repository, so each one pays off on every future task.
-
-- **A1 `verify`**: the whole local gate in one place (tsc, `node --test`,
-  `vite build`, `cargo test`, clippy on the touched files) plus the shell
-  traps learned the hard way (`pkill -f` kills the tool shell; kill by
-  `pgrep` loop instead; no chained `sleep`).
-- **A2 `run-app`**: the debug build under Xvfb against the mock engine,
-  with the connect-field click, the Ctrl+K page opener and a screenshot
-  helper. Moves the scratch `serve.js` and the screenshot scripts into
-  `scripts/dev/` so they are versioned.
-- **A3 `steward`**: this repo's PR conventions (draft first, merge after
-  green, reset the branch onto main, commit trailers, never touch
-  `engine/`, Windows must keep building).
-- **A4 SessionStart hook**: `npm ci` and `cargo fetch` so a web session
-  starts with the gate runnable.
-- **A5 Linux skills for working on packaging**: English versions of the
-  collection's `systemd-manager`, `bash-scripting-expert` and
-  `linux-troubleshooter` (MIT, credited), trimmed to Mint.
-- **A6 A linter for A1–A5**: the same checks as B3, run in CI.
+Phase A, this repository's own skills and session hook, moved to the PC
+plan as P4, so the app phases start at B.
 
 ## Phase B — skills inside NeuraOS
 
@@ -102,6 +84,15 @@ repository, so each one pays off on every future task.
 - **C8 Untrusted content marked.** Text from web pages and files is
   labelled untrusted in tool results, against prompt injection.
 - **C9 Adversarial evals** added to `evals.js`.
+- **C10 A credential broker for tools.** A tool that needs a key or an
+  SSH login calls a named operation in the Rust shell; the shell reads
+  the secret and returns only the output, so the model never holds it.
+- **C11 Read-only presets for approvals.** Allow a list of known
+  read-only commands once per project, the way HomelabHero allows only
+  its read-only `hh` commands, and keep Ask for everything else.
+- **C12 An audit log the agent cannot touch.** Every approved tool call
+  appended to a log the model's tools cannot read or rewrite, shown in
+  Activity.
 
 ## Phase D — release and security hardening
 
@@ -113,6 +104,9 @@ repository, so each one pays off on every future task.
 - **D4 Release notes** drafted from merged PRs in `release.yml`.
 - **D5 Decision records** in `docs/adr/`, starting with "the engine is
   upstream verbatim".
+- **D6 A doctor screen.** One check of everything NeuraOS depends on
+  (engine, Node, runtimes, sd-server, git identity, keys present, ports),
+  each failure with its fix, like `hh doctor`.
 
 ## Phase E — held follow-ups
 
@@ -124,9 +118,9 @@ repository, so each one pays off on every future task.
 
 ## Suggested order
 
-1. **Wave 1, small and felt at once:** A1–A4, B2, B3, B7, E4.
+1. **Wave 1, small and felt at once:** B2, B3, B7, D6, E4.
 2. **Wave 2, the skills store:** B1, B4, B8, B10, B11, B12, E1, E2.
-3. **Wave 3, agents:** C1–C4, C6, C8, D1, D2.
-4. **Wave 4, the rest:** A5, A6, B5, B6, B9, C5, C7, C9, D3–D5, E3, E5.
+3. **Wave 3, agents and safety:** C1–C4, C6, C8, C10–C12, D1, D2.
+4. **Wave 4, the rest:** B5, B6, B9, C5, C7, C9, D3–D5, E3, E5.
 
 Every wave ships as its own PR, green in CI before merge.
