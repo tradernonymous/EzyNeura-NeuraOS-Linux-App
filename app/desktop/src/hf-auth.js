@@ -475,6 +475,19 @@
 
   // --- personal access token ---------------------------------------------
 
+  /** What the fine-grained permissions say about Inference Providers. A token
+   *  whose whoami carries no fineGrained block is treated as allowed (it is an
+   *  old-style token, and the router is the one who says no to those). */
+  function inferencePermission(user) {
+    var perms = user && user.auth && user.auth.accessToken && user.auth.accessToken.fineGrained;
+    var scoped = perms && Array.isArray(perms.scoped) ? perms.scoped : [];
+    var wide = perms && Array.isArray(perms.global) ? perms.global : [];
+    var canInfer = !perms
+      || wide.indexOf('inference.serverless.write') >= 0
+      || scoped.some(function (s) { return (s.permissions || []).indexOf('inference.serverless.write') >= 0; });
+    return { canInfer: canInfer, known: !!perms };
+  }
+
   /**
    * Sign in with a pasted access token: checked against whoami first, so a
    * typo or a token without the Inference Providers permission is refused
@@ -490,18 +503,105 @@
     if (res.status === 401) throw new Error('Hugging Face refused that token. Create a new one and paste it again.');
     if (!res.ok) throw new Error('Hugging Face did not answer (' + res.status + '). Try again in a moment.');
     var user = await res.json();
-    var perms = user && user.auth && user.auth.accessToken && user.auth.accessToken.fineGrained;
-    var scoped = perms && Array.isArray(perms.scoped) ? perms.scoped : [];
-    var wide = perms && Array.isArray(perms.global) ? perms.global : [];
-    var canInfer = !perms
-      || wide.indexOf('inference.serverless.write') >= 0
-      || scoped.some(function (s) { return (s.permissions || []).indexOf('inference.serverless.write') >= 0; });
-    if (!canInfer) {
+    if (!inferencePermission(user).canInfer) {
       throw new Error('This token cannot call Inference Providers. Tick "Make calls to Inference Providers" when you create it.');
     }
     saveUser(user);
     saveToken({ access_token: value, token_type: 'bearer', source: 'pat' });
     return user;
+  }
+
+  /**
+   * testToken(token, fetchImpl)
+   *
+   * The button beside the paste field: checks a token end to end WITHOUT
+   * keeping it, and reports which Inference Providers it can reach. The
+   * question it exists to answer is "why is the Model column empty?" -- so
+   * the report says which of the four things is wrong (the token's shape, the
+   * token itself, its permission, or the router having no models), instead of
+   * an empty column looking like a bug. Never writes to the token store.
+   *
+   * Resolves with { ok, status, user, providers, models, messages }, where
+   * status is one of: bad-format | refused | hub-unreachable | offline |
+   * no-inference-permission | router-unreachable | no-models | ok.
+   */
+  async function testToken(token, fetchImpl) {
+    var value = String(token || '').trim();
+    var report = { ok: false, status: 'bad-format', user: null, providers: [], models: 0, messages: [] };
+    if (!/^hf_[A-Za-z0-9]{20,}$/.test(value)) {
+      report.messages.push('That does not look like a Hugging Face token (they start with hf_).');
+      return report;
+    }
+    var doFetch = fetchImpl || globalThis.fetch;
+    var user;
+    try {
+      var res = await doFetch(API_ME, { headers: { Authorization: 'Bearer ' + value } });
+      if (res.status === 401) {
+        report.status = 'refused';
+        report.messages.push('Hugging Face refused that token. Create a new one and paste it again.');
+        return report;
+      }
+      if (!res.ok) {
+        report.status = 'hub-unreachable';
+        report.messages.push('Hugging Face did not answer (' + res.status + '). Try again in a moment.');
+        return report;
+      }
+      user = await res.json();
+    } catch (e) {
+      report.status = 'offline';
+      report.messages.push('huggingface.co could not be reached. Check this PC\u2019s connection and try again.');
+      return report;
+    }
+    report.user = (user && user.name) || null;
+    if (!inferencePermission(user).canInfer) {
+      report.status = 'no-inference-permission';
+      report.messages.push('The token is valid but cannot call Inference Providers. Tick \u201cMake calls to Inference Providers\u201d when you create it.');
+      return report;
+    }
+    // The router\u2019s live model list, per provider: the same facts the Model
+    // column is built from, so the test answers with what the column will show.
+    try {
+      var r = await doFetch('https://router.huggingface.co/v1/models', {
+        headers: { Accept: 'application/json', Authorization: 'Bearer ' + value },
+      });
+      if (r.status === 401 || r.status === 403) {
+        report.status = 'no-inference-permission';
+        report.messages.push('The Inference Providers router refused the token (' + r.status + '). Tick \u201cMake calls to Inference Providers\u201d when you create it.');
+        return report;
+      }
+      if (!r.ok) {
+        report.status = 'router-unreachable';
+        report.messages.push('The Inference Providers router answered ' + r.status + '. The Model column may look empty until it recovers.');
+        return report;
+      }
+      var data = await r.json();
+      var rows = Array.isArray(data && data.data) ? data.data : [];
+      var counts = {};
+      var models = 0;
+      for (var i = 0; i < rows.length; i += 1) {
+        var names = (Array.isArray(rows[i] && rows[i].providers) ? rows[i].providers : [])
+          .map(function (p) { return p && p.provider; }).filter(Boolean);
+        if (!names.length) continue;
+        models += 1;
+        for (var j = 0; j < names.length; j += 1) counts[names[j]] = (counts[names[j]] || 0) + 1;
+      }
+      report.models = models;
+      report.providers = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || (a < b ? -1 : 1); });
+      if (!models) {
+        report.status = 'no-models';
+        report.messages.push('The token works, but the router lists no models with a provider right now -- which is why the Model column is empty. It is not the token.');
+        return report;
+      }
+      report.status = 'ok';
+      report.ok = true;
+      report.messages.push('The token reaches ' + report.providers.length + ' Inference Provider' + (report.providers.length === 1 ? '' : 's') +
+        ', ' + models + ' model' + (models === 1 ? '' : 's') + ': ' + report.providers.join(', ') + '.');
+      return report;
+    } catch (e) {
+      report.status = 'offline';
+      report.messages.push('router.huggingface.co could not be reached. Check this PC\u2019s connection and try again.');
+      return report;
+    }
   }
 
   // --- sign out -----------------------------------------------------------
@@ -534,6 +634,8 @@
     CLIENT_ID_KEY: CLIENT_ID_KEY,
     DOCS_URL: DOCS_URL,
     useToken: useToken,
+    testToken: testToken,
+    inferencePermission: inferencePermission,
     signedIn: signedIn,
     accessToken: accessToken,
     authHeaders: authHeaders,

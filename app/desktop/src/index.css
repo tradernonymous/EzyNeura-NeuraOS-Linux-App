@@ -4663,6 +4663,10 @@ body.quick-body { background: var(--bg-1); }
 .hf-signin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .hf-token-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 .hf-token-form input { flex: 1 1 220px; min-width: 0; }
+/* The Test button's report: which Inference Providers the token reaches. */
+.hf-token-report { flex: 1 1 100%; display: flex; flex-direction: column; gap: 4px; }
+.hf-token-report .chip-note { text-align: left; }
+.hf-token-report.is-ok .chip-note { border-color: color-mix(in srgb, var(--ok, #34d399) 45%, transparent); }
 .hf-steps { flex-basis: 100%; color: var(--text-2); }
 .hf-page { flex-basis: 100%; }
 

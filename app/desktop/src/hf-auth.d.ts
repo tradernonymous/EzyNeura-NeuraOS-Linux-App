@@ -44,6 +44,25 @@ export declare const DEFAULT_TIMEOUT_SECS: number;
 export declare const CLIENT_ID_KEY: string;
 /** How to register the OAuth app (docs/desktop.md). */
 export declare const DOCS_URL: string;
+/** What testToken found: status is bad-format | refused | hub-unreachable | offline | no-inference-permission | router-unreachable | no-models | ok. */
+export interface TokenTestReport {
+  ok: boolean;
+  status: string;
+  user: string | null;
+  /** Inference Providers the token can reach, most models first. */
+  providers: string[];
+  /** Models on the router with at least one provider. */
+  models: number;
+  /** One sentence per finding, each saying what to do about it. */
+  messages: string[];
+}
+
+/** Check a token end to end WITHOUT storing it: which Inference Providers it reaches. */
+export declare function testToken(token: string, fetchImpl?: typeof fetch): Promise<TokenTestReport>;
+
+/** What the fine-grained permissions say about Inference Providers. */
+export declare function inferencePermission(user: any): { canInfer: boolean; known: boolean };
+
 /** Check a pasted access token against whoami, store it, resolve with the user. */
 export declare function useToken(token: string, fetchImpl?: typeof fetch): Promise<any>;
 

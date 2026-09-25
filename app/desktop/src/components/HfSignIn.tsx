@@ -56,6 +56,8 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [report, setReport] = useState<import('../hf-auth.js').TokenTestReport | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState('');
   const [buildId, setBuildId] = useState<string | null>(null);
@@ -133,6 +135,23 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
     }
   };
 
+  // The Test button beside the paste field: checks the token without keeping
+  // it and says which Inference Providers it reaches, so an empty Model column
+  // is an explanation instead of a mystery.
+  const test = async () => {
+    if (!token.trim() || testing) return;
+    setTesting(true);
+    setError('');
+    setReport(null);
+    try {
+      setReport(await hfAuth.testToken(token));
+    } catch (e) {
+      setError(((e as Error).message || String(e)).split('\n')[0]);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const field = showClientId && hasShell() ? <ClientIdField buildId={buildId} onDocs={openDocs} /> : null;
 
   if (signedIn) {
@@ -186,7 +205,13 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
           spellCheck={false}
         />
         <button type="submit" className="primary" disabled={!token.trim() || busy}>{busy ? 'Checking…' : 'Use token'}</button>
+        <button type="button" onClick={test} disabled={!token.trim() || testing}>{testing ? 'Testing…' : 'Test'}</button>
         <button type="button" onClick={() => setOpen(false)}>Cancel</button>
+        {report && (
+          <div className={`hf-token-report${report.ok ? ' is-ok' : ''}`} role="status">
+            {report.messages.map((line) => <div key={line} className="chip-note">{line}</div>)}
+          </div>
+        )}
         <span className="settings-hint mono hf-page">{hfAuth.TOKEN_PAGE.split('?')[0]}</span>
       </form>
     );
