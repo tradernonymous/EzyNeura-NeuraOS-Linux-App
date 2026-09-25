@@ -19,7 +19,7 @@ export const DEFAULT_DIRS = ['.claude/skills', 'pc/skills/linux-mint', 'pc/skill
 const MAX_DESC = 1024;
 const MAX_BODY_LINES = 500;
 // Words that decide nothing on their own; a trigger made only of these is no trigger.
-const GENERIC = new Set(['linux', 'pc', 'machine', 'server', 'system', 'help', 'fix', 'check', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'this', 'when', 'use', 'run', 'my', 'me', 'i', 'is', 'are', 'it', 'what', 'whats', 'how', 'why', 'can', 'do', 'does', 'show', 'going', 'everything', 'something', 'wrong', 'ok', 'up', 'down', 'keeps', 'should', 'need', 'needed', 'am', 'was', 'before', 'after', 'now', 'all', 'some', 'any', 'get', 'set', 'add', 'make', 'new']);
+const GENERIC = new Set(['linux', 'pc', 'machine', 'server', 'system', 'help', 'fix', 'check', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'this', 'when', 'use', 'run', 'my', 'me', 'i', 'is', 'are', 'it', 'what', 'whats', 'how', 'why', 'can', 'do', 'does', 'show', 'going', 'everything', 'something', 'wrong', 'ok', 'up', 'down', 'keeps', 'should', 'need', 'needed', 'am', 'was', 'before', 'after', 'now', 'all', 'some', 'any', 'get', 'set', 'add', 'make', 'new', 'no', 'not']);
 
 function skillDirs(dir) {
   if (!existsSync(dir)) return [];
@@ -45,7 +45,7 @@ export function parseSkill(text) {
 export function triggers(description) {
   const out = new Set();
   for (const q of description.matchAll(/["“]([^"”]{2,40})["”]/g)) {
-    for (const w of q[1].toLowerCase().split(/[^a-z0-9+]+/)) if (w && !GENERIC.has(w)) out.add(w);
+    for (const w of q[1].toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9+]+/)) if (w && !GENERIC.has(w)) out.add(w);
   }
   return out;
 }
@@ -79,10 +79,17 @@ export function lintSkill(path) {
   return findings;
 }
 
+/** Every pack listed here is installed into one ~/.claude/skills, so their triggers must not collide across packs either. */
+export const TOGETHER = ['pc/skills/linux-mint', 'pc/skills/pc-ops'];
+
 export function lintPack(dir) {
+  return lintDirs([dir]);
+}
+
+export function lintDirs(dirs) {
   const findings = [];
   const seen = [];
-  for (const skill of skillDirs(dir)) {
+  for (const skill of dirs.flatMap(skillDirs)) {
     const path = join(skill, 'SKILL.md');
     findings.push(...lintSkill(path));
     const parsed = parseSkill(readFileSync(path, 'utf8'));
@@ -105,6 +112,9 @@ export function lint(dirs = DEFAULT_DIRS) {
     count += skillDirs(abs).length;
     findings.push(...lintPack(abs));
   }
+  // The packs that share one install folder, checked as one (only the collisions are new here).
+  const together = TOGETHER.filter((d) => dirs.includes(d)).map((d) => resolve(ROOT, d));
+  if (together.length > 1) findings.push(...lintDirs(together).filter((f) => f.includes('share the triggers') && !findings.includes(f)));
   return { count, findings };
 }
 

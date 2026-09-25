@@ -1,6 +1,6 @@
 ---
 name: pc-security-audit
-description: A periodic security audit of this PC that runs agents - open ports, logins, sudo use, updates, firewall, AppArmor, the agent audit log, secrets on disk - as a report with a fix list, changing nothing. Triggers on "security audit", "am I exposed", "check for intrusions", "who logged in", "review sudo", "lynis report", "monthly audit".
+description: A periodic security audit of this PC that runs agents - open ports, logins, sudo use, updates, firewall, AppArmor, the agent audit log, secrets on disk - as a report with a fix list, changing nothing. Triggers on "security audit", "am I exposed", "check for intrusions", "who logged in", "review sudo", "lynis", "monthly audit".
 ---
 
 # The monthly audit (read-only report)
