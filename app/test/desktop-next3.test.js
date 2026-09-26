@@ -42,13 +42,17 @@ test('the card draws the steps and the Get button looks the set up at once', () 
   assert.match(card, /autoLookup\?: string;/);
 });
 
-test('commit from the Changes panel: checked paths and message, nothing pushed', () => {
+test('commit from the Changes panel: checked paths and message, commit itself never pushes', () => {
   const rust = read('desktop', 'src-tauri', 'src', 'git.rs');
   assert.match(rust, /pub fn local_git_commit\(/);
   assert.match(rust, /check_commit_paths\(&paths\)\?/);
   assert.match(rust, /check_commit_message\(&message\)\?/);
   assert.match(rust, /"commit", "-m", &text/);
-  assert.ok(!/"push"/.test(rust), 'nothing here pushes');
+  // E1 added a push BUTTON in the panel; local_git_commit itself still never
+  // touches a remote — that is what this pin always meant.
+  const at = rust.indexOf('pub fn local_git_commit(');
+  const next = rust.indexOf('#[tauri::command', at + 1);
+  assert.ok(!/"push"/.test(rust.slice(at, next < 0 ? undefined : next)), 'the commit command itself never pushes');
   assert.match(rust, /fn commit_paths_and_message_are_checked_before_git_runs/);
   assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /git::local_git_commit/);
   assert.match(read('desktop', 'src', 'bridge.ts'), /export async function gitCommit\(/);

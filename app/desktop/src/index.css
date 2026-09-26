@@ -6757,6 +6757,20 @@ input, textarea, select { border-radius: 8px; }
 .chat-output-commit { display: flex; gap: 6px; margin-top: 8px; }
 .chat-output-commit input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
 
+/* ---- Push and pull, unstage, discard (the Changes panel, E1/E2) -------- */
+.chat-output-sync { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.chat-output-sync button { padding: 3px 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 11px; cursor: pointer; }
+.chat-output-sync button:hover:not(:disabled) { background: var(--hover); }
+.chat-output-sync button:disabled { opacity: 0.45; cursor: default; }
+.chat-output-remote { margin-left: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--text-3); }
+.chat-output-changes .change-mini { flex: 0 0 auto; padding: 2px 7px; border: 1px solid var(--edge); border-radius: 6px; background: var(--bg-2); color: var(--text-3); font-family: var(--font-mono); font-size: 10.5px; cursor: pointer; }
+.chat-output-changes .change-mini:hover { color: var(--text-1); background: var(--hover); }
+.chat-output-changes .change-danger { color: var(--err); }
+.change-row.is-confirming .change-danger { border-color: var(--err); background: var(--bg-3); }
+.change-unstage-all { align-self: flex-start; margin-bottom: 6px; font-size: 11px; }
+.chat-output-amend { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--text-3); font-size: 11.5px; cursor: pointer; }
+.chat-output-amend input { margin: 0; }
+
 .topnav-menu-head { margin-top: 4px; padding: 6px 10px 2px; border-top: 1px solid var(--edge); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 .topnav-menu-project .topnav-menu-label { display: inline-flex; align-items: center; gap: 6px; }
 .topnav-menu-project .topnav-menu-hint { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

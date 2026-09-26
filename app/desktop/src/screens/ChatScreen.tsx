@@ -468,7 +468,9 @@ export default function ChatScreen() {
     const root = openFolder();
     if (!hasShell() || !root || !active) { setGitDirty(0); return; }
     let live = true;
-    gitStatus(root).then((g) => { if (live) setGitDirty(g.repo ? g.changes.length : 0); }).catch(() => { if (live) setGitDirty(0); });
+    // Unpushed commits count as "dirty" too, so the panel (and its Push
+    // button) stays reachable after a commit that left no uncommitted files.
+    gitStatus(root).then((g) => { if (live) setGitDirty(g.repo ? g.changes.length + g.ahead : 0); }).catch(() => { if (live) setGitDirty(0); });
     return () => { live = false; };
   }, [active?.id, active?.messages.length]);
   // The shell works in the chat's folder: the terminal, the folder tree and the

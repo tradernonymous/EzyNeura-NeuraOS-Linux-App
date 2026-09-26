@@ -149,8 +149,18 @@ export async function projectHome(): Promise<string> {
   return call<string>('local_project_home');
 }
 
-export interface GitChange { path: string; status: 'M' | 'A' | 'D' | 'R' | '?' | 'C'; }
-export interface GitStatus { repo: boolean; branch: string; ahead: number; behind: number; changes: GitChange[]; }
+export interface GitChange { path: string; status: 'M' | 'A' | 'D' | 'R' | '?' | 'C'; /** part of the change is in the index */ staged: boolean; }
+export interface GitStatus {
+  repo: boolean;
+  branch: string;
+  ahead: number;
+  behind: number;
+  /** origin's URL, or ''; checked again before push/pull run. */
+  remote: string;
+  /** false in a repository with no commits yet (nothing to amend/push). */
+  head: boolean;
+  changes: GitChange[];
+}
 
 /** The folder's branch and uncommitted changes (read-only; `repo: false` outside git). */
 export async function gitStatus(root: string): Promise<GitStatus> {
@@ -170,6 +180,34 @@ export async function gitCommit(root: string, paths: string[], message: string):
 /** `git clone <url>` into `<parent>/<repo name>`; returns the new folder. */
 export async function gitClone(url: string, parent: string): Promise<string> {
   return call<string>('local_git_clone', { url, parent });
+}
+
+/** What a push or pull came back with: the host it talked to and the new counts. */
+export interface GitSynced { remote: string; host: string; ahead: number; behind: number; message: string; }
+
+/** Push the current branch; the remote's URL and host are checked first. */
+export async function gitPush(root: string): Promise<GitSynced> {
+  return call<GitSynced>('local_git_push', { root });
+}
+
+/** Pull with --ff-only: a fast-forward, or an explanation — never a merge behind you. */
+export async function gitPull(root: string): Promise<GitSynced> {
+  return call<GitSynced>('local_git_pull', { root });
+}
+
+/** Amend the last commit with the ticked files; a blank message keeps the old one. */
+export async function gitAmend(root: string, paths: string[], message: string): Promise<{ sha: string; files: number }> {
+  return call('local_git_amend', { root, paths, message });
+}
+
+/** Take files back out of the index; with no paths, all of them. The working tree is untouched. */
+export async function gitUnstage(root: string, paths: string[]): Promise<number> {
+  return call<number>('local_git_unstage', { root, paths });
+}
+
+/** Throw a file's changes away (revert + delete untracked). The UI confirms first. */
+export async function gitDiscard(root: string, paths: string[]): Promise<number> {
+  return call<number>('local_git_discard', { root, paths });
 }
 
 /** The native folder picker; null when it is cancelled. */

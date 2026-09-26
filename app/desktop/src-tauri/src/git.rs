@@ -21,6 +21,9 @@ pub struct Change {
     pub path: String,
     /// `M` modified, `A` added, `D` deleted, `R` renamed, `?` untracked, `C` conflict.
     pub status: String,
+    /// True when part of the change is in the index (staged): porcelain's
+    /// first column. Unstaging only makes sense for these.
+    pub staged: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -29,16 +32,23 @@ pub struct Status {
     pub branch: String,
     pub ahead: u32,
     pub behind: u32,
+    /// The `origin` URL as written (checked again before push/pull touch the
+    /// network); '' when the folder has no origin.
+    pub remote: String,
+    /// False in a repository with no commits yet: nothing to amend or push.
+    pub head: bool,
     pub changes: Vec<Change>,
 }
 
 /// `git status --porcelain=v1 -b` -> Status. The first line names the branch
 /// (`## main...origin/main [ahead 1]`); every other line is `XY path`.
 pub fn parse_status(text: &str) -> Status {
-    let mut out = Status { repo: true, branch: String::new(), ahead: 0, behind: 0, changes: Vec::new() };
+    let mut out = Status { repo: true, branch: String::new(), ahead: 0, behind: 0, remote: String::new(), head: false, changes: Vec::new() };
     for line in text.lines() {
         if let Some(head) = line.strip_prefix("## ") {
             let name = head.split("...").next().unwrap_or(head);
+            // "No commits yet on main" is porcelain's unborn-HEAD line.
+            out.head = !name.starts_with("No commits yet");
             out.branch = name
                 .strip_prefix("No commits yet on ")
                 .unwrap_or(name)
@@ -73,7 +83,10 @@ pub fn parse_status(text: &str) -> Status {
             s if s.starts_with('D') || s.ends_with('D') => "D",
             _ => "M",
         };
-        out.changes.push(Change { path: path.trim_matches('"').to_string(), status: status.to_string() });
+        // The first column of XY is the index: a letter there means part of
+        // the change is staged ("M " fully, "MM" partly; "??" never is).
+        let staged = xy.chars().next().map(|c| c != ' ' && c != '?').unwrap_or(false);
+        out.changes.push(Change { path: path.trim_matches('"').to_string(), status: status.to_string(), staged });
     }
     out
 }
@@ -118,6 +131,110 @@ pub fn check_clone_url(url: &str) -> Result<String, String> {
     Err("Only https:// (or git@github.com:…) repository URLs are cloned.".to_string())
 }
 
+/// The remote's URL, checked before any command reaches the network: the
+/// same rules a clone URL must pass, plus local paths (no network, so
+/// nothing to fake). The host is also shown to the person, so the push
+/// button says where it will push to.
+pub fn check_remote_url(url: &str) -> Result<String, String> {
+    let u = url.trim();
+    if u.starts_with('/') || u.starts_with("./") || u.starts_with("../") || u.starts_with("file://") {
+        return Ok(u.to_string());
+    }
+    check_clone_url(u)
+}
+
+/// The host a remote URL names — `github.com` from either form — for the
+/// button's tooltip and the toast. '' for a local path.
+pub fn remote_host(url: &str) -> String {
+    let u = url.trim();
+    if let Some(rest) = u.strip_prefix("git@") {
+        return rest.split(':').next().unwrap_or("").to_string();
+    }
+    for scheme in ["https://", "http://", "ssh://", "git://"] {
+        if let Some(rest) = u.strip_prefix(scheme) {
+            let authority = rest.split('/').next().unwrap_or("");
+            let host = authority.rsplit('@').next().unwrap_or(authority);
+            return host.split(':').next().unwrap_or(host).to_string();
+        }
+    }
+    String::new()
+}
+
+/// `origin`'s URL, or the first remote's, or '' when the folder has none.
+fn remote_url(root: &Path) -> String {
+    for name in ["origin", "upstream"] {
+        if let Ok(out) = git(root, &["remote", "get-url", name]) {
+            if out.status.success() {
+                let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !url.is_empty() {
+                    return url;
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+fn remote_name(root: &Path) -> Result<String, String> {
+    let out = git(root, &["remote"])?;
+    let mut names = String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty());
+    let preferred = names.clone().find(|n| *n == "origin").map(str::to_string);
+    preferred
+        .or_else(|| names.next().map(str::to_string))
+        .ok_or_else(|| "This folder has no remote to push to or pull from. Set one in a terminal: git remote add origin <url>".to_string())
+}
+
+/// HEAD exists? A repository with no commits cannot push, pull or amend.
+fn has_head(root: &Path) -> Result<bool, String> {
+    let out = git(root, &["rev-parse", "--verify", "--quiet", "HEAD"])?;
+    Ok(out.status.success())
+}
+
+fn current_branch(root: &Path) -> Result<String, String> {
+    let out = git(root, &["symbolic-ref", "--short", "HEAD"])?;
+    if !out.status.success() {
+        return Err("You are not on a branch (detached HEAD). Check out a branch first.".to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// git's own words for a failed push, said in this app's words instead.
+pub fn push_error(stderr: &str) -> String {
+    let lower = stderr.to_lowercase();
+    if lower.contains("non-fast-forward") || lower.contains("fetch first") || lower.contains("rejected") {
+        return "The remote has commits you do not have. Pull first, then push.".to_string();
+    }
+    if lower.contains("permission denied") || lower.contains("could not read username") || lower.contains("authentication failed") {
+        return "The remote refused you (no credentials). Connect GitHub in the app, or push from a terminal.".to_string();
+    }
+    if lower.contains("could not resolve host") || lower.contains("unable to access") || lower.contains("network is unreachable") {
+        return "The remote could not be reached — check the network, then try again.".to_string();
+    }
+    if lower.contains("no upstream branch") {
+        return "This branch has no upstream yet — push again and one will be made.".to_string();
+    }
+    last_line(stderr, "git push failed")
+}
+
+/// git's own words for a failed pull, in this app's words.
+pub fn pull_error(stderr: &str) -> String {
+    let lower = stderr.to_lowercase();
+    if lower.contains("not possible to fast-forward") || lower.contains("divergent") || lower.contains("merge strategy") {
+        return "Your branch and the remote have diverged. Reconcile in a terminal (git pull --rebase), then pull again.".to_string();
+    }
+    if lower.contains("local changes") || lower.contains("would be overwritten") || lower.contains("unmerged files") {
+        return "The pull would overwrite local changes. Commit or discard them first, then pull again.".to_string();
+    }
+    if lower.contains("could not resolve host") || lower.contains("unable to access") {
+        return "The remote could not be reached — check the network, then try again.".to_string();
+    }
+    last_line(stderr, "git pull failed")
+}
+
+fn last_line(text: &str, fallback: &str) -> String {
+    text.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or(fallback).trim().to_string()
+}
+
 fn git(root: &Path, args: &[&str]) -> Result<std::process::Output, String> {
     Command::new("git")
         .arg("-C")
@@ -140,9 +257,11 @@ pub fn local_git_status(root: String) -> Result<Status, String> {
     }
     let out = git(&root_path, &["status", "--porcelain=v1", "-b", "--untracked-files=normal"])?;
     if !out.status.success() {
-        return Ok(Status { repo: false, branch: String::new(), ahead: 0, behind: 0, changes: Vec::new() });
+        return Ok(Status { repo: false, branch: String::new(), ahead: 0, behind: 0, remote: String::new(), head: false, changes: Vec::new() });
     }
-    Ok(parse_status(&String::from_utf8_lossy(&out.stdout)))
+    let mut status = parse_status(&String::from_utf8_lossy(&out.stdout));
+    status.remote = remote_url(&root_path);
+    Ok(status)
 }
 
 /// The uncommitted diff of one file (or of everything, with no path), as
@@ -305,6 +424,213 @@ pub fn local_git_commit(root: String, paths: Vec<String>, message: String) -> Re
     Ok(Committed { sha, files: count })
 }
 
+/// Amend the last commit: the given files are staged on top of it (all of
+/// the index when none are given), and the message is replaced only when one
+/// is written. History rewrite — the person clicks Amend with a confirm on
+/// screen; the agent side still refuses --amend on its own.
+#[tauri::command(async)]
+pub fn local_git_amend(root: String, paths: Vec<String>, message: String) -> Result<Committed, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    if !has_head(&root_path)? {
+        return Err("There is no commit to amend yet: make the first commit first.".to_string());
+    }
+    let wanted = check_commit_paths(&paths)?;
+    for p in &wanted {
+        crate::local::resolve_inside(&root_path, p)?;
+    }
+    if !wanted.is_empty() {
+        let mut add: Vec<&str> = vec!["add", "--"];
+        add.extend(wanted.iter().map(String::as_str));
+        let staged = git(&root_path, &add)?;
+        if !staged.status.success() {
+            return Err(last_line(&String::from_utf8_lossy(&staged.stderr), "git add failed"));
+        }
+    }
+    let text = message.trim();
+    let checked = if text.is_empty() { None } else { Some(check_commit_message(text)?) };
+    let mut args: Vec<&str> = vec!["commit", "--amend", "--no-verify"];
+    match &checked {
+        None => args.push("--no-edit"),
+        Some(m) => {
+            args.push("-m");
+            args.push(m.as_str());
+        }
+    }
+    let out = git(&root_path, &args)?;
+    if !out.status.success() {
+        let why = String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
+        if why.contains("Please tell me who you are") || why.contains("user.email") {
+            return Err("git does not know who you are yet. In a terminal: git config --global user.name \"Your Name\" and git config --global user.email \"you@example.com\", then amend again.".to_string());
+        }
+        return Err(last_line(&why, "git commit --amend failed"));
+    }
+    let sha = git(&root_path, &["rev-parse", "--short", "HEAD"])
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let count = git(&root_path, &["show", "--stat", "--format=", "HEAD"])
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().filter(|l| l.contains('|')).count())
+        .unwrap_or(0);
+    Ok(Committed { sha, files: count })
+}
+
+/// Take files back out of the index (staged -> working tree again). With no
+/// paths, everything staged comes back out. Never touches the working tree.
+#[tauri::command(async)]
+pub fn local_git_unstage(root: String, paths: Vec<String>) -> Result<usize, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    let wanted = check_commit_paths(&paths)?;
+    for p in &wanted {
+        crate::local::resolve_inside(&root_path, p)?;
+    }
+    if wanted.is_empty() {
+        // `git reset` (mixed, no ref) works in a repository with no commits too.
+        let out = git(&root_path, &["reset"])?;
+        if !out.status.success() {
+            return Err(last_line(&(String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout)), "git reset failed"));
+        }
+        return Ok(0);
+    }
+    let mut args: Vec<&str> = vec!["restore", "--staged", "--"];
+    args.extend(wanted.iter().map(String::as_str));
+    let out = git(&root_path, &args)?;
+    if out.status.success() {
+        return Ok(wanted.len());
+    }
+    // `git restore` needs a HEAD; on a repository with no commits, reset stages out.
+    let mut reset_args: Vec<&str> = vec!["reset", "--"];
+    reset_args.extend(wanted.iter().map(String::as_str));
+    let fallback = git(&root_path, &reset_args)?;
+    if fallback.status.success() {
+        return Ok(wanted.len());
+    }
+    Err(last_line(&String::from_utf8_lossy(&out.stderr), "git restore --staged failed"))
+}
+
+/// Throw away a file's changes: staged and working-tree content both go back
+/// to HEAD, and an untracked file is deleted. The caller must have asked the
+/// person to confirm — this cannot be undone. Empty is refused: "discard
+/// everything" is not a decision anyone means to make.
+#[tauri::command(async)]
+pub fn local_git_discard(root: String, paths: Vec<String>) -> Result<usize, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    let wanted = check_commit_paths(&paths)?;
+    if wanted.is_empty() {
+        return Err("Pick at least one file to discard.".to_string());
+    }
+    for p in &wanted {
+        crate::local::resolve_inside(&root_path, p)?;
+    }
+    let mut failed: Vec<String> = Vec::new();
+    for p in &wanted {
+        let probe = git(&root_path, &["status", "--porcelain=v1", "--", p])
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let done = if probe.starts_with("??") {
+            // Untracked: deletion is the only way to discard it. `-d` so a
+            // whole untracked folder picked as `dir/` goes with it.
+            git(&root_path, &["clean", "-fd", "--", p]).map(|o| o.status.success()).unwrap_or(false)
+        } else if probe.is_empty() {
+            // Nothing recorded: already at HEAD (or gone), so nothing to do.
+            true
+        } else {
+            git(&root_path, &["restore", "--staged", "--worktree", "--", p]).map(|o| o.status.success()).unwrap_or(false)
+        };
+        if !done {
+            failed.push(p.clone());
+        }
+    }
+    if !failed.is_empty() {
+        return Err(format!("Could not discard: {}", failed.join(", ")));
+    }
+    Ok(wanted.len())
+}
+
+/// Push the current branch: the remote's URL is checked (and its host known)
+/// before git touches the network, and a branch with no upstream gets one.
+#[tauri::command(async)]
+pub fn local_git_push(root: String) -> Result<Synced, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    let name = remote_name(&root_path)?;
+    let url = remote_url(&root_path);
+    check_remote_url(&url)?;
+    if !has_head(&root_path)? {
+        return Err("There is nothing to push yet: make a commit first.".to_string());
+    }
+    let branch = current_branch(&root_path)?;
+    let upstream = git(&root_path, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let out = if upstream {
+        git(&root_path, &["push"])
+    } else {
+        let target = format!("HEAD:refs/heads/{}", branch);
+        git(&root_path, &["push", "-u", &name, &target])
+    }?;
+    if !out.status.success() {
+        return Err(push_error(&String::from_utf8_lossy(&out.stderr)));
+    }
+    sync_report(&root_path, url, "Pushed.")
+}
+
+/// Pull with --ff-only: a fast-forward moves the branch, and anything else
+/// (divergence, local edits in the way) is refused in words, never merged
+/// behind the person's back.
+#[tauri::command(async)]
+pub fn local_git_pull(root: String) -> Result<Synced, String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err(format!("That folder is not there any more: {}", root));
+    }
+    // Errors out with the "no remote" words when the folder has none.
+    let _ = remote_name(&root_path)?;
+    let url = remote_url(&root_path);
+    check_remote_url(&url)?;
+    if !has_head(&root_path)? {
+        return Err("There are no commits in this folder yet; pull has nothing to fast-forward to.".to_string());
+    }
+    let out = git(&root_path, &["pull", "--ff-only"])?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        return Err(pull_error(&stderr));
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    if stdout.contains("Already up to date") || stdout.contains("Already up-to-date") {
+        return sync_report(&root_path, url, "Already up to date.");
+    }
+    sync_report(&root_path, url, "Pulled.")
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Synced {
+    /// The remote's URL (checked).
+    pub remote: String,
+    /// Its host, for the toast: 'github.com', '' for a local path.
+    pub host: String,
+    pub ahead: u32,
+    pub behind: u32,
+    pub message: String,
+}
+
+/// The counts after a push or pull, so the panel redraws true.
+fn sync_report(root: &Path, url: String, message: &str) -> Result<Synced, String> {
+    let counts = git(root, &["status", "--porcelain=v1", "-b"])
+        .map(|o| parse_status(&String::from_utf8_lossy(&o.stdout)))
+        .unwrap_or_else(|_| parse_status(""));
+    Ok(Synced { host: remote_host(&url), remote: url, ahead: counts.ahead, behind: counts.behind, message: message.to_string() })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +679,49 @@ mod tests {
         assert_eq!(repo_name("git@github.com:o/r").as_deref(), Some("r"));
         assert_eq!(repo_name("https://github.com/o/r/").as_deref(), Some("r"));
         assert_eq!(repo_name("https://x.y/..").as_deref(), None);
+    }
+
+    #[test]
+    fn staged_and_unborn_are_read_from_the_porcelain_line() {
+        let s = parse_status("## main\nM  staged.ts\n M worktree.ts\nMM both.ts\n?? new.md\n");
+        assert!(s.head);
+        let staged: Vec<(String, bool)> = s.changes.iter().map(|c| (c.path.clone(), c.staged)).collect();
+        assert_eq!(staged, vec![
+            ("staged.ts".into(), true),
+            ("worktree.ts".into(), false),
+            ("both.ts".into(), true),
+            ("new.md".into(), false),
+        ]);
+        let unborn = parse_status("## No commits yet on main\n?? a\n");
+        assert!(!unborn.head, "an unborn repository has nothing to amend or push");
+        assert_eq!(unborn.branch, "main");
+    }
+
+    #[test]
+    fn a_remote_url_is_checked_before_anything_touches_the_network() {
+        assert!(check_remote_url("https://github.com/o/r.git").is_ok());
+        assert!(check_remote_url("git@github.com:o/r.git").is_ok());
+        assert!(check_remote_url("/srv/repos/r.git").is_ok(), "a local path is no network");
+        assert!(check_remote_url("file:///srv/repos/r.git").is_ok());
+        assert!(check_remote_url("ext::sh -c evil").is_err());
+        assert!(check_remote_url("--upload-pack=evil https://x.y/z").is_err());
+        assert!(check_remote_url("https://user:pw@github.com/o/r").is_err());
+        assert!(check_remote_url("git@evil.example:o/r").is_err());
+        assert!(check_remote_url("").is_err());
+        assert_eq!(remote_host("https://github.com/o/r.git"), "github.com");
+        assert_eq!(remote_host("git@github.com:o/r.git"), "github.com");
+        assert_eq!(remote_host("ssh://git@host.example:2222/r.git"), "host.example");
+        assert_eq!(remote_host("/srv/repos/r.git"), "");
+    }
+
+    #[test]
+    fn push_and_pull_failures_are_said_in_this_app_s_words() {
+        assert!(push_error("! [rejected] main -> main (fetch first)").contains("Pull first"));
+        assert!(push_error("ERROR: Permission denied (publickey)").contains("credentials"));
+        assert!(push_error("fatal: Could not resolve host: github.com").contains("network"));
+        assert_eq!(push_error("fatal: surprise"), "fatal: surprise");
+        assert!(pull_error("Not possible to fast-forward, aborting").contains("diverged"));
+        assert!(pull_error("error: Your local changes to the following files would be overwritten").contains("Commit or discard"));
+        assert_eq!(pull_error("fatal: surprise\nmore"), "more", "the last line is the one git meant");
     }
 }
