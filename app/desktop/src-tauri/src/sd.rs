@@ -923,6 +923,18 @@ fn log_tail(app: &tauri::AppHandle) -> String {
 /// picture in tiles: without it, sampling ran to the end on a 4 GB card and
 /// the very last step failed out of GPU memory, leaving a blank file after
 /// six minutes of work.
+/// On a small card the VAE runs on the CPU. Even tiled, FLUX.2's VAE asked
+/// the PC's 4 GB GTX 1050 Ti for 3.3 GB against a 2.8 GB budget to encode the
+/// picture an edit starts from ("failed to encode reference image 0"). The VAE
+/// is small; on the CPU it costs seconds, not the edit. `--vae-on-cpu` rather
+/// than `--backend vae=cpu`: the same thing in sd.cpp, without naming a device.
+pub fn small_card_args(vram_mb: Option<u64>) -> Vec<String> {
+    match vram_mb {
+        Some(mb) if mb > 0 && mb <= 6 * 1024 => vec!["--vae-on-cpu".to_string()],
+        _ => Vec::new(),
+    }
+}
+
 pub fn args_for_set(parts: &SetParts, port: u16, threads: Option<u32>) -> Vec<String> {
     let mut args = vec!["--diffusion-model".to_string(), parts.diffusion.display().to_string()];
     for (flag, part) in [
@@ -982,10 +994,11 @@ pub async fn sd_start(
 
     let mut command = Command::new(&binary);
     // A folder is a set, and a set starts with each part under its own flag.
-    let argv = match set_in(&model) {
+    let mut argv = match set_in(&model) {
         Some(parts) if model.is_dir() => args_for_set(&parts, port, threads),
         _ => args_for(&model, port, threads),
     };
+    argv.extend(small_card_args(crate::models::vram_mb()));
     command.args(argv);
     command.stdin(Stdio::null());
     // The server's own log is the only place a load failure explains itself.
@@ -1513,6 +1526,15 @@ pub async fn sd_cancel(id: String) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_small_card_encodes_on_the_cpu() {
+        assert_eq!(small_card_args(Some(4096)), vec!["--vae-on-cpu"], "the PC's GTX 1050 Ti");
+        assert_eq!(small_card_args(Some(6144)), vec!["--vae-on-cpu"]);
+        assert!(small_card_args(Some(8192)).is_empty(), "a bigger card keeps the VAE on the GPU");
+        assert!(small_card_args(None).is_empty(), "unknown: leave sd.cpp's own choice");
+        assert!(small_card_args(Some(0)).is_empty());
+    }
 
     #[test]
     fn only_a_model_inside_sd_models_can_be_deleted() {
