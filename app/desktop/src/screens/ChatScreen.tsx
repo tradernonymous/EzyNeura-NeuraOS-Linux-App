@@ -58,7 +58,7 @@ import '../puter.js';
 import '../image-run.js';
 // The shell's command bridge, for this PC's image server (sd_find, sd_cancel).
 import { call } from '../bridge';
-import { saveFile } from '../files/save';
+import { saveFile, savePictureUrl } from '../files/save';
 
 const chats: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
 const persistLib: typeof import('../persist.js') = (globalThis as any).FreeAI4UPersist;
@@ -350,6 +350,16 @@ const EMPTY_PROMPTS = [
   'Write a bash script that renames photos by their date',
   'Compare three local models I could run on this GPU',
 ];
+
+/** A chat picture through the native save dialog; cancelling is not an error. */
+function savePictureNow(url: string): void {
+  savePictureUrl(url)
+    .then((said) => pushToast('ok', said))
+    .catch((e: unknown) => {
+      const text = (e as Error)?.message || String(e);
+      if (!/cancel/i.test(text)) pushToast('error', `Could not save: ${text}`);
+    });
+}
 
 export default function ChatScreen() {
   // Parsed once. The active id is taken from the list this component already
@@ -2428,7 +2438,7 @@ _${done.notes.join(' · ')}_` : said,
                       >
                         <button onClick={() => editPicture(url, i, j)} disabled={sending} title="Put /edit in the composer, aimed at this picture">Edit</button>
                         <button onClick={() => openInImages(url)} title="Change it in the Images screen">Open in Images</button>
-                        <button onClick={() => imageRun.savePicture(url)} title="Save it to a file">Save</button>
+                        <button onClick={() => savePictureNow(url)} title="Save it to a file">Save</button>
                       </span>
                     </span>
                   );
@@ -2772,7 +2782,7 @@ _${done.notes.join(' · ')}_` : said,
           onTab={setOutputTab}
           onClose={() => setOutputOpen((o) => ({ ...o, [active.id]: false }))}
           onOpenFile={() => window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { view: 'local' } }))}
-          onSavePicture={(url) => imageRun.savePicture(url)}
+          onSavePicture={(url) => savePictureNow(url)}
         />
       )}
       {!(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && (turnLib.outputOf(active.messages).any || gitDirty > 0) && (
