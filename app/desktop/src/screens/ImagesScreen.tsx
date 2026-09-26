@@ -118,6 +118,10 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   const [gallery, setGallery] = useState<Job[]>([]);
   const [signedIn, setSignedIn] = useState(false);
   const [puterMsg, setPuterMsg] = useState('');
+  // A sign-in waits on the browser for up to five minutes; it has its own
+  // state so the rest of the screen (a local draw, an edit) stays usable.
+  const [puterWaiting, setPuterWaiting] = useState(false);
+  const puterCancel = useRef(false);
   const [reportError, setReportError] = useState('');
   const [sd, setSd] = useState<SdFacts | null>(null);
   const [sdStatus, setSdStatus] = useState<SdStatus | null>(null);
@@ -273,19 +277,20 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   }, []);
 
   const connectPuter = () => {
-    setPuterMsg('');
-    setBusy(true);
+    puterCancel.current = false;
+    setPuterMsg('Waiting for Puter: finish signing in in the browser tab that opened. This updates on its own.');
+    setPuterWaiting(true);
     // Under the shell the sign-in page opens in the system browser THROUGH a
     // redirect page the shell serves on 127.0.0.1: Puter's page is blank
     // without a referrer, and a URL launched by Windows has none.
     const open = hasShell() ? (url: string) => puterSigninOpen(url) : undefined;
-    puter.signIn(open ? { open } : undefined)
+    puter.signIn({ ...(open ? { open } : {}), cancelled: () => puterCancel.current })
       .then((ok: boolean) => {
         setSignedIn(!!ok);
         setPuterMsg(ok ? 'Signed in to Puter.' : 'Sign-in did not finish. Finish it in the browser tab that opened, then try again.');
       })
       .catch((err: unknown) => setPuterMsg((err as Error).message || String(err)))
-      .finally(() => setBusy(false));
+      .finally(() => setPuterWaiting(false));
   };
 
   /**
@@ -552,18 +557,22 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
             </div>
           )}
 
-          {/* Puter is a service, so its sign-in is always on screen -- not
-              only when it is the service selected. Someone who wants it should
-              not have to select it first to find out they cannot use it yet,
-              and someone who is signed in should be able to sign out without
-              switching services. */}
+          {/* Puter is one service among several. Chosen, its sign-in is in
+              full view; otherwise it folds to one line marked optional, so a
+              picture on This PC or the engine never looks like it needs a
+              Puter account -- and sign-out is still one click away. */}
+          <details className="puter-fold" open={isBrowser || puterWaiting}>
+          <summary className="settings-hint">{signedIn ? 'Puter: signed in' : 'Puter (optional)'}</summary>
           <div className={`puter-strip ${isBrowser ? 'is-chosen' : ''}`}>
             <span className={`chip ${signedIn ? 'chip-ok' : 'chip-warn'}`}>
               <Icon name={signedIn ? 'check' : 'alert'} size={12} />
               {signedIn ? 'Puter: signed in' : 'Puter: not signed in'}
             </span>
-            {!signedIn && (
+            {!signedIn && !puterWaiting && (
               <button onClick={connectPuter} disabled={busy}>Sign in to Puter</button>
+            )}
+            {puterWaiting && (
+              <button onClick={() => { puterCancel.current = true; }}>Cancel sign-in</button>
             )}
             {signedIn && (
               <button
@@ -575,9 +584,10 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
             <span className="settings-hint">
               {isBrowser
                 ? (choice?.note || 'Puter bills the account that is signed in, not this app.')
-                : 'Signing in adds Puter as a service you can pick above: it draws in this window, on your own Puter account.'}
+                : 'Not needed for This PC or the engine. Signing in adds Puter as a service you can pick above: it draws on your own Puter account.'}
             </span>
           </div>
+          </details>
 
           <div className="images-actions">
             <button className="primary send-btn-wide" onClick={submit} disabled={busy || !prompt.trim() || blocked}>

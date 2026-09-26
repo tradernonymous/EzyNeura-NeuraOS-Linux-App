@@ -179,7 +179,8 @@
       var session = uuid();
       var deadline = Date.now() + (opts.timeoutMs || SIGNIN_TIMEOUT_MS);
       return Promise.resolve(open(signInUrl(api, session))).then(function poll() {
-        if (Date.now() >= deadline) throw new Error('Puter sign-in timed out. Try again, and finish signing in within five minutes.');
+        if (typeof opts.cancelled === 'function' && opts.cancelled()) throw new Error('Puter sign-in cancelled.');
+        if (Date.now() >= deadline) throw new Error('Puter sign-in timed out: Puter never handed this app a token. Try again, or use This PC or the engine instead.');
         return doFetch(waitUrl(api), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
