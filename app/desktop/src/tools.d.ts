@@ -45,6 +45,9 @@ export declare const MAX_RESULT_CHARS: number;
 export declare const WEB: ToolDef[];
 export declare const GITHUB: ToolDef[];
 export declare const LOCAL: ToolDef[];
+/** C10: the credential broker's two tools — names only, never a secret. */
+export declare const BROKER: ToolDef[];
+export declare const BROKER_NAMES: string[];
 export declare const ASKS: Record<string, string>;
 export declare const SPAWN_AGENT: ToolDef;
 export declare function slug(name: string): string;

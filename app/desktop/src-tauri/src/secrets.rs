@@ -29,23 +29,43 @@ pub const KEYS: &[&str] = &["hf_token", "hf_user"];
 /// NEURA-054: one entry per endpoint the user added, named `byok.<id>`.
 pub const BYOK_PREFIX: &str = "byok.";
 
+/// C10: the credential broker's two families. A `ssh.<id>` entry is a saved
+/// host (user, host, port, an optional private key) and a `api.<id>` entry a
+/// saved address (base URL, header, secret). Neither value is ever returned
+/// to a tool — broker.rs reads it and returns only the command's output or
+/// the request's answer. The shape of the id is byok's, so one rule covers
+/// all three families.
+pub const SSH_PREFIX: &str = "ssh.";
+pub const API_PREFIX: &str = "api.";
+
+fn prefixed(key: &str, prefix: &str) -> bool {
+    match key.strip_prefix(prefix) {
+        Some(id) => {
+            !id.is_empty()
+                && id.len() <= 64
+                && !id.contains("..")
+                && id.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.')
+        }
+        None => false,
+    }
+}
+
 /// The ids `byok.` accepts. src/byok.js makes an id out of exactly these
 /// characters, so a name with anything else in it is not one this app wrote:
 /// it is a page asking for some other entry.
 fn is_byok_key(key: &str) -> bool {
-    let id = match key.strip_prefix(BYOK_PREFIX) {
-        Some(id) => id,
-        None => return false,
-    };
-    if id.is_empty() || id.len() > 64 || id.contains("..") {
-        return false;
-    }
-    id.chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.')
+    prefixed(key, BYOK_PREFIX)
+}
+
+/// C10: `ssh.<id>` and `api.<id>` are the broker's entries — ids by the same
+/// rule as byok, so a page still cannot ask for some other program's entry.
+fn is_broker_key(key: &str) -> bool {
+    prefixed(key, SSH_PREFIX) || prefixed(key, API_PREFIX)
 }
 
 fn entry(key: &str) -> Result<Entry, String> {
-    if !KEYS.contains(&key) && !is_byok_key(key) {
+    if !KEYS.contains(&key) && !is_byok_key(key) && !is_broker_key(key) {
         return Err(format!("{} is not a secret this app stores", key));
     }
     Entry::new(SERVICE, key).map_err(|e| format!("credential store: {}", e))
@@ -103,6 +123,14 @@ mod tests {
         assert!(entry("byok.UPPER").is_err(), "ids are the ones byok.js makes");
         assert!(entry("byok.a b").is_err());
         assert!(entry(&format!("byok.{}", "x".repeat(65))).is_err());
+        // C10: the broker's two families live by the same id rule.
+        assert!(entry("ssh.nas").is_ok());
+        assert!(entry("api.home.lan").is_ok());
+        assert!(entry("ssh.").is_err());
+        assert!(entry("ssh.NAS").is_err());
+        assert!(entry("ssh.a..b").is_err());
+        assert!(entry("api.hi there").is_err());
+        assert!(entry("sh.nas").is_err(), "the prefix is exactly ssh.");
         // Another program's entry is still not reachable through the prefix.
         assert!(entry("git:https://github.com").is_err());
     }

@@ -93,6 +93,20 @@
   ];
   var DESKTOP_NAMES = DESKTOP.map(function (t) { return t.function.name; });
 
+  // C10: the credential broker (broker.rs in the shell). Both tools name a
+  // SAVED profile — Settings -> Credentials holds the hosts and addresses —
+  // and the shell reads the secret and returns only the command's output or
+  // the request's answer, so no key or login is ever in this conversation.
+  // Offered only with a shell: without one there is no broker to call.
+  var BROKER = [
+    fn('ssh_run', 'Run a command on a saved host over SSH (saved under Settings → Credentials). The shell holds the login — the key never reaches this conversation — and the answer is only the command\u2019s output. Asks the user first.',
+      { target: { type: 'string', description: 'The saved host\u2019s name' }, command: STR }, ['target', 'command']),
+    fn('http_auth', 'Make an HTTP request with a stored credential attached, to the address saved with it (Settings → Credentials). The secret stays in the shell; the answer is only the response. Asks the user first.',
+      { name: { type: 'string', description: 'The saved address\u2019s name' }, path: { type: 'string', description: 'Path on the saved address, starting with /' }, method: { type: 'string', description: 'GET (default), POST, PUT, PATCH, DELETE or HEAD' }, body: STR },
+      ['name', 'path']),
+  ];
+  var BROKER_NAMES = BROKER.map(function (t) { return t.function.name; });
+
   // Delegation to a sub-agent (agents.js). Not in the catalogue: Chat offers it
   // with the list of agents in its description. The agent's own tools still
   // ask one by one; this asks before the agent starts at all.
@@ -114,6 +128,8 @@
     desktop_type: 'types into the app in front',
     desktop_key: 'presses keys in the app in front',
     desktop_scroll: 'scrolls the app under the pointer',
+    ssh_run: 'runs a command on a saved host',
+    http_auth: 'sends a request with a stored credential',
   };
 
   function storage(given) {
@@ -140,6 +156,8 @@
     github_search_code: 'that repository search',
     github_list_files: 'that folder in the repository',
     github_list_commits: 'that repository history',
+    ssh_run: 'that host',
+    http_auth: 'that response',
   };
 
   /** The source's name for the badge and the label; '' for trusted results. */
@@ -534,6 +552,7 @@
     if (ctx.github) out = out.concat(GITHUB);
     if (ctx.localRoot && ctx.shell) out = out.concat(LOCAL);
     if (ctx.desktop && ctx.shell) out = out.concat(DESKTOP);
+    if (ctx.shell) out = out.concat(BROKER);
     return out.concat(mcpDefs(given));
   }
 
@@ -693,6 +712,8 @@
     if (n === 'desktop_type') return 'Type “' + String(a.text || '').slice(0, 60) + (String(a.text || '').length > 60 ? '…' : '') + '”';
     if (n === 'desktop_key') return 'Press ' + (a.key || '');
     if (n === 'desktop_scroll') return 'Scroll ' + (Number(a.steps) < 0 ? 'up' : 'down') + ' ' + Math.abs(Number(a.steps) || 0);
+    if (n === 'ssh_run') return 'Run ' + String(a.command || '').slice(0, 80) + ' on ' + (a.target || 'a saved host');
+    if (n === 'http_auth') return String(a.method || 'GET') + ' ' + (a.name || 'a saved address') + String(a.path || '');
     if (n === 'github_commit_file') return 'Commit ' + (a.path || 'a file') + ' to ' + (a.repo || 'a repository') + (a.branch ? ' (' + a.branch + ')' : '');
     if (n === 'github_delete_file') return 'Delete ' + (a.path || 'a file') + ' from ' + (a.repo || 'a repository');
     if (n === 'github_create_branch') return 'Create branch ' + (a.branch || '') + ' in ' + (a.repo || 'a repository');
@@ -719,6 +740,8 @@
     WEB: WEB,
     GITHUB: GITHUB,
     LOCAL: LOCAL,
+    BROKER: BROKER,
+    BROKER_NAMES: BROKER_NAMES,
     ASKS: ASKS,
     untrustedSource: untrustedSource,
     markUntrusted: markUntrusted,

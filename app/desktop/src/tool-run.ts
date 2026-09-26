@@ -9,6 +9,9 @@
 //                                (mcp.rs) for a local (stdio) one
 //   * list/read/write/edit/run -> the shell, confined to the folder the person
 //                                opened (local.rs enforces the confinement)
+//   * ssh_run / http_auth      -> the credential broker (broker.rs): the shell
+//                                reads the secret and returns only the output
+//                                — the key never reaches this conversation
 //
 // By the time a call reaches here it has been allowed (agent-turn.ts asks
 // first for anything in tools.ASKS). The result is TEXT for the model: short,
@@ -16,7 +19,7 @@
 // itself said no -- a model can do something useful with a sentence.
 import { api, ApiError } from './api';
 import {
-  desktopAct, desktopScreenshot, editLocalFile, hasShell, listLocalDir, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
+  call, desktopAct, desktopScreenshot, editLocalFile, hasShell, listLocalDir, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
 } from './bridge';
 import './tools.js';
 
@@ -330,6 +333,31 @@ async function desktop(name: string, a: Args, callId: string): Promise<string> {
   return `Error: ${name} is not a desktop tool.`;
 }
 
+// ---- the credential broker (C10) -------------------------------------------
+
+/**
+ * ssh_run / http_auth -> the shell's one `credential_op` command. Arguments
+ * carry profile NAMES only; broker.rs reads the secret from the OS keyring,
+ * runs the operation and returns its output. The shell refuses a name it
+ * does not store, and the call itself has already been allowed (tools.ASKS).
+ */
+async function broker(name: string, a: Args): Promise<string> {
+  if (!hasShell()) return 'Error: the credential broker lives in the NeuraOS app, not the server.';
+  const args = name === 'ssh_run'
+    ? { target: String(a.target ?? ''), command: String(a.command ?? '') }
+    : {
+        name: String(a.name ?? ''),
+        path: String(a.path ?? ''),
+        method: a.method ? String(a.method) : undefined,
+        body: a.body ? String(a.body) : undefined,
+      };
+  try {
+    return await call<string>('credential_op', { op: name, args });
+  } catch (e) {
+    return `Error: ${((e as Error).message || String(e)).split('\n')[0]}`;
+  }
+}
+
 /** Run one allowed call and return what the model should be told. */
 export async function executeTool(call: ToolCall, args: Args, context: ToolContext): Promise<string> {
   const name = call.name;
@@ -337,6 +365,7 @@ export async function executeTool(call: ToolCall, args: Args, context: ToolConte
   if (name === 'spawn_agent') return context.spawnAgent ? context.spawnAgent(args) : 'Error: no sub-agent may be spawned here.';
   if (name.startsWith('github_')) return github(name, args);
   if (name.startsWith('mcp__')) return mcp(name, args, call.id);
+  if (tools.BROKER_NAMES.includes(name)) return broker(name, args);
   if (tools.LOCAL.some((t) => t.function.name === name)) return local(name, args, context.localRoot);
   if (tools.DESKTOP_NAMES.includes(name)) return desktop(name, args, call.id);
   return `Error: ${name} is not a tool this app has.`;

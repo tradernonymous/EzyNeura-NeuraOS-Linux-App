@@ -10,12 +10,12 @@
   var GROUPS = [
     { id: 'general', label: 'General', hint: 'Look, start-up, keys', sections: ['Appearance', 'Startup and desktop', 'Shortcuts'] },
     { id: 'ai', label: 'AI & Models', hint: 'Engine, services, models, memory', sections: ['Engine', 'Providers', 'Local models', 'Limits the engine enforces', 'Memory the model saved'] },
-    { id: 'tools', label: 'Tools', hint: 'Connectors, voice, desktop', sections: ['Connectors', 'Dictation', 'Desktop control'] },
+    { id: 'tools', label: 'Tools', hint: 'Connectors, credentials, voice, desktop', sections: ['Connectors', 'Credentials', 'Dictation', 'Desktop control'] },
     { id: 'system', label: 'System', hint: 'Doctor, Diagnostics, the engine shell', sections: ['Doctor', 'Diagnostics', 'Advanced'] },
   ];
 
   /** Sections whose card spans the whole grid: they are lists, not a value. */
-  var WIDE = ['Local models', 'Connectors', 'Doctor', 'Diagnostics', 'Shortcuts', 'Providers', 'Advanced', 'Engine'];
+  var WIDE = ['Local models', 'Connectors', 'Credentials', 'Doctor', 'Diagnostics', 'Shortcuts', 'Providers', 'Advanced', 'Engine'];
 
   function groupOf(title) {
     var t = String(title || '').trim();

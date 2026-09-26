@@ -7,6 +7,7 @@ import DoctorCard from '../components/DoctorCard';
 import LocalModelsCard from '../components/LocalModelsCard';
 import DictationCard from '../components/DictationCard';
 import ConnectorsCard from '../components/ConnectorsCard';
+import CredentialsCard from '../components/CredentialsCard';
 import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
 import StartupCard from '../components/StartupCard';
@@ -196,6 +197,9 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
           </section>
 
           <ConnectorsCard />
+
+          {/* C10: the credential broker's saved hosts and addresses. */}
+          <CredentialsCard />
 
           <section className="settings-section">
             <h2>Appearance</h2>

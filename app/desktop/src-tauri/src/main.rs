@@ -30,6 +30,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod byok;
+mod broker;
 mod chat_store;
 mod crash;
 mod diag;
@@ -349,6 +350,7 @@ fn main() {
             secrets::secret_get,
             secrets::secret_set,
             secrets::secret_delete,
+            broker::credential_op,
             chat_store::chat_store_list,
             chat_store::chat_store_put,
             chat_store::chat_store_delete,

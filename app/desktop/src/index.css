@@ -4718,6 +4718,11 @@ body.quick-body { background: var(--bg-1); }
 .parallel-steps li.is-failed { color: var(--danger, #d9534f); }
 .parallel-stat, .parallel-approval pre { max-height: 140px; overflow: auto; margin: 0; padding: 6px 8px; font-size: 11px; background: var(--bg-1); border-radius: 6px; }
 .parallel-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* C10: Settings → Credentials — the broker's two forms. */
+.credential-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.credential-form input { flex: 1 1 140px; min-width: 0; }
+.credential-form .credential-key { flex: 1 1 100%; resize: vertical; font-family: var(--mono, monospace); font-size: 12px; }
+.credential-form button { flex: 0 0 auto; }
 /* C5: the Activity board's comparison of parallel worktree runs. */
 .compare-batch { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .compare-batch-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 11px; color: var(--text-3); }
