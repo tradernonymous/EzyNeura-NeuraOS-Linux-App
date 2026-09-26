@@ -17,6 +17,8 @@ import '../audit.js';
 // C7: one local line per model call and tool call (Activity reads it).
 import '../traces.js';
 import MintPackCard from '../components/MintPackCard';
+// E3: FLUX.2 on this PC, offered where the app begins.
+import Flux2OfferCard from '../components/Flux2OfferCard';
 
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 const builtIn: typeof import('../built-in-skills.js') = (globalThis as any).FreeAI4UBuiltInSkills;
@@ -2364,6 +2366,8 @@ _${done.notes.join(' · ')}_` : said,
             </div>
             {/* B10: the pack is offered where the app begins — an empty chat. */}
             <MintPackCard root={openFolder()} />
+            {/* E3: and so is local image generation, while it is not set up. */}
+            <Flux2OfferCard />
           </div>
         )}
         {active.messages.map((msg, i) => (
