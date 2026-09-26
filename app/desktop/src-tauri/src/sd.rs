@@ -897,9 +897,27 @@ pub fn explain_tail(tail: &str) -> String {
         })
         .collect();
     let mut out = if errors.is_empty() { tail.trim().to_string() } else { errors.join(" · ") };
+    let lower = tail.to_ascii_lowercase();
     if tail.contains("get sd version from file failed") {
-        out.push_str(
-            " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
+        if lower.contains("controlnet") {
+            out.push_str(
+                " -- this file is a ControlNet, an add-on that guides a model, not a model that draws on its own: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
+        } else if lower.contains("lora") {
+            out.push_str(
+                " -- this file looks like a LoRA, an add-on for a model, not a model that draws on its own: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
+        } else {
+            out.push_str(
+                " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
+            );
+        }
+    } else if tail.contains("VAE tensor") && tail.contains("not in model metadata") {
+        // Collapse the hundreds of per-tensor lines to the first one.
+        let first = errors.first().cloned().unwrap_or_default();
+        out = format!(
+            "{} (and more) -- this checkpoint was published without its VAE. Download the VAE it was made for (sdxl_vae.safetensors from stabilityai/sdxl-vae for an SDXL model) and use \"Add files as a set\" with both files.",
+            first
         );
     }
     out
@@ -1568,6 +1586,14 @@ mod tests {
         assert!(said.contains("new_sd_ctx_t failed"));
         assert!(!said.contains("Vulkan devices"));
         assert!(said.contains("UNet-only GGUF made for ComfyUI"));
+        // The PC's two next tries: a ControlNet, and a checkpoint without its VAE.
+        let cn = "[INFO   ] model_loader.cpp:221  - load /m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors using safetensors format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: '/m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors'";
+        assert!(explain_tail(cn).contains("is a ControlNet"));
+        let novae = "[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.bias' not in model metadata\n[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.weight' not in model metadata\n[ERROR  ] diffusion_engine.cpp:1247 - model metadata validation failed";
+        let said = explain_tail(novae);
+        assert!(said.contains("published without its VAE"), "{}", said);
+        assert!(said.contains("Add files as a set"));
+        assert_eq!(said.matches("not in model metadata").count(), 1, "one line, not hundreds");
         // No error lines: the tail as it was.
         assert_eq!(explain_tail("  just info\n"), "just info");
         // An assert is an error too (the FP4 crash).
