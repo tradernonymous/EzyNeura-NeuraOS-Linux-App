@@ -159,6 +159,47 @@
    *
    * Resolves to the data: URL, or '' when the person cancelled.
    */
+  /**
+   * Scale a data: URL picture to exactly w x h on a canvas. The source of an
+   * edit is sent at the size the job draws at: FLUX.2 reads the reference
+   * image as extra tokens, so a 3072x4096 photo costs GPU memory and a long
+   * encode even when the output is small. Without a canvas (tests), as-is.
+   */
+  function scalePicture(url, width, height, deps) {
+    var doc = (deps && deps.document) || (root && root.document);
+    var Ctor = (deps && deps.Image) || (root && root.Image);
+    if (!url || !doc || !Ctor || typeof doc.createElement !== 'function') return Promise.resolve(url);
+    return new Promise(function (resolve) {
+      var img = new Ctor();
+      img.onload = function () {
+        if (img.naturalWidth === width && img.naturalHeight === height) { resolve(url); return; }
+        var canvas = doc.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        var ctx = canvas.getContext && canvas.getContext('2d');
+        if (!ctx) { resolve(url); return; }
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = function () { resolve(url); };
+      img.src = url;
+    });
+  }
+
+  /** The job body with its init image and mask at the job's own size. */
+  function fitForLocal(body, deps) {
+    if (!body || !body.initImage || !(body.width > 0) || !(body.height > 0)) return Promise.resolve(body);
+    return Promise.all([
+      scalePicture(body.initImage, body.width, body.height, deps),
+      body.maskImage ? scalePicture(body.maskImage, body.width, body.height, deps) : Promise.resolve(body.maskImage),
+    ]).then(function (pair) {
+      var out = Object.assign({}, body, { initImage: pair[0] });
+      if (body.maskImage) out.maskImage = pair[1];
+      return out;
+    });
+  }
+
   function runLocal(body, deps) {
     var images = imagesLib();
     var call = deps.call;
@@ -178,7 +219,11 @@
       })
       .then(function () {
         if (stopped()) { onJob(null); return ''; }
-        return Promise.resolve(call('sd_generate', body)).then(function (submitted) {
+        return fitForLocal(body, deps);
+      })
+      .then(function (sized) {
+        if (sized === '' || stopped()) { onJob(null); return ''; }
+        return Promise.resolve(call('sd_generate', sized)).then(function (submitted) {
           id = String((submitted && submitted.id) || '');
           if (!id) throw new Error('The local server accepted the job without an id.');
           onJob({ id: id, label: 'Queued', since: Date.now() });
@@ -253,7 +298,7 @@
   function failureView(kind, route, choice, error) {
     var images = imagesLib();
     var e = error || {};
-    var message = images.describePuterError(e) || (e && e.message) || String(e);
+    var message = images.describePuterError(e) || images.errorText(e);
     var what = kind === 'edit' ? 'change that picture' : 'draw that';
     if (route === 'local') {
       return { summary: 'This PC could not ' + what, upstream: message, walk: '', advice: images.localAdvice(message), message: message };
