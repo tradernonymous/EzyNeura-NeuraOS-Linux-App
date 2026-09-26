@@ -627,12 +627,8 @@ fn log_tail(app: &tauri::AppHandle) -> String {
     tail.trim().to_string()
 }
 
-/// A model file the frontend named: either a file in the models folder, or an
-/// absolute path to a .gguf that exists (one the scan found). Anything else
-/// is refused, so "start this file" cannot become "run llama-server on
-/// whatever path a page says".
 /// The GPU's memory in MB, when the machine reports it.
-fn vram_mb() -> Option<u64> {
+pub(crate) fn vram_mb() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
         crate::linux::gpu::facts().get("vram_mb").and_then(|v| v.as_u64())
@@ -708,6 +704,10 @@ pub fn fit_gpu_layers(weights: u64, layers: u64, kv_per_token: u64, ctx: u32, vr
     Some((budget / per_layer).min(layers))
 }
 
+/// A model file the frontend named: either a file in the models folder, or an
+/// absolute path to a .gguf that exists (one the scan found). Anything else
+/// is refused, so "start this file" cannot become "run llama-server on
+/// whatever path a page says".
 fn resolve_model_file(app: &tauri::AppHandle, file: &str) -> Result<PathBuf, String> {
     let candidate = Path::new(file);
     let path = if candidate.is_absolute() {
