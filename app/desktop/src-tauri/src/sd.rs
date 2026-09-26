@@ -907,6 +907,13 @@ pub fn explain_tail(tail: &str) -> String {
             out.push_str(
                 " -- this file looks like a LoRA, an add-on for a model, not a model that draws on its own: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
             );
+        } else if ["pulid", "ip-adapter", "ip_adapter", "ipadapter", "instantid", "t2i-adapter", "t2i_adapter"]
+            .iter()
+            .any(|k| lower.contains(k))
+        {
+            out.push_str(
+                " -- this file is an adapter (PuLID, IP-Adapter, InstantID and the like) that a ComfyUI workflow adds to a model; it does not draw on its own and stable-diffusion.cpp does not load it: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
         } else {
             out.push_str(
                 " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
@@ -1618,6 +1625,8 @@ mod tests {
         // The PC's two next tries: a ControlNet, and a checkpoint without its VAE.
         let cn = "[INFO   ] model_loader.cpp:221  - load /m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors using safetensors format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: '/m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors'";
         assert!(explain_tail(cn).contains("is a ControlNet"));
+        let pulid = "[INFO   ] model_loader.cpp:221  - load /m/pulid_flux_v0.9.1.safetensors using safetensors format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: '/m/pulid_flux_v0.9.1.safetensors'";
+        assert!(explain_tail(pulid).contains("is an adapter (PuLID"));
         let novae = "[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.bias' not in model metadata\n[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.weight' not in model metadata\n[ERROR  ] diffusion_engine.cpp:1247 - model metadata validation failed";
         let said = explain_tail(novae);
         assert!(said.contains("published without its VAE"), "{}", said);
