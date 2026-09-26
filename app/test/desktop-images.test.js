@@ -146,3 +146,15 @@ test('a local edit keeps the photo\'s shape at about one megapixel (the 4 GB car
   assert.equal(plan.body.width, 832);
   assert.equal(plan.body.height, 1152);
 });
+
+test('an image model can be deleted from the card, with a second click to confirm', () => {
+  const src = card();
+  assert.match(src, /call<[^>]*>\('sd_delete_model', \{ path \}\)/);
+  assert.match(src, /if \(deleteAsk !== path\) \{ setDeleteAsk\(path\); return; \}/, 'the first click only arms it');
+  assert.match(src, /'Sure\? Delete' : 'Delete'/);
+  assert.match(src, /chosenPath\.startsWith\(facts\.models_dir \+ '\/'\)/, 'offered only for a model inside sd-models');
+  const rs = sdRs();
+  assert.match(rs, /pub fn sd_delete_model/);
+  assert.match(rs, /"--vae-tiling"\.to_string\(\)/, 'a single-file model encodes in tiles too');
+  assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_delete_model,/);
+});

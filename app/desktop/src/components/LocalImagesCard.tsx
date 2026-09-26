@@ -374,6 +374,23 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
     await onRefresh();
   });
 
+  // Delete asks twice (the Changes panel's pattern): the first click arms it,
+  // the second deletes. Only a model inside sd-models can go; the shell
+  // refuses anything else and stops the server if it has that model loaded.
+  const [deleteAsk, setDeleteAsk] = useState('');
+  const deleteModel = (path: string) => {
+    if (!path) return;
+    if (deleteAsk !== path) { setDeleteAsk(path); return; }
+    setDeleteAsk('');
+    void guard('model', async () => {
+      const done = await call<{ path: string; bytes: number; stopped: boolean }>('sd_delete_model', { path });
+      pushToast('ok', `Deleted ${done.path.split(/[\\/]/).pop()} (${sizeOf(done.bytes)} freed)${done.stopped ? '; the image server was stopped' : ''}.`);
+      await onRefresh();
+    });
+  };
+  const chosenPath = facts?.model || '';
+  const deletable = !!chosenPath && !!facts?.models_dir && chosenPath.startsWith(facts.models_dir + '/');
+
   const chooseModel = (path: string) => guard('model', async () => {
     if (!path) return;
     await call('sd_use_model', { path });
@@ -489,6 +506,17 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
             onPick={chooseModel}
           />
           <button onClick={pickModel} disabled={!!busy || drawing}>Choose file…</button>
+          {deletable && (
+            <button
+              className={deleteAsk === chosenPath ? 'danger' : ''}
+              onClick={() => deleteModel(chosenPath)}
+              onBlur={() => setDeleteAsk('')}
+              disabled={!!busy || drawing}
+              title={deleteAsk === chosenPath ? 'Click again: this deletes the model from disk and cannot be undone' : 'Delete this model from sd-models to free the disk space'}
+            >
+              {deleteAsk === chosenPath ? 'Sure? Delete' : 'Delete'}
+            </button>
+          )}
           <button onClick={importSet} disabled={!!busy || drawing} title="Pick a diffusion model with its VAE and text encoder; the app moves them into one folder">
             Add files as a set…
           </button>
