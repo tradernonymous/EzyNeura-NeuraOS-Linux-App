@@ -22,3 +22,12 @@ export declare function plan(input: {
 
 export declare const SWITCHABLE: string[];
 export declare const MAX_ATTEMPTS: number;
+
+// C4: the same model's own retry, before any switching.
+export declare const RETRIES: number;
+/** Milliseconds before retry `attempt` (0-based): 1000, 2000, 4000… capped. */
+export declare function backoff(attempt: number): number;
+/** "2s" — what the steps fold prints for a backoff(). */
+export declare function waitLabel(ms: number): string;
+/** True while `attempt` retries of the same model are still allowed. */
+export declare function retryable(failure: { kind?: string } | null | undefined, attempt: number): boolean;

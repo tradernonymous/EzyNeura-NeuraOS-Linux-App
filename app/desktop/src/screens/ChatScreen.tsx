@@ -433,11 +433,20 @@ export default function ChatScreen() {
     const resolve = approvals.current[id];
     if (!resolve) return;
     delete approvals.current[id];
-    if (allow && always) {
-      const event = active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id);
-      if (event) toolsLib.setAlways(event.name);
+    const event = allow && always ? active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id) : undefined;
+    let via = '';
+    if (allow && always && event) {
+      // C11: "always" on a command card means the folder's read-only preset
+      // (commands are never trusted wholesale -- only their read-only list).
+      if (event.name === 'run_command') {
+        approval.allowPreset(openFolder());
+        via = 'project';
+      } else {
+        toolsLib.setAlways(event.name);
+        via = 'always';
+      }
     }
-    resolve(allow && args ? { args } : allow, always && allow ? 'always' : '');
+    resolve(allow && args ? { args } : allow, via);
   };
   const hfRow = hfInference.providerRow(hfToken);
   const choices = [
@@ -1468,7 +1477,7 @@ _${done.notes.join(' · ')}_` : said,
       const streamOnce = streamer(active.provider, active.model);
       const upsertTool = upsertToolIn(sid);
       const root = openFolder();
-      await runTurn({
+      const turnOptions: TurnOptions = {
         messages: turns,
         tools: toolsOn
           // The composer's Search / Code / MCP chips decide which groups are
@@ -1493,9 +1502,70 @@ _${done.notes.join(' · ')}_` : said,
         imagesFor: takeToolImages,
         onText: append,
         onTool: upsertTool,
+        // C11: the folder's read-only preset decides whether a command asks
+        // at all; everything else keeps the gate it has always had.
+        asks: (name, nameArgs) => (name === 'run_command' && approval.presetAllows(root, name, nameArgs)
+          ? ''
+          : toolsLib.needsApproval(name)),
         onNote: (note) => pushToast('info', note),
         signal: controller.signal,
-      });
+      };
+      // C4: a failed step retries with backoff, before anything is switched.
+      // `touched` is the safety wire: a turn that already ran a tool is never
+      // re-sent automatically, because running it again would run the tool
+      // again. The wait itself is a step in the fold, so a pause is never a
+      // silence -- and Stop during the wait is still Stop.
+      let attempt = 0;
+      for (;;) {
+        let touched = false;
+        try {
+          await runTurn({ ...turnOptions, onTool: (event: ToolEvent) => { touched = true; upsertTool(event); } });
+          break;
+        } catch (err) {
+          const aborted = (err as Error).name === 'AbortError';
+          const told = failure.attribute({ ...asked, message: aborted ? '' : (err as Error).message });
+          if (aborted || touched || !fallback.retryable(told, attempt)) throw err;
+          const wait = fallback.backoff(attempt);
+          const label = fallback.waitLabel(wait);
+          attempt += 1;
+          const stepId = `retry-${attempt}-${Date.now().toString(36)}`;
+          const stepArgs = { kind: told.kind, attempt: attempt + 1, of: fallback.RETRIES + 1, wait: label };
+          upsertTool({
+            id: stepId,
+            name: 'retry',
+            args: stepArgs,
+            asks: '',
+            status: 'running',
+            summary: `${told.label} — waiting ${label}, then asking ${asked.model || 'the model'} again`,
+          });
+          // The half an answer the failed attempt left is not the retry's.
+          setSessions((prev) => prev.map((s) => {
+            if (s.id !== sid) return s;
+            const msgs = s.messages.slice();
+            const last = msgs[msgs.length - 1];
+            if (last && last.role === 'assistant' && !last.error) msgs[msgs.length - 1] = { ...last, content: '' };
+            return { ...s, messages: msgs };
+          }));
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, wait);
+            controller.signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+          });
+          if (controller.signal.aborted) {
+            const stopNow = new Error('Aborted');
+            stopNow.name = 'AbortError';
+            throw stopNow;
+          }
+          upsertTool({
+            id: stepId,
+            name: 'retry',
+            args: stepArgs,
+            asks: '',
+            status: 'done',
+            summary: `${told.label} — waited ${label}, asking ${asked.model || 'the model'} again`,
+            result: `Backoff retry ${attempt} of ${fallback.RETRIES}: waited ${label} after “${told.label}” and sent the turn again.`,
+          });
+        }
+      }
       // persist the finished transcript
       setSessions((prev) => { saveSessions(prev); return prev; });
       // A reply that took a while, finished while the window was elsewhere.

@@ -82,7 +82,12 @@ test('the funnel records every answer, and arguments never reach the log', () =>
   assert.match(block, /project: openFolder\(\)/);
   assert.ok(!/args:/.test(block), 'the raw arguments are never recorded');
   assert.match(chat, /finish\(false, 'stopped'\)/, 'stopping a turn is an answer too');
-  assert.match(chat, /resolve\(allow && args \? \{ args \} : allow, always && allow \? 'always' : ''\)/, '"always" is recorded as always');
+  // C4/C11 changed this line: "always" on a command card means the folder's
+  // read-only preset (recorded as "project"), on any other card it is the
+  // old per-tool always.
+  assert.match(chat, /resolve\(allow && args \? \{ args \} : allow, via\)/, 'the recorded word is the decision that happened');
+  assert.match(chat, /via = 'project'/, 'a command card\'s "always" is recorded as for this project');
+  assert.match(chat, /via = 'always'/, '"always" is recorded as always');
 
   const activity = read('desktop', 'src', 'screens', 'ActivityScreen.tsx');
   assert.match(activity, /auditLib\.recent\(undefined, 20\)/, 'Activity shows the log');

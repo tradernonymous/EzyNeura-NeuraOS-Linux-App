@@ -103,6 +103,18 @@
     }
   }
 
+  // C11: approval.js is read off the global for the same reason -- its
+  // read-only preset is a switch this agent's gate consults, and a caller
+  // that never loaded it keeps every command approval-gated.
+  function approvalLib() {
+    try {
+      var scope = typeof globalThis !== 'undefined' ? globalThis : null;
+      return (scope && scope.FreeAI4UApproval) || null;
+    } catch {
+      return null;
+    }
+  }
+
   // NEURA-056. project-scout.js is read off the global for the same reason as
   // project-config.js: these UMD modules are loaded as scripts, and a caller
   // that never loaded it (Parallel, a test) must still get today's behaviour --
@@ -479,6 +491,14 @@
       // the project file, never widened by it (project-config.js), so with no
       // settings -- or a module that never loaded -- the answer is "ask".
       var gated = !pc || !config ? true : pc.needsApproval(config, call.name, args);
+
+      // C11: the person's read-only preset for THIS folder trims one more
+      // question off -- known read-only commands only (approval.js decides
+      // that), and everything else still asks.
+      if (gated && call.name === 'run_command') {
+        var ap = approvalLib();
+        if (ap && ap.presetAllows(session.root, call.name, args)) gated = false;
+      }
 
       var diff = null;
       if (call.name === 'edit_file' && args.old_text != null && args.new_text != null) {

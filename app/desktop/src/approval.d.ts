@@ -56,3 +56,27 @@ export declare function readGroups(storage?: any): GroupId[];
 export declare function saveGroups(ids: string[], storage?: any): GroupId[];
 export declare function toggleGroup(ids: string[], id: string): GroupId[];
 export declare function offered<T>(catalogue: T[], ids: string[]): T[];
+
+// C11: the read-only preset — known read-only commands, allowed once per
+// project; everything else keeps asking.
+export declare const PRESET_KEY: string;
+/** The curated first words (with PAIRS) that no argument can turn into a change. */
+export declare const READONLY: string[];
+export declare const PAIRS: Record<string, string[]>;
+/** Whether this exact command is on the known read-only list. */
+export declare function isReadonlyCommand(command: unknown): boolean;
+/** Whether the preset is on for this folder. */
+export declare function presetOn(folder: string | null | undefined, storage?: any): boolean;
+/** Every folder the switch is on for. */
+export declare function presetProjects(storage?: any): string[];
+/** Turn the preset on for this folder; false only when storage refuses. */
+export declare function allowPreset(folder: string | null | undefined, storage?: any): boolean;
+/** Turn it back off. */
+export declare function revokePreset(folder: string | null | undefined, storage?: any): boolean;
+/** Whether a gate may skip its question for this call. */
+export declare function presetAllows(
+  folder: string | null | undefined,
+  tool: string | null | undefined,
+  args: { command?: unknown } | null | undefined,
+  storage?: any,
+): boolean;

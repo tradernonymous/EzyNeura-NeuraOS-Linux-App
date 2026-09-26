@@ -2,10 +2,13 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import Icon from './Icon';
 import type { ToolEvent } from '../agent-turn';
 import { mcpAppFor } from '../tool-run';
-// UMD: loaded for its side effect, read off globalThis (C8's badge).
+// UMD: loaded for its side effect, read off globalThis (C8's badge, C11's
+// read-only preset).
 import '../tools.js';
+import '../approval.js';
 
 const toolsLib: typeof import('../tools.js') = (globalThis as any).FreeAI4UTools;
+const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
 
 // Only an MCP App result shows a frame, so its code loads the first time one
 // does (NEURA-035: kept out of the first bundle).
@@ -165,6 +168,18 @@ export default function ToolCards({ events, onDecide, expandAll }: Props) {
                     {editing[event.id] ? 'Done editing' : 'Edit'}
                   </button>
                   {canAlways && <button onClick={() => onDecide!(event.id, true, true)}>Always for this server</button>}
+                  {/* C11: a known read-only command may be allowed for this
+                      folder instead of asked about forever. Anything else has
+                      no such button -- the preset is an allowlist. */}
+                  {event.name === 'run_command'
+                    && approvalLib.isReadonlyCommand((event.args || {}).command) && (
+                    <button
+                      onClick={() => onDecide!(event.id, true, true)}
+                      title="Allow this and other known read-only commands in this folder, without asking. Everything else still asks."
+                    >
+                      Allow read-only here
+                    </button>
+                  )}
                   <button onClick={() => onDecide!(event.id, false, false)}>Deny</button>
                   <button
                     className="primary"

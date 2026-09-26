@@ -26,6 +26,50 @@
 
   var MAX_ATTEMPTS = 2;
 
+  // C4: before any switching, the SAME model gets one more chance, after a
+  // pause. A rate limit or an overload is usually measured in seconds, so a
+  // retry that waits beats a retry that does not -- and a retry that SAYS it
+  // is waiting beats both, which is why backoff() and waitLabel() are here
+  // next to plan(): the steps fold shows the wait as a step.
+  var RETRIES = 1;
+  var BASE_BACKOFF = 1000;
+  var MAX_BACKOFF = 8000;
+
+  /**
+   * Milliseconds to wait before retry number `attempt` (0-based): 1s, 2s, 4s…
+   * capped. Deterministic on purpose -- a test can assert it, and a person
+   * reading the step sees the number the code used.
+   */
+  function backoff(attempt) {
+    var n = Number(attempt);
+    if (!isFinite(n) || n < 0) n = 0;
+    return Math.min(MAX_BACKOFF, BASE_BACKOFF * Math.pow(2, Math.floor(n)));
+  }
+
+  /** "2s" -- what the steps fold prints for a backoff(). */
+  function waitLabel(ms) {
+    var n = Number(ms);
+    if (!isFinite(n) || n < 0) n = 0;
+    if (n < 1000) return Math.round(n) + 'ms';
+    var s = n / 1000;
+    return (Math.round(s * 10) / 10) + 's';
+  }
+
+  /**
+   * Whether the SAME model may be tried again after `attempt` retries:
+   * only for the kinds a moment of waiting can fix, and only while the
+   * retry budget lasts. Anything that already ran (a tool round that
+   * happened before the failure) is the caller's to refuse -- re-running a
+   * turn that executed something would execute it twice.
+   */
+  function retryable(failure, attempt) {
+    var kind = text((failure || {}).kind);
+    if (SWITCHABLE.indexOf(kind) < 0) return false;
+    var n = Number(attempt);
+    if (!isFinite(n) || n < 0) n = 0;
+    return Math.floor(n) < RETRIES;
+  }
+
   function text(value) {
     return String(value == null ? '' : value).trim();
   }
@@ -107,6 +151,10 @@
   return {
     SWITCHABLE: SWITCHABLE,
     MAX_ATTEMPTS: MAX_ATTEMPTS,
+    RETRIES: RETRIES,
+    backoff: backoff,
+    waitLabel: waitLabel,
+    retryable: retryable,
     plan: plan,
   };
 });

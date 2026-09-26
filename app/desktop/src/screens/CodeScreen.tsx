@@ -15,6 +15,8 @@ import '../docker-sandbox.js';
 // Loaded before the agent ever runs: the agent reads the folder's rules off the
 // global, and without them it approval-gates every mutation.
 import '../project-config.js';
+// C11: the read-only preset the approval card offers below.
+import '../approval.js';
 // NEURA-056: the agent reads the folder's map off the global for the same
 // reason, and this screen owns the open folder, so it is the one that can
 // answer the Rebuild button in Agents.
@@ -30,6 +32,7 @@ const shellLib: typeof import('../shell.js') = (globalThis as any).FreeAI4UShell
 const agent: typeof import('../coding-agent.js') = (globalThis as any).FreeAI4UCodingAgent;
 const scout: typeof import('../project-scout.js') = (globalThis as any).FreeAI4UProjectScout;
 const projectConfig: typeof import('../project-config.js') = (globalThis as any).FreeAI4UProjectConfig;
+const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
 const dockerSandbox: typeof import('../docker-sandbox.js') = (globalThis as any).FreeAI4UDockerSandbox;
 const chats: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
 
@@ -563,6 +566,19 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
             )}
             <div className="approval-actions">
               <button className="primary" onClick={() => decide(true)}>Approve</button>
+              {/* C11: a known read-only command may be allowed for this
+                  folder once instead of asked about every time. */}
+              {approval.tool === 'run_command'
+                && !!localRoot
+                && approvalLib.isReadonlyCommand(approval.command)
+                && !approvalLib.presetOn(localRoot) && (
+                <button
+                  onClick={() => { approvalLib.allowPreset(localRoot); decide(true); }}
+                  title="Allow this and other known read-only commands in this folder, without asking. Everything else still asks."
+                >
+                  Approve · allow read-only here
+                </button>
+              )}
               <input
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}

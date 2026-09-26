@@ -13,6 +13,8 @@ import '../threads.js';
 import '../chats.js';
 import '../runs.js';
 import '../audit.js';
+// C11: the read-only preset's folder list (with its way off).
+import '../approval.js';
 import { OPEN_CHAT_EVENT } from './ChatScreen';
 
 const runsLib: typeof import('../runs.js') = (globalThis as any).FreeAI4URuns;
@@ -21,6 +23,7 @@ const LAYOUT_KEY = 'freeai4u.runs.layout';
 
 const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4URecipes;
 const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
+const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
 const threadsLib: typeof import('../threads.js') = (globalThis as any).FreeAI4UThreads;
 
 type Props = { onOpen: (view: ViewId) => void };
@@ -58,6 +61,8 @@ function useShellStatus() {
 export default function ActivityScreen({ onOpen }: Props) {
   const [pending, setPending] = useState(() => recipesLib.approvals.pending());
   useEffect(() => recipesLib.approvals.subscribe(setPending), []);
+  // C11: turning a folder's read-only preset off has to redraw the list.
+  const [, setPresetAt] = useState(0);
   const busy = useBusyChats();
   const { model, engine } = useShellStatus();
   const [recipes] = useState(() => recipesLib.list().filter((r) => r.schedule && r.schedule.enabled !== false));
@@ -211,6 +216,33 @@ export default function ActivityScreen({ onOpen }: Props) {
           );
         })()}
         <p className="settings-hint">Decisions and summaries only — never the arguments themselves, which can carry secrets. The log lives where the model's tools do not reach.</p>
+        {/* C11: where the read-only preset is on — because "once per project"
+            implies the person can take it back, in the same place the
+            decisions are already listed. */}
+        {(() => {
+          const folders = approvalLib.presetProjects();
+          if (!folders.length) return null;
+          return (
+            <div className="audit-readonly">
+              <p className="settings-hint">Known read-only commands (ls, git status, docker ps, …) run without asking in:</p>
+              <ul className="activity-list audit-list">
+                {folders.map((folder) => (
+                  <li key={folder} className="audit-row">
+                    <span className="audit-decision is-project">read-only</span>
+                    <span className="audit-summary">{folder}</span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => { approvalLib.revokePreset(folder); setPresetAt((n) => n + 1); }}
+                    >
+                      Turn off
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
       </section>
       </>)}
     </div>

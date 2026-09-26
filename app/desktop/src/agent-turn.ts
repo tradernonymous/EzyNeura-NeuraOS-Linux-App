@@ -55,6 +55,12 @@ export interface TurnOptions {
   stream: (messages: Message[], tools: ToolDef[] | undefined, onFrame: (frame: StreamFrame) => void, signal?: AbortSignal) => Promise<void>;
   execute: (call: ToolCall, args: Record<string, any>) => Promise<string>;
   approve: (event: ToolEvent) => Promise<boolean | { args: Record<string, any> }>;
+  /**
+   * C11: the screen's own gate for whether this call asks at all (the
+   * folder's read-only preset). Returns the reason to ask, or '' to run
+   * without asking. Without it the decision is tools.needsApproval, as always.
+   */
+  asks?: (name: string, args: Record<string, any>) => string;
   onText: (piece: string) => void;
   onTool: (event: ToolEvent) => void;
   onNote?: (note: string) => void;
@@ -143,7 +149,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
         name: call.name,
         args,
         summary: tools.summarise(call.name, args),
-        asks: tools.needsApproval(call.name),
+        asks: options.asks ? options.asks(call.name, args) : tools.needsApproval(call.name),
         status: 'running',
       };
       let result: string;

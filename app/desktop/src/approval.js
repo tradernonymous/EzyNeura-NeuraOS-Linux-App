@@ -287,6 +287,186 @@
     });
   }
 
+  // --- read-only presets (C11) ------------------------------------------------
+  //
+  // "Allow a list of known read-only commands once per project ... and keep
+  // Ask for everything else." Two halves: a curated list where no argument
+  // can turn the command into a change (one test decides that, and a chain,
+  // redirect or dangerous flag anywhere fails it), and a per-folder switch
+  // the person throws once. Reading never needed approval in this app
+  // (tools.js: "Reading never asks"), so this grants no new visibility --
+  // only a way for `git status` to stop being a speed bump in a folder the
+  // person said so about. It can only ever make a turn ask LESS: with the
+  // preset off, every gate below still says "ask".
+
+  /** Chaining and redirection, tested on the RAW line: a newline is a chain. */
+  var CHAINING = /[;&|<>`$()\n\r\\]/;
+
+  /** First words where any flags are still a viewer. */
+  var READONLY = [
+    'ls', 'pwd', 'cat', 'head', 'tail', 'wc', 'stat', 'file', 'which', 'readlink', 'realpath',
+    'du', 'df', 'free', 'uname', 'id', 'whoami', 'uptime', 'ps', 'lscpu', 'lsblk', 'lsmod',
+    'grep', 'rg', 'find', 'fd', 'diff', 'cmp', 'md5sum', 'sha256sum', 'cksum', 'od', 'strings',
+    'nl', 'dirname', 'basename', 'echo', 'printf', 'journalctl', 'nslookup', 'dig', 'date',
+  ];
+
+  /**
+   * First word -> the subcommands/flags that keep it read-only. The second
+   * token must be here or the command asks: `git status` reads, `git commit`
+   * and `npm install` do not, and `node -e` executes.
+   */
+  var PAIRS = {
+    git: ['status', 'log', 'diff', 'show', 'describe', 'blame', 'shortlog', 'rev-parse',
+      'ls-files', 'ls-tree', 'reflog', 'grep', 'version', '--version', 'branch', 'tag', 'remote', 'stash', 'config'],
+    npm: ['ls', 'list', 'view', 'outdated', 'explain', 'why', '-v', '--version'],
+    docker: ['ps', 'images', 'logs', 'version', 'inspect', 'port'],
+    systemctl: ['status', 'is-active', 'is-enabled', 'show', 'cat', 'list-units', 'list-timers', 'list-unit-files'],
+    pip: ['list', 'freeze', 'show', 'check'],
+    node: ['-v', '--version'],
+    python: ['--version', '-V'],
+    python3: ['--version', '-V'],
+    go: ['version'],
+    cargo: ['--version', '-V'],
+    rustc: ['--version', '-V'],
+    java: ['-version'],
+    gcc: ['--version'],
+    'g++': ['--version'],
+    clang: ['--version'],
+    make: ['--version'],
+  };
+
+  /**
+   * git <sub> -> the rule for the tokens AFTER the subcommand, for the verbs
+   * that read harmless until you look at the arguments: `git branch foo`
+   * CREATES a branch, `git remote add` adds one, `git stash` commits the
+   * worktree, `git config a b` writes the config.
+   */
+  var GIT_REST = {
+    branch: function (rest) { return rest.every(isFlag); },
+    tag: function (rest) {
+      var pastList = false;
+      return rest.every(function (t) { if (pastList) return true; if (t === '-l') { pastList = true; return true; } return isFlag(t); });
+    },
+    remote: function (rest) {
+      if (!rest.length) return true;
+      if (rest[0] === '-v') return rest.slice(1).every(isFlag);
+      return rest[0] === 'show';
+    },
+    stash: function (rest) { return (rest[0] === 'list' || rest[0] === 'show') && rest.slice(1).every(isFlag); },
+    config: function (rest) {
+      return rest.length && ['--get', '--get-all', '--get-regexp', '--list', '-l'].indexOf(rest[0]) >= 0;
+    },
+  };
+
+  /**
+   * Tokens that write, execute or follow, wherever they appear: `find
+   * -delete`, `find -exec rm`, `tail -f`, `git log --output=x`, `git branch
+   * -d`. `-d`/`-D` are here for git's sake (`git branch -d` deletes); `ls -d`
+   * asking again is the price, and asking again is the safe side.
+   */
+  var NEVER = {
+    '-f': 1, '-rf': 1, '--follow': 1, '--force': 1, '--output': 1,
+    '-d': 1, '-D': 1, '--delete': 1,
+    '-exec': 1, '--exec': 1, '-execdir': 1, '-ok': 1, '-okdir': 1, '-delete': 1,
+    '-fls': 1, '-fprint': 1, '-fprint0': 1, '-fprintf': 1, '-fputs': 1,
+  };
+
+  /** First word -> extra rule for its arguments. */
+  var FIRST_RULES = {
+    // `date -s` SETS the clock.
+    date: function (rest) { return rest.indexOf('-s') < 0 && rest.indexOf('--set') < 0; },
+  };
+
+  function has(map, key) {
+    return Object.prototype.hasOwnProperty.call(map, String(key == null ? '' : key));
+  }
+
+  function isFlag(t) {
+    return String(t == null ? '' : t).charAt(0) === '-';
+  }
+
+  /**
+   * isReadonlyCommand(command) -> whether this exact command is on the known
+   * read-only list. Anything the rules do not understand asks -- the preset
+   * is an allowlist, never a heuristic.
+   */
+  function isReadonlyCommand(command) {
+    var raw = String(command == null ? '' : command);
+    if (!raw.trim() || CHAINING.test(raw)) return false;
+    var tokens = raw.replace(/\s+/g, ' ').trim().split(' ');
+    for (var i = 0; i < tokens.length; i += 1) {
+      // `--output=x` is the same flag as `--output`: the value side never
+      // makes a forbidden flag safe.
+      if (has(NEVER, tokens[i]) || has(NEVER, tokens[i].split('=')[0])) return false;
+    }
+    var head = tokens[0];
+    var rest = tokens.slice(1);
+    if (has(PAIRS, head)) {
+      var sub = rest.length ? rest[0] : '';
+      if (!sub || PAIRS[head].indexOf(sub) < 0) return false;
+      var tail = rest.slice(1);
+      if (head === 'git' && has(GIT_REST, sub)) return GIT_REST[sub](tail);
+      return true;
+    }
+    if (READONLY.indexOf(head) >= 0) {
+      return has(FIRST_RULES, head) ? FIRST_RULES[head](rest) : true;
+    }
+    return false;
+  }
+
+  /** The folders the person switched the preset on for. */
+  var PRESET_KEY = 'freeai4u.readonly_projects';
+  var MAX_PROJECTS = 100;
+
+  function presetList(store) {
+    var rows = readJson(store, PRESET_KEY);
+    if (!Array.isArray(rows)) return [];
+    return rows.filter(function (r) { return typeof r === 'string' && r; });
+  }
+
+  /** The folders the switch is on for (Activity shows them, with a way off). */
+  function presetProjects(store) {
+    return presetList(store).slice();
+  }
+
+  function folderKey(folder) {
+    return String(folder == null ? '' : folder).trim();
+  }
+
+  /** Whether the preset is on for this folder. No folder is never on. */
+  function presetOn(folder, store) {
+    var key = folderKey(folder);
+    return !!key && presetList(store).indexOf(key) >= 0;
+  }
+
+  /** Throw the switch for this folder; false only when storage refuses. */
+  function allowPreset(folder, store) {
+    var key = folderKey(folder);
+    if (!key) return false;
+    var rows = presetList(store);
+    if (rows.indexOf(key) >= 0) return true;
+    rows.push(key);
+    if (rows.length > MAX_PROJECTS) rows = rows.slice(rows.length - MAX_PROJECTS);
+    return writeJson(store, PRESET_KEY, rows);
+  }
+
+  function revokePreset(folder, store) {
+    var key = folderKey(folder);
+    var rows = presetList(store).filter(function (r) { return r !== key; });
+    return writeJson(store, PRESET_KEY, rows);
+  }
+
+  /**
+   * presetAllows(folder, tool, args) -> whether the gate may skip its question:
+   * the folder's switch is on, the tool is a command, and the command is on
+   * the read-only list. Everything else keeps asking.
+   */
+  function presetAllows(folder, tool, args, store) {
+    if (String(tool == null ? '' : tool) !== 'run_command') return false;
+    if (!presetOn(folder, store)) return false;
+    return isReadonlyCommand(args && args.command);
+  }
+
   return {
     KEY: KEY,
     GROUPS_KEY: GROUPS_KEY,
@@ -307,5 +487,15 @@
     saveGroups: saveGroups,
     toggleGroup: toggleGroup,
     offered: offered,
+    // C11: the read-only preset.
+    PRESET_KEY: PRESET_KEY,
+    READONLY: READONLY,
+    PAIRS: PAIRS,
+    isReadonlyCommand: isReadonlyCommand,
+    presetOn: presetOn,
+    presetProjects: presetProjects,
+    allowPreset: allowPreset,
+    revokePreset: revokePreset,
+    presetAllows: presetAllows,
   };
 });

@@ -4383,9 +4383,12 @@ button.linkish {
 .audit-list { display: flex; flex-direction: column; gap: 4px; }
 .audit-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
 .audit-decision { flex: none; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; background: var(--bg-3, #1c1c28); color: var(--text-3, #80849a); }
-.audit-decision.is-allowed, .audit-decision.is-always { background: rgba(74, 222, 128, 0.16); color: var(--ok, #34d399); }
+.audit-decision.is-allowed, .audit-decision.is-always, .audit-decision.is-project { background: rgba(74, 222, 128, 0.16); color: var(--ok, #34d399); }
 .audit-decision.is-denied, .audit-decision.is-stopped { background: rgba(242, 109, 109, 0.16); color: var(--err, #f26d6d); }
 .audit-decision.is-edited { background: var(--accent-dim, #26263a); color: var(--accent, #7aa2ff); }
+/* C11: the folders where the read-only preset is on. */
+.audit-readonly { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border, #26263a); }
+.audit-readonly .audit-row { gap: 8px; }
 .audit-summary { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-family: var(--font-mono, monospace); font-size: 12px; }
 .audit-when { flex: none; color: var(--text-3, #80849a); font-size: 11px; }
 

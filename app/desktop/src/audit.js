@@ -93,6 +93,7 @@
     denied: 'denied',
     edited: 'allowed, edited',
     always: 'always allowed',
+    project: 'allowed for this project',
     stopped: 'stopped',
   };
 
