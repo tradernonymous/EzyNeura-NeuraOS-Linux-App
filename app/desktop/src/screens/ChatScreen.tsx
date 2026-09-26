@@ -13,10 +13,12 @@ import StepsFold from '../components/StepsFold';
 import ChatOutput from '../components/ChatOutput';
 import '../turn.js';
 import '../built-in-skills.js';
+import '../audit.js';
 import MintPackCard from '../components/MintPackCard';
 
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 const builtIn: typeof import('../built-in-skills.js') = (globalThis as any).FreeAI4UBuiltInSkills;
+const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -426,7 +428,7 @@ export default function ChatScreen() {
   // An Allow / Deny card is a promise the turn is waiting on. C6: the
   // answer may be "allow, with these arguments" — edited on the card.
   type Approval = boolean | { args: Record<string, any> };
-  const approvals = useRef<Record<string, (decision: Approval) => void>>({});
+  const approvals = useRef<Record<string, (decision: Approval, via?: string) => void>>({});
   const decide = (id: string, allow: boolean, always: boolean, args?: Record<string, any>) => {
     const resolve = approvals.current[id];
     if (!resolve) return;
@@ -435,7 +437,7 @@ export default function ChatScreen() {
       const event = active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id);
       if (event) toolsLib.setAlways(event.name);
     }
-    resolve(allow && args ? { args } : allow);
+    resolve(allow && args ? { args } : allow, always && allow ? 'always' : '');
   };
   const hfRow = hfInference.providerRow(hfToken);
   const choices = [
@@ -744,13 +746,31 @@ export default function ChatScreen() {
   };
 
   // Stopping the turn is a Deny for whatever was waiting.
+  // An Allow / Deny card is a promise the turn is waiting on. C12: every
+  // answer — clicked, edited, "always", or stopped by the abort — is one
+  // append to the audit log before the turn carries on. The log lives in
+  // localStorage, which no tool of the model's can read or rewrite, and it
+  // records the decision and the card's summary, never the raw arguments.
   const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean | { args: Record<string, any> }>((resolve) => {
-    approvals.current[event.id] = resolve;
+    const finish = (decision: boolean | { args: Record<string, any> }, via = '') => {
+      try {
+        auditLib.record({
+          tool: event.name,
+          summary: event.summary || event.name,
+          decision: typeof decision === 'object' ? 'edited' : decision ? (via || 'allowed') : (via || 'denied'),
+          project: openFolder(),
+        });
+      } catch {
+        /* an audit line that cannot be written must never eat the approval */
+      }
+      resolve(decision);
+    };
+    approvals.current[event.id] = finish;
     // Approve / Reject on the notification itself (Linux), so the answer
     // never needs the window in front; the plain notification elsewhere.
     notifyWithActions(event.id, 'NeuraOS needs your OK', event.summary || event.name, [['approve', 'Approve'], ['reject', 'Reject']])
       .then((r) => { if (!r.shown) notifyUser('NeuraOS needs your OK', event.summary || event.name); });
-    signal.addEventListener('abort', () => { delete approvals.current[event.id]; resolve(false); }, { once: true });
+    signal.addEventListener('abort', () => { delete approvals.current[event.id]; finish(false, 'stopped'); }, { once: true });
   });
 
   // ---- agents (roadmap 6.7) ---------------------------------------------------

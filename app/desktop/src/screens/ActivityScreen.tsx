@@ -12,6 +12,7 @@ import '../recipes.js';
 import '../threads.js';
 import '../chats.js';
 import '../runs.js';
+import '../audit.js';
 import { OPEN_CHAT_EVENT } from './ChatScreen';
 
 const runsLib: typeof import('../runs.js') = (globalThis as any).FreeAI4URuns;
@@ -19,6 +20,7 @@ const chatsLib: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats
 const LAYOUT_KEY = 'freeai4u.runs.layout';
 
 const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4URecipes;
+const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
 const threadsLib: typeof import('../threads.js') = (globalThis as any).FreeAI4UThreads;
 
 type Props = { onOpen: (view: ViewId) => void };
@@ -182,6 +184,33 @@ export default function ActivityScreen({ onOpen }: Props) {
           </ul>
         )}
         <button type="button" className="link-button" onClick={() => onOpen('recipes')}>All recipes</button>
+      </section>
+
+      {/* C12: the approval audit — in the app's own store, where the
+          model's file and shell tools do not reach. Decisions and the
+          card's summary only: never the raw arguments, which can hold a
+          secret. */}
+      <section className="activity-section">
+        <h2><Icon name="shield" size={14} /> Approvals</h2>
+        {(() => {
+          const rows = auditLib.recent(undefined, 20);
+          if (!rows.length) {
+            return <p className="settings-hint">Nothing has asked yet. Every Allow, Deny, edit and “always” is recorded here as it happens.</p>;
+          }
+          return (
+            <ul className="activity-list audit-list">
+              {rows.map((e, i) => (
+                <li key={`${e.at}-${i}`} className="audit-row">
+                  <span className={`audit-decision is-${e.decision}`}>{auditLib.wordFor(e.decision)}</span>
+                  <strong>{e.tool}</strong>
+                  <span className="audit-summary">{e.summary}</span>
+                  <span className="audit-when">{new Date(e.at).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
+        <p className="settings-hint">Decisions and summaries only — never the arguments themselves, which can carry secrets. The log lives where the model's tools do not reach.</p>
       </section>
       </>)}
     </div>
