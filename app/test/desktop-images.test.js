@@ -129,3 +129,20 @@ test('a local failure says what sd-server said, never "[object Object]"', () => 
   assert.equal(images.errorText({ code: 7 }), '{"code":7}');
   assert.doesNotMatch(images.errorText({ error: { detail: 'x' } }), /object Object/);
 });
+
+test('a local edit keeps the photo\'s shape at about one megapixel (the 4 GB card)', () => {
+  // The PC's photo: 3072x4096 became a 2048x2048 square that needed 4.2 GB.
+  assert.deepEqual(images.localEditSize(3072, 4096), { width: 832, height: 1152 });
+  const s = images.localEditSize(3072, 4096);
+  assert.ok(s.width * s.height <= 1024 * 1024, 'within one megapixel');
+  assert.ok(Math.abs(s.width / s.height - 3072 / 4096) < 0.05, 'same aspect ratio, not a square');
+  assert.deepEqual(images.localEditSize(4000, 2000), { width: 1408, height: 704 });
+  assert.deepEqual(images.localEditSize(512, 768), { width: 512, height: 768 }, 'never upscaled');
+  assert.equal(images.localEditSize(0, 100), null);
+  const plan = images.editRequest(images.localRow({ found: true, model: 'flux-2-klein-4b', running: true }), {
+    prompt: 'make the sky orange', source: 'data:image/png;base64,AAAA', sourceWidth: 3072, sourceHeight: 4096,
+  });
+  assert.equal(plan.route, 'local');
+  assert.equal(plan.body.width, 832);
+  assert.equal(plan.body.height, 1152);
+});

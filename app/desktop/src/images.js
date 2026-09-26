@@ -177,6 +177,26 @@
   }
 
   /** A side sd.cpp accepts: a multiple of 64, never bigger than LOCAL_MAX_PX. */
+  // What a local edit draws at: about one megapixel, the size FLUX.2 [klein]
+  // and SD are trained around. A phone photo (3072x4096) as-is asked a 4 GB
+  // card for 2048x2048 and ran out of GPU memory on the first block.
+  var LOCAL_EDIT_PIXELS = 1024 * 1024;
+
+  /**
+   * The output shape for changing a w x h picture on this PC: the same aspect
+   * ratio, scaled down (never up) to about LOCAL_EDIT_PIXELS, each side a
+   * multiple of LOCAL_STEP_PX. Clamping each side on its own is how a portrait
+   * became a square.
+   */
+  function localEditSize(w, h) {
+    var width = Number(w);
+    var height = Number(h);
+    if (!(width > 0) || !(height > 0)) return null;
+    var scale = Math.min(1, Math.sqrt(LOCAL_EDIT_PIXELS / (width * height)));
+    var fit = function (px) { return Math.max(LOCAL_STEP_PX, Math.floor((px * scale) / LOCAL_STEP_PX) * LOCAL_STEP_PX); };
+    return { width: Math.min(fit(width), LOCAL_MAX_PX), height: Math.min(fit(height), LOCAL_MAX_PX) };
+  }
+
   function localSide(px) {
     var value = Math.round(Number(px) / LOCAL_STEP_PX) * LOCAL_STEP_PX;
     if (!isFinite(value) || value < LOCAL_STEP_PX) value = LOCAL_STEP_PX;
@@ -476,8 +496,10 @@
       // init image and a strength (examples/server/api.md). The shape follows
       // the source rather than the preset, because resizing a picture the user
       // asked to CHANGE is a change nobody asked for.
-      var width = localSide(Number(req.sourceWidth) > 0 ? req.sourceWidth : preset(req.size).width);
-      var height = localSide(Number(req.sourceHeight) > 0 ? req.sourceHeight : preset(req.size).height);
+      var shape = localEditSize(req.sourceWidth, req.sourceHeight)
+        || localEditSize(preset(req.size).width, preset(req.size).height);
+      var width = shape.width;
+      var height = shape.height;
       var localBody = {
         prompt: prompt,
         negativePrompt: String(req.negativePrompt || '').trim(),
@@ -571,6 +593,7 @@
     BROWSER_ID: BROWSER_ID,
     LOCAL_ID: LOCAL_ID,
     errorText: errorText,
+    localEditSize: localEditSize,
     localSteps: localSteps,
     LOCAL_STEP_PX: LOCAL_STEP_PX,
     LOCAL_MAX_PX: LOCAL_MAX_PX,
