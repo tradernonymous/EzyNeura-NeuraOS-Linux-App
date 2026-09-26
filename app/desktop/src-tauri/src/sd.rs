@@ -520,6 +520,73 @@ pub fn sd_pick_binary(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+/// Whether `target` may be deleted: a model file or a set folder directly
+/// inside `root` (the app's own sd-models), never anything outside it or
+/// the folder itself. Canonical paths, so `..` and links cannot reach out.
+pub fn deletable_in(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    let root = root.canonicalize().map_err(|e| format!("no models folder: {}", e))?;
+    let target = target
+        .canonicalize()
+        .map_err(|_| format!("{} is not there any more", target.display()))?;
+    if target.parent() != Some(root.as_path()) {
+        return Err("Only a model in this app's own sd-models folder is deleted from here; remove other files yourself.".to_string());
+    }
+    if target.is_dir() {
+        if set_in(&target).is_none() {
+            return Err(format!("{} is not a model set", target.display()));
+        }
+    } else {
+        let name = target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if !is_model_name(&name) {
+            return Err(format!("{} is not a model file", name));
+        }
+    }
+    Ok(target)
+}
+
+/// Delete one image model (a file, or a set's whole folder) from sd-models.
+/// Stops the server first when it has that model loaded, and forgets the
+/// choice when it was the chosen one.
+#[tauri::command(async)]
+pub fn sd_delete_model(app: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
+    let root = models_dir(&app)?;
+    let target = deletable_in(&root, Path::new(&path))?;
+    let loaded = {
+        let guard = match slot().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        guard
+            .as_ref()
+            .map(|run| Path::new(&run.model).canonicalize().ok() == Some(target.clone()))
+            .unwrap_or(false)
+    };
+    if loaded {
+        shutdown();
+    }
+    let freed: u64 = if target.is_dir() {
+        std::fs::read_dir(&target)
+            .map(|d| d.flatten().filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum())
+            .unwrap_or(0)
+    } else {
+        std::fs::metadata(&target).map(|m| m.len()).unwrap_or(0)
+    };
+    if target.is_dir() {
+        std::fs::remove_dir_all(&target)
+    } else {
+        std::fs::remove_file(&target)
+    }
+    .map_err(|e| format!("could not delete {}: {}", target.display(), e))?;
+    if let Ok(file) = model_file(&app) {
+        let chosen = std::fs::read_to_string(&file).unwrap_or_default();
+        let chosen = Path::new(chosen.trim());
+        if chosen.canonicalize().is_err() || chosen == target {
+            let _ = std::fs::write(&file, "");
+        }
+    }
+    Ok(serde_json::json!({ "path": target.display().to_string(), "bytes": freed, "stopped": loaded }))
+}
+
 /// Remember the weights the user pointed at.
 #[tauri::command(async)]
 pub fn sd_use_model(app: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
@@ -704,6 +771,10 @@ pub fn args_for(model: &Path, port: u16, threads: Option<u32>) -> Vec<String> {
         "127.0.0.1".to_string(),
         "--listen-port".to_string(),
         port.to_string(),
+        // Encode and decode the picture in tiles: on the PC's 4 GB card an
+        // SDXL edit at 832x1152 asked for 4.1 GB in one VAE pass and failed
+        // ("failed to encode init image"). Sets already had it.
+        "--vae-tiling".to_string(),
     ];
     if let Some(threads) = threads {
         args.push("-t".to_string());
@@ -1444,6 +1515,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_a_model_inside_sd_models_can_be_deleted() {
+        let root = std::env::temp_dir().join(format!("neuraos-sd-del-{}", std::process::id()));
+        let models = root.join("sd-models");
+        let set = models.join("flux-2-klein-4b");
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::write(set.join("flux-2-klein-4b.safetensors"), vec![0u8; 8]).unwrap();
+        std::fs::write(set.join("flux2-vae.safetensors"), vec![0u8; 2]).unwrap();
+        std::fs::write(models.join("FlammenSDXL1-q4_1.gguf"), vec![0u8; 4]).unwrap();
+        std::fs::write(models.join("notes.txt"), b"x").unwrap();
+        std::fs::write(root.join("outside.gguf"), b"x").unwrap();
+
+        assert!(deletable_in(&models, &models.join("FlammenSDXL1-q4_1.gguf")).is_ok());
+        assert!(deletable_in(&models, &set).is_ok(), "a set folder is one model");
+        assert!(deletable_in(&models, &set.join("flux2-vae.safetensors")).is_err(), "not a part of a set on its own");
+        assert!(deletable_in(&models, &models.join("notes.txt")).is_err(), "not a model file");
+        assert!(deletable_in(&models, &root.join("outside.gguf")).is_err(), "outside sd-models");
+        assert!(deletable_in(&models, &models.join("..").join("outside.gguf")).is_err(), "no climbing out");
+        assert!(deletable_in(&models, &models).is_err(), "never the folder itself");
+        assert!(deletable_in(&models, &models.join("gone.gguf")).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_failed_start_leads_with_the_error_not_the_vulkan_banner() {
         // The PC's log for a ComfyUI-style SDXL GGUF.
         let tail = "ggml_vulkan: Found 1 Vulkan devices:\nggml_vulkan: 0 = NVIDIA GeForce GTX 1050 Ti (NVIDIA) | uma: 0\n[INFO   ] model_loader.cpp:215  - load x.gguf using gguf format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: 'x.gguf'\n[ERROR  ] main.cpp:93   - new_sd_ctx_t failed";
@@ -1623,7 +1717,7 @@ mod tests {
         let args = args_for(Path::new("m.safetensors"), 1234, None);
         assert_eq!(
             args,
-            vec!["-m", "m.safetensors", "--listen-ip", "127.0.0.1", "--listen-port", "1234"]
+            vec!["-m", "m.safetensors", "--listen-ip", "127.0.0.1", "--listen-port", "1234", "--vae-tiling"]
         );
         assert!(!args.iter().any(|a| a == "-t"));
         let threaded = args_for(Path::new("m.safetensors"), 1234, Some(4));

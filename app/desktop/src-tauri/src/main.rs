@@ -414,6 +414,7 @@ fn main() {
             sd::sd_find,
             sd::sd_pick_binary,
             sd::sd_use_model,
+            sd::sd_delete_model,
             sd::sd_pick_model,
             sd::sd_import_set,
             sd::sd_start,
