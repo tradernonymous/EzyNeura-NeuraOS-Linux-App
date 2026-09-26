@@ -72,7 +72,7 @@ const QWEN_SUGGESTIONS = [
   {
     label: 'Qwen-Image',
     repo: 'Comfy-Org/Qwen-Image_ComfyUI',
-    note: '20B model + VAE + 7B encoder: about 30 GB as fp8, 26 GB for the lightest set — each row says what it costs on this PC',
+    note: '20B model + VAE + 7B encoder: about 30 GB as fp8 — each row says what it costs on this PC',
   },
 ];
 
