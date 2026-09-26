@@ -53,7 +53,7 @@ test('the card can be edited before Allow, and what ran is what was typed', () =
 
   const chat = read('desktop', 'src', 'screens', 'ChatScreen.tsx');
   assert.match(chat, /args\?: Record<string, any>/, 'decide takes edited arguments');
-  assert.match(chat, /resolve\(allow && args \? \{ args \} : allow\)/, 'allow-with-args and deny both reach the turn');
+  assert.match(chat, /resolve\(allow && args \? \{ args \} : allow,/, 'allow-with-args and deny both reach the turn');
   assert.match(chat, /new Promise<boolean \| \{ args: Record<string, any> \}>/);
 
   const fold = read('desktop', 'src', 'components', 'StepsFold.tsx');
