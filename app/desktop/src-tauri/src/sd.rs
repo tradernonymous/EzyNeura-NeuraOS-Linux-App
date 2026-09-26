@@ -273,7 +273,7 @@ pub fn set_roles(files: &[(PathBuf, u64)]) -> Option<SetParts> {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        if !is_model_name(&name) {
+        if !is_model_name(&name) || is_fp4(&name) {
             continue;
         }
         match role_of(&name) {
@@ -331,6 +331,15 @@ pub fn set_in(dir: &Path) -> Option<SetParts> {
         .map(|e| (e.path(), e.metadata().map(|m| m.len()).unwrap_or(0)))
         .collect();
     set_roles(&files)
+}
+
+/// FP4 weights (NVFP4, `fp4_flux2`) carry per-block scales stable-diffusion.cpp
+/// does not read: loading one aborts sd-server (`GGML_ASSERT(scale_nelements
+/// == 1 || scale_nelements == out_features)`). A set never uses one, so a folder
+/// that also holds the bf16 or fp8 file of the same part picks that instead.
+fn is_fp4(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("nvfp4") || lower.contains("mxfp4") || lower.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| w == "fp4")
 }
 
 /// Is this a file name sd.cpp would load as a model?
@@ -1411,6 +1420,28 @@ pub async fn sd_cancel(id: String) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_set_never_takes_an_fp4_part() {
+        // The PC's folder: both encoders from Comfy-Org/flux2-klein-4B.
+        let files = vec![
+            (PathBuf::from("k/flux-2-klein-4b.safetensors"), 7_751_105_712),
+            (PathBuf::from("k/qwen_3_4b_fp4_flux2.safetensors"), 3_848_213_998),
+            (PathBuf::from("k/qwen_3_4b.safetensors"), 8_044_982_048),
+            (PathBuf::from("k/flux2-vae.safetensors"), 336_211_292),
+        ];
+        let parts = set_roles(&files).expect("a set");
+        assert_eq!(parts.llm, Some(PathBuf::from("k/qwen_3_4b.safetensors")), "the bf16 encoder, whatever the listing order");
+        assert_eq!(parts.diffusion, PathBuf::from("k/flux-2-klein-4b.safetensors"));
+        // An NVFP4 diffusion model is not a model this server can load.
+        let nvfp4 = vec![
+            (PathBuf::from("q/qwen_image_nvfp4.safetensors"), 19_769_000_000),
+            (PathBuf::from("q/qwen_2.5_vl_7b_nvfp4.safetensors"), 6_114_000_000),
+            (PathBuf::from("q/qwen_image_vae.safetensors"), 253_000_000),
+        ];
+        assert!(set_roles(&nvfp4).is_none());
+        assert!(is_fp4("x_fp4.safetensors") && is_fp4("x-NVFP4.gguf") && !is_fp4("qwen_2.5_vl_7b_fp8_scaled.safetensors"));
+    }
 
     #[test]
     fn a_chosen_set_folder_is_remembered_as_the_model() {

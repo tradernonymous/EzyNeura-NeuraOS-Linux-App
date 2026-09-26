@@ -97,7 +97,7 @@ test('Qwen-Image lands as one set with exactly one encoder per row (E5)', () => 
     ],
   };
   const offer = hfModels.imageOffer(repo);
-  assert.equal(offer.rows.length, 4, 'one row per diffusion model');
+  assert.equal(offer.rows.length, 3, 'one row per diffusion model sd-server can load');
   const byName = {};
   offer.rows.forEach((r) => { byName[r.label] = r; });
   const encoderOf = (label) => byName[label].files.find((f) => f.name.includes('qwen_2.5_vl')).name;
@@ -110,10 +110,12 @@ test('Qwen-Image lands as one set with exactly one encoder per row (E5)', () => 
   assert.equal(encoderOf('qwen_image_fp8_e4m3fn.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors');
   assert.equal(encoderOf('qwen_image_2512_fp8_e4m3fn.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors');
   assert.equal(encoderOf('qwen_image_bf16.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b.safetensors');
-  assert.equal(encoderOf('qwen_image_nvfp4.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_nvfp4.safetensors');
-  // Smallest first: the ~26 GB fp8-free set is the one offered first.
-  assert.ok(offer.rows[0].size < 30_000_000_000, 'the smallest row is offered first');
+  // FP4 has per-block scales stable-diffusion.cpp aborts on: never offered.
+  assert.equal(byName['qwen_image_nvfp4.safetensors'], undefined);
+  assert.ok(offer.rows.every((r) => r.files.every((f) => !/fp4/i.test(f.name))), 'no FP4 part in any set');
+  // Smallest first: an fp8 set (~30 GB) before the bf16 one.
+  assert.ok(offer.rows[0].size < 31_000_000_000 && offer.rows[2].size > 50_000_000_000, 'the smallest row is offered first');
   const source = card();
   assert.match(source, /repo: 'Comfy-Org\/Qwen-Image_ComfyUI'/);
-  assert.match(source, /about 30 GB as fp8, 26 GB for the lightest set/, 'the size is said before the download');
+  assert.match(source, /about 30 GB as fp8/, 'the size is said before the download');
 });

@@ -314,7 +314,10 @@
   function imageOffer(card) {
     var repo = String((card && card.id) || 'This repo');
     var all = repoFiles(card);
-    var usable = all.filter(function (f) { return !kindRefusal('image', f.name); });
+    // FP4 (NVFP4, "fp4_flux2") weights carry per-block scales that
+    // stable-diffusion.cpp does not read: sd-server aborts on load
+    // (GGML_ASSERT scale_nelements), so they are not offered at all.
+    var usable = all.filter(function (f) { return !kindRefusal('image', f.name) && quantFamily(f.name) !== 'FP4'; });
     var pickles = all.filter(function (f) { return /\.ckpt$/i.test(f.name); });
     var diffusers = all.some(function (f) { return f.name === 'model_index.json'; });
     var rows = [];
