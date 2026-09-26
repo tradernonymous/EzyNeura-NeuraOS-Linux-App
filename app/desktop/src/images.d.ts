@@ -61,6 +61,8 @@ export declare const SIZE_PRESETS: ImageSizePreset[];
 export declare const BROWSER_ID: string;
 export declare const LOCAL_ID: string;
 /** The steps a request carries: the caller's number, or null so the shell picks the model's own. */
+/** The words in an error of any shape (string, Error, `{ message }`), never "[object Object]". */
+export declare function errorText(value: unknown): string;
 export declare function localSteps(value: unknown): number | null;
 export declare const LOCAL_STEP_PX: number;
 export declare const LOCAL_MAX_PX: number;

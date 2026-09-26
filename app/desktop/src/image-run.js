@@ -253,7 +253,7 @@
   function failureView(kind, route, choice, error) {
     var images = imagesLib();
     var e = error || {};
-    var message = images.describePuterError(e) || (e && e.message) || String(e);
+    var message = images.describePuterError(e) || images.errorText(e);
     var what = kind === 'edit' ? 'change that picture' : 'draw that';
     if (route === 'local') {
       return { summary: 'This PC could not ' + what, upstream: message, walk: '', advice: images.localAdvice(message), message: message };

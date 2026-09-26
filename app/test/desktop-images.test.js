@@ -119,3 +119,13 @@ test('Qwen-Image lands as one set with exactly one encoder per row (E5)', () => 
   assert.match(source, /repo: 'Comfy-Org\/Qwen-Image_ComfyUI'/);
   assert.match(source, /about 30 GB as fp8/, 'the size is said before the download');
 });
+
+test('a local failure says what sd-server said, never "[object Object]"', () => {
+  const view = images.localJobView({ status: 'failed', error: { message: 'failed to decode init image', code: 'bad_request' } });
+  assert.equal(view.error, 'failed to decode init image');
+  assert.equal(images.localJobView({ status: 'failed', error: 'out of memory' }).error, 'out of memory');
+  assert.equal(images.localJobView({ status: 'failed' }).error, 'The local server could not draw that.');
+  assert.equal(images.errorText(new Error('boom')), 'boom');
+  assert.equal(images.errorText({ code: 7 }), '{"code":7}');
+  assert.doesNotMatch(images.errorText({ error: { detail: 'x' } }), /object Object/);
+});

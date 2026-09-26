@@ -213,6 +213,22 @@
    * an image. "completed" with an empty result is an error, not a picture:
    * the screen must never show a frame it did not get bytes for.
    */
+  /**
+   * The words in an error, whatever shape it came in: sd-server's job API can
+   * answer `error: { message, code }` rather than a string, and String() of
+   * that is "[object Object]" -- which says nothing to the person reading it.
+   */
+  function errorText(value) {
+    if (value == null || value === '') return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+      var inner = value.message || value.error || value.detail || value.reason;
+      if (inner && inner !== value) return errorText(inner);
+      try { return JSON.stringify(value); } catch { return 'unknown error'; }
+    }
+    return String(value);
+  }
+
   function localJobView(job) {
     var body = job || {};
     var status = String(body.status || '').toLowerCase();
@@ -238,7 +254,7 @@
         done: true,
         url: '',
         label: 'Failed',
-        error: String(body.error || body.detail || 'The local server could not draw that.'),
+        error: errorText(body.error) || errorText(body.detail) || 'The local server could not draw that.',
       };
     }
     if (status === 'cancelled') {
@@ -554,6 +570,7 @@
     SIZE_PRESETS: SIZE_PRESETS,
     BROWSER_ID: BROWSER_ID,
     LOCAL_ID: LOCAL_ID,
+    errorText: errorText,
     localSteps: localSteps,
     LOCAL_STEP_PX: LOCAL_STEP_PX,
     LOCAL_MAX_PX: LOCAL_MAX_PX,
