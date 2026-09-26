@@ -94,6 +94,8 @@ export declare function pickDefaultFile<T extends { name: string; size: number }
 export declare function downloadLabel(progress: any): string;
 export declare const STATES: LocalModelState[];
 export declare function machine(): MachineFacts;
+/** Keep the RAM the shell measured (GB); machine() uses it on every later call. */
+export declare function rememberMachine(ramGb: unknown): void;
 export declare function fit(entry: Partial<LocalModelEntry>, machineInfo?: MachineFacts): FitReport;
 export declare function contextFor(entry: Partial<LocalModelEntry>): number;
 export declare function quantFor(entry: Partial<LocalModelEntry>): string;

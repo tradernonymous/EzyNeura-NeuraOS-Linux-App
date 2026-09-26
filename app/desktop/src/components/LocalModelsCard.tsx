@@ -125,7 +125,14 @@ export default function LocalModelsCard() {
   const [runtime, setRuntime] = useState<RuntimeFacts | null>(null);
   useEffect(() => {
     if (!hasShell()) return;
-    runtimeFacts().then(setRuntime).catch(() => setRuntime(null));
+    runtimeFacts()
+      .then((next) => {
+        // The shell's /proc/meminfo figure, so the memory check stops
+        // assuming the webview's "4 GB".
+        if (next?.gpu?.ram_gb) localModels.rememberMachine(next.gpu.ram_gb);
+        setRuntime(next);
+      })
+      .catch(() => setRuntime(null));
   }, [server?.found]);
 
   // The models folder and its files.
@@ -183,6 +190,14 @@ export default function LocalModelsCard() {
     setHubError('');
     hfModels.getModel(ref.repo, { authHeaders: hfAuth.authHeaders() })
       .then((card: any) => {
+        // An image model's GGUF (SDXL, FLUX) is not something llama-server
+        // can run: say where it goes instead of offering a download that
+        // will never start.
+        if (hfModels.isImageModel(card)) {
+          setHubError(`${ref.repo} is an image model, and this list runs chat models. Add it in Create → Image → On this PC: paste the same link in "Add from Hugging Face" there.`);
+          setHub(null);
+          return;
+        }
         // A split set is one row: part 1's name, every part's size summed.
         const files: HubFile[] = localModels.groupHubFiles(hfModels.ggufFiles(card).map((f: any) => ({
           name: f.name as string,

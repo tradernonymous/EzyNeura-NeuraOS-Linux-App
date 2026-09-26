@@ -420,13 +420,43 @@
 
   /** What the machine can hold. `deviceMemory` is in GB, rounded down by the
    *  browser and capped at 8, so this is a floor and the guard is generous. */
+  // The RAM the shell measured (/proc/meminfo), remembered across screens.
+  // navigator.deviceMemory does not exist in WebKitGTK and is capped at 8 in
+  // Chromium, so on Linux every machine read as "4 GB" and any model needing
+  // more was refused before it was tried.
+  var MACHINE_KEY = 'freeai4u.machine_ram_gb';
+
+  function storedRam() {
+    try {
+      var scope = typeof globalThis !== 'undefined' ? globalThis : {};
+      var n = Number(scope.localStorage && scope.localStorage.getItem(MACHINE_KEY));
+      return isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Keep the shell's measured RAM (GB) for every later machine() call. */
+  function rememberMachine(ramGb) {
+    var n = Number(ramGb);
+    if (!(isFinite(n) && n > 0)) return;
+    try {
+      var scope = typeof globalThis !== 'undefined' ? globalThis : {};
+      if (scope.localStorage) scope.localStorage.setItem(MACHINE_KEY, String(Math.round(n)));
+    } catch {
+      // Storage off: this session still has the webview's own guess.
+    }
+  }
+
   function machine() {
     var scope = typeof globalThis !== 'undefined' ? globalThis : {};
+    var measured = storedRam();
     var memory = Number(scope.navigator && scope.navigator.deviceMemory);
     var cores = Number(scope.navigator && scope.navigator.hardwareConcurrency);
+    var browserRam = isFinite(memory) && memory > 0 ? memory : 0;
     return {
-      ramGb: isFinite(memory) && memory > 0 ? memory : 4,
-      ramKnown: isFinite(memory) && memory > 0,
+      ramGb: measured || browserRam || 4,
+      ramKnown: !!(measured || browserRam),
       cores: isFinite(cores) && cores > 0 ? cores : 4,
     };
   }
@@ -607,6 +637,7 @@
     warmup: warmup,
     machine: machine,
     fit: fit,
+    rememberMachine: rememberMachine,
     contextFor: contextFor,
     quantFor: quantFor,
     stateOf: stateOf,

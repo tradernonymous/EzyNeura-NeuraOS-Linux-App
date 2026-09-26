@@ -185,6 +185,20 @@
     return typeof lic === 'string' ? lic : '';
   }
 
+  /**
+   * Whether a repo holds an image model (SDXL, FLUX, ...) rather than a chat
+   * model. The card's pipeline_tag decides when it has one: a prompt-writer
+   * tagged "stable-diffusion" is still text-generation. Without one, the
+   * diffusers / text-to-image tags do.
+   */
+  var IMAGE_PIPELINES = ['text-to-image', 'image-to-image', 'unconditional-image-generation', 'image-text-to-image'];
+  function isImageModel(card) {
+    var pipeline = String((card && card.pipeline_tag) || '').toLowerCase();
+    if (pipeline) return IMAGE_PIPELINES.indexOf(pipeline) >= 0;
+    var tags = Array.isArray(card && card.tags) ? card.tags.map(function (t) { return String(t).toLowerCase(); }) : [];
+    return tags.indexOf('diffusers') >= 0 || tags.indexOf('text-to-image') >= 0 || tags.indexOf('image-to-image') >= 0;
+  }
+
   function isGated(card) {
     // HF marks gated models with a tag or a flag.
     var tags = Array.isArray(card?.tags) ? card.tags : [];
@@ -459,5 +473,6 @@
     formatSize: formatSize,
     licenseShort: licenseShort,
     isGated: isGated,
+    isImageModel: isImageModel,
   };
 });

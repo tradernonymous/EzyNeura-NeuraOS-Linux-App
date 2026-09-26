@@ -12,6 +12,7 @@ export interface HfModelCard {
   cardData?: { license?: string };
   license?: string;
   gated?: boolean | string;
+  pipeline_tag?: string;
 }
 
 export interface GgufFile {
@@ -42,6 +43,8 @@ export declare function fileUrl(modelId: string, filename: string): string;
 export declare function formatSize(bytes: number): string;
 export declare function licenseShort(card: HfModelCard): string;
 export declare function isGated(card: HfModelCard): boolean;
+/** True for an image model (text-to-image / image-to-image), which llama-server cannot run. */
+export declare function isImageModel(card: HfModelCard): boolean;
 
 /** What a download feeds, and where it lands (models.rs Kind). */
 export type ModelKind = 'text' | 'image' | 'voice';
