@@ -423,9 +423,11 @@ export default function ChatScreen() {
       window.removeEventListener(GITHUB_CHANGED_EVENT, readGithub);
     };
   }, []);
-  // An Allow / Deny card is a promise the turn is waiting on.
-  const approvals = useRef<Record<string, (allow: boolean) => void>>({});
-  const decide = (id: string, allow: boolean, always: boolean) => {
+  // An Allow / Deny card is a promise the turn is waiting on. C6: the
+  // answer may be "allow, with these arguments" — edited on the card.
+  type Approval = boolean | { args: Record<string, any> };
+  const approvals = useRef<Record<string, (decision: Approval) => void>>({});
+  const decide = (id: string, allow: boolean, always: boolean, args?: Record<string, any>) => {
     const resolve = approvals.current[id];
     if (!resolve) return;
     delete approvals.current[id];
@@ -433,7 +435,7 @@ export default function ChatScreen() {
       const event = active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id);
       if (event) toolsLib.setAlways(event.name);
     }
-    resolve(allow);
+    resolve(allow && args ? { args } : allow);
   };
   const hfRow = hfInference.providerRow(hfToken);
   const choices = [
@@ -742,7 +744,7 @@ export default function ChatScreen() {
   };
 
   // Stopping the turn is a Deny for whatever was waiting.
-  const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean>((resolve) => {
+  const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean | { args: Record<string, any> }>((resolve) => {
     approvals.current[event.id] = resolve;
     // Approve / Reject on the notification itself (Linux), so the answer
     // never needs the window in front; the plain notification elsewhere.

@@ -11,7 +11,7 @@ const turn: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 
 interface Props {
   events: ToolEvent[];
-  onDecide?: (id: string, allow: boolean, always: boolean) => void;
+  onDecide?: (id: string, allow: boolean, always: boolean, args?: Record<string, any>) => void;
   expandAll?: boolean;
 }
 

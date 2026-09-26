@@ -42,6 +42,8 @@ export interface ToolEvent {
   asks: string;
   status: ToolStatus;
   result?: string;
+  /** C6: the person changed the arguments on the card before allowing. */
+  edited?: boolean;
   /** Stamped by the screen, for the elapsed timer. */
   startedAt?: number;
   endedAt?: number;
@@ -52,7 +54,7 @@ export interface TurnOptions {
   tools: ToolDef[];
   stream: (messages: Message[], tools: ToolDef[] | undefined, onFrame: (frame: StreamFrame) => void, signal?: AbortSignal) => Promise<void>;
   execute: (call: ToolCall, args: Record<string, any>) => Promise<string>;
-  approve: (event: ToolEvent) => Promise<boolean>;
+  approve: (event: ToolEvent) => Promise<boolean | { args: Record<string, any> }>;
   onText: (piece: string) => void;
   onTool: (event: ToolEvent) => void;
   onNote?: (note: string) => void;
@@ -135,7 +137,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
     messages.push(tools.assistantMessage(text, calls));
     for (const call of calls) {
       if (options.signal?.aborted) return;
-      const args = tools.parseArgs(call.arguments);
+      let args = tools.parseArgs(call.arguments);
       const event: ToolEvent = {
         id: call.id,
         name: call.name,
@@ -148,13 +150,21 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       if (event.asks) {
         event.status = 'asking';
         options.onTool({ ...event });
-        const allowed = await options.approve({ ...event });
-        if (!allowed) {
+        const decision = await options.approve({ ...event });
+        if (!decision) {
           event.status = 'denied';
           event.result = 'The user declined this action.';
           options.onTool({ ...event });
           messages.push(tools.toolMessage(call, event.result));
           continue;
+        }
+        // C6: what runs is what was typed on the card, not what was asked
+        // for — and the model is told, so its next words describe reality.
+        if (typeof decision === 'object') {
+          args = decision.args;
+          event.args = args;
+          event.summary = tools.summarise(call.name, args);
+          event.edited = true;
         }
         event.status = 'running';
       }
@@ -168,7 +178,13 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       }
       event.result = tools.clip(result);
       options.onTool({ ...event });
-      messages.push(tools.toolMessage(call, result));
+      // C8: a result from the web, a repository or somebody else's file is
+      // labelled where the model reads it — data, not instructions.
+      const shown = tools.markUntrusted(call.name, result);
+      const note = event.edited
+        ? `The person edited this tool call before it ran; these are the arguments that ran: ${JSON.stringify(args)}\n`
+        : '';
+      messages.push(tools.toolMessage(call, note + shown));
       const images = options.imagesFor?.(call.id) || [];
       if (images.length) {
         messages.push({ role: 'user', content: withImages(`[The picture from ${call.name}.]`, images) });

@@ -78,6 +78,10 @@ export declare function setEnabled(on: boolean, storage?: any): boolean;
 export declare function alwaysKey(name: string): string;
 export declare function setAlways(name: string, storage?: any): boolean;
 export declare function needsApproval(name: string, storage?: any): string;
+/** C8: the source's name for a result the model must not trust; '' when trusted. */
+export declare function untrustedSource(name: string): string;
+/** C8: prefix an untrusted result with the label; trusted text comes back untouched. */
+export declare function markUntrusted(name: string, text: string): string;
 export declare function collect(state: any[] | null, deltas: any[] | undefined): any[];
 export declare function finish(state: any[] | null): ToolCall[];
 export declare function parseArgs(text: string | Record<string, any>): Record<string, any>;

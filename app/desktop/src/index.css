@@ -4351,6 +4351,34 @@ button.linkish {
   gap: 6px;
 }
 
+/* C6/C8: the editable arguments on an asking card, and the two labels. */
+.tool-card-edit {
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #252533);
+  border-radius: 8px;
+  background: var(--bg-1, #0d0d14);
+  color: var(--text-1, #e8e8f2);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.tool-card-edit-hint { flex-basis: 100%; font-size: 11.5px; color: var(--text-3, #80849a); }
+.tool-card-edited,
+.tool-card-untrusted {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tool-card-edited { background: var(--accent-dim, #26263a); color: var(--accent, #7aa2ff); }
+.tool-card-untrusted { background: rgba(245, 182, 66, 0.16); color: #f5b642; }
+
 /* ---- Phase 2: the composer is the chat's only control surface ------------ */
 
 .sub-nav {

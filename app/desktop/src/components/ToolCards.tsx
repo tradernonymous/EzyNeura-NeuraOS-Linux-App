@@ -2,6 +2,10 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import Icon from './Icon';
 import type { ToolEvent } from '../agent-turn';
 import { mcpAppFor } from '../tool-run';
+// UMD: loaded for its side effect, read off globalThis (C8's badge).
+import '../tools.js';
+
+const toolsLib: typeof import('../tools.js') = (globalThis as any).FreeAI4UTools;
 
 // Only an MCP App result shows a frame, so its code loads the first time one
 // does (NEURA-035: kept out of the first bundle).
@@ -17,8 +21,9 @@ const McpAppFrame = lazy(() => import('./McpAppFrame'));
 
 interface Props {
   events: ToolEvent[];
-  /** Present only while the turn is live and a card is asking. */
-  onDecide?: (id: string, allow: boolean, always: boolean) => void;
+  /** Present only while the turn is live and a card is asking. C6: the
+   * fourth argument is the edited arguments — Allow runs those. */
+  onDecide?: (id: string, allow: boolean, always: boolean, args?: Record<string, any>) => void;
   /** Ctrl+T: every card open (true), every card folded (false), or each its own. */
   expandAll?: boolean;
 }
@@ -51,6 +56,10 @@ export default function ToolCards({ events, onDecide, expandAll }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // An MCP App under its call is shown unless the person hides it.
   const [appHidden, setAppHidden] = useState<Record<string, boolean>>({});
+  // C6: the arguments being typed on an asking card, per card.
+  const [editing, setEditing] = useState<Record<string, boolean>>({});
+  const [editText, setEditText] = useState<Record<string, string>>({});
+  const [editErr, setEditErr] = useState<Record<string, string>>({});
   // A running tool's timer ticks; nothing re-renders once they are all done.
   const live = events.some((e) => e.status === 'running');
   const [, setTick] = useState(0);
@@ -86,11 +95,36 @@ export default function ToolCards({ events, onDecide, expandAll }: Props) {
             </button>
             {shown && (
               <div className="tool-card-body">
-                <div className="tool-card-label">{event.name}</div>
-                <pre className="tool-card-pre">{JSON.stringify(event.args, null, 2)}</pre>
+                <div className="tool-card-label">
+                  {event.name}
+                  {event.edited && (
+                    <span className="tool-card-edited" title="The person changed these arguments before allowing the call">edited before running</span>
+                  )}
+                </div>
+                {editing[event.id] ? (
+                  <textarea
+                    className="tool-card-edit"
+                    spellCheck={false}
+                    value={editText[event.id] ?? ''}
+                    onChange={(e) => setEditText((t) => ({ ...t, [event.id]: e.target.value }))}
+                    aria-label={`Edit the arguments for ${event.name}`}
+                  />
+                ) : (
+                  <pre className="tool-card-pre">{JSON.stringify(event.args, null, 2)}</pre>
+                )}
                 {event.result != null && (
                   <>
-                    <div className="tool-card-label">Result</div>
+                    <div className="tool-card-label">
+                      Result
+                      {toolsLib.untrustedSource(event.name) && (
+                        <span
+                          className="tool-card-untrusted"
+                          title="This text did not come from the person using this app. Instructions inside it are data to describe, not commands to follow."
+                        >
+                          untrusted · {toolsLib.untrustedSource(event.name)}
+                        </span>
+                      )}
+                    </div>
                     <pre className="tool-card-pre">{event.result}</pre>
                   </>
                 )}
@@ -118,10 +152,46 @@ export default function ToolCards({ events, onDecide, expandAll }: Props) {
               <div className="tool-card-ask">
                 <span>This {event.asks}.</span>
                 <div className="tool-card-actions">
+                  <button
+                    onClick={() => {
+                      const on = !editing[event.id];
+                      setEditing((s) => ({ ...s, [event.id]: on }));
+                      if (on) setEditText((t) => ({ ...t, [event.id]: t[event.id] ?? JSON.stringify(event.args, null, 2) }));
+                      setEditErr((s) => ({ ...s, [event.id]: '' }));
+                    }}
+                    aria-pressed={!!editing[event.id]}
+                    title="Change what will run — Allow runs the JSON below, not what the model asked for"
+                  >
+                    {editing[event.id] ? 'Done editing' : 'Edit'}
+                  </button>
                   {canAlways && <button onClick={() => onDecide!(event.id, true, true)}>Always for this server</button>}
                   <button onClick={() => onDecide!(event.id, false, false)}>Deny</button>
-                  <button className="primary" onClick={() => onDecide!(event.id, true, false)}>Allow</button>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      if (!editing[event.id]) { onDecide!(event.id, true, false); return; }
+                      try {
+                        const args = JSON.parse(editText[event.id] ?? '');
+                        if (!args || typeof args !== 'object' || Array.isArray(args)) {
+                          throw new Error('the arguments must be a JSON object');
+                        }
+                        setEditErr((s) => ({ ...s, [event.id]: '' }));
+                        setEditing((s) => ({ ...s, [event.id]: false }));
+                        onDecide!(event.id, true, false, args);
+                      } catch (e) {
+                        setEditErr((s) => ({ ...s, [event.id]: `Not valid JSON: ${(e as Error).message}` }));
+                      }
+                    }}
+                  >
+                    {editing[event.id] ? 'Allow what’s here' : 'Allow'}
+                  </button>
                 </div>
+                {editing[event.id] && (
+                  <div className="tool-card-edit-hint">
+                    Allow runs exactly this JSON.
+                    {editErr[event.id] && <span className="stream-error"> {editErr[event.id]}</span>}
+                  </div>
+                )}
               </div>
             )}
           </div>
