@@ -4663,6 +4663,17 @@ body.quick-body { background: var(--bg-1); }
 .hf-signin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .hf-token-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 .hf-token-form input { flex: 1 1 220px; min-width: 0; }
+/* The Doctor (Settings → System): one row per dependency, each with its fix. */
+.doctor-rows { display: flex; flex-direction: column; gap: 8px; }
+.doctor-row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border, #252533); border-radius: 8px; }
+.doctor-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--text-dim, #80849a); }
+.doctor-row.is-ok .doctor-dot { background: var(--ok, #34d399); }
+.doctor-row.is-warn .doctor-dot { background: #f5b642; }
+.doctor-row.is-fail .doctor-dot { background: #f26d6d; }
+.doctor-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.doctor-state { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-dim, #80849a); }
+.doctor-fix { margin: 4px 0 0; padding: 6px 8px; font-size: 12px; background: var(--bg-1, #0d0d14); border-radius: 6px; white-space: pre-wrap; user-select: text; }
+
 /* The Test button's report: which Inference Providers the token reaches. */
 .hf-token-report { flex: 1 1 100%; display: flex; flex-direction: column; gap: 4px; }
 .hf-token-report .chip-note { text-align: left; }
