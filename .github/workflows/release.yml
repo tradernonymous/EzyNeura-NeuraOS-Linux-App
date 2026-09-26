@@ -127,6 +127,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # D4: the notes are drafted from the merged PRs, so the release job
+      # needs the history -- tags included, to find the previous one.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: neuraos-release-${{ needs.stage.outputs.version }}
@@ -138,7 +144,23 @@ jobs:
           VERSION: ${{ needs.stage.outputs.version }}
         run: |
           tag="v$VERSION"
+          # D4: what landed since the previous tag, from the merged PRs
+          # themselves. The first release has nothing to compare against and
+          # says so; a failed search omits the section rather than failing
+          # the publish.
+          merged=""
+          prev=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_SHA^" 2>/dev/null || true)
+          if [ -n "$prev" ]; then
+            since=$(git log -1 --format=%cs "$prev")
+            merged=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main \
+              --search "is:merged merged:>=$since" --limit 50 \
+              --json number,title --jq '.[] | "- #\(.number) \(.title)"' 2>/dev/null || true)
+          fi
           cat > notes.md <<NOTES
+          ## Merged in this release
+
+          ${merged:-_No previous v tag to compare against._}
+
           ## Install on Linux Mint
 
           \`\`\`bash
