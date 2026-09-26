@@ -6805,6 +6805,27 @@ input, textarea, select { border-radius: 8px; }
 /* B4: a collision the router cannot separate, and the written reason for keeping both. */
 .skill-routing { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .skill-warn { padding: 8px 10px; border: 1px solid var(--edge); border-left: 3px solid #f5b642; border-radius: 8px; background: var(--bg-2); font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+/* B5: the description's own "Do not use when…", on the card. */
+.skill-neg { font-size: 11px; color: #f5b642; }
+/* B9: installed manuals — the section, its rows, and the rendered page. */
+.library-installed { margin-top: 14px; }
+.library-installed .installed-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.library-installed .installed-row:last-child { border-bottom: 0; }
+.skill-manual { background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.skill-manual h1, .skill-manual h2, .skill-manual h3, .skill-manual h4 { margin: 14px 0 6px; font-size: 14px; }
+.skill-manual h1:first-child, .skill-manual h2:first-child, .skill-manual h3:first-child, .skill-manual h4:first-child { margin-top: 0; }
+.skill-manual p { margin: 6px 0; }
+.skill-manual ul, .skill-manual ol { margin: 6px 0; padding-left: 20px; }
+.skill-manual li { margin: 2px 0; }
+.skill-manual blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--border); color: var(--text-3, #80849a); }
+.skill-manual code { background: var(--bg-3, #1c1c28); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.skill-manual pre { background: var(--bg-3, #1c1c28); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font-size: 12px; }
+.skill-manual pre code { background: none; padding: 0; }
+.skill-manual a { color: var(--accent, #7aa2ff); }
+/* B6: which skill would answer this — a glimpse above the box. */
+.skill-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3, #80849a); padding: 4px 10px 2px; }
+.skill-preview-label { text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; font-weight: 700; }
+.skill-preview-name { background: var(--accent-dim, #26263a); color: var(--accent, #7aa2ff); border-radius: 999px; padding: 1px 8px; font-weight: 600; }
 .skill-reason { display: flex; flex-wrap: wrap; gap: 6px; }
 .skill-reason input { flex: 1 1 180px; min-width: 0; padding: 5px 8px; border: 1px solid var(--edge); border-radius: 6px; background: var(--bg-1); color: var(--text-1); font: inherit; font-size: 12px; }
 .skill-reason button { flex: none; font-size: 11.5px; }

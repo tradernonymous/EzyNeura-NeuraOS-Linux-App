@@ -41,6 +41,23 @@ export declare const TOKEN_BUDGET: number;
 
 export declare function parseSkill(text: string | null | undefined): { front: Record<string, string>; body: string } | null;
 export declare function triggers(description: string | null | undefined): Set<string>;
+
+export interface SkillCandidate {
+  name: string;
+  description: string;
+  /** Trigger words weigh 3, the name 2, description words 1. */
+  score: number;
+  /** The draft's words that scored, for the chip's tooltip. */
+  matched: string[];
+}
+/** The description's "do not use when…" sentence, or '' (B5, display only). */
+export declare function negative(description: string | null | undefined): string;
+/** The top skills a draft points at, best first; [] for a vague draft (B6). */
+export declare function rankCandidates(
+  draft: string | null | undefined,
+  skills: Array<{ name?: string; description?: string } | null | undefined>,
+  limit?: number,
+): SkillCandidate[];
 export declare function lintSkill(input: SkillLintInput): SkillLintFindings;
 export declare function lintRouting(skills: Array<{ name: string; description: string }>): RoutingCollision[];
 /** B4: one order-independent key for a collision pair (the written reason's handle). */

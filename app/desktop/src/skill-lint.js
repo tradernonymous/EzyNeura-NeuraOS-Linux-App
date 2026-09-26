@@ -285,12 +285,92 @@
     });
   }
 
+  // --- B5: the description's own negative triggers ---------------------------
+  //
+  // "Do not use when…" is written by whoever made the skill. The card shows
+  // it so a person deciding to install sees the boundary without reading a
+  // wall of text. Honouring it in ROUTING is the engine's call and goes
+  // upstream as a proposal (APP_UPGRADE_PLAN B5) -- this is display, and
+  // only display, on purpose.
+
+  var NEGATIVE = /\b(?:do not|don't|dont|never|avoid)\s+(?:use\s*)?(?:when|for|if|with|on)\b|\bnot\s+(?:to\s+be\s+)?used\s+(?:when|for|with)\b|\bnot\s+for\b/i;
+
+  /** The description's "do not use when…" sentence, trimmed to one line, or ''. */
+  function negative(description) {
+    var text = String(description == null ? '' : description).trim();
+    if (!text || !NEGATIVE.test(text)) return '';
+    var re = /[^.;]+(?:[.;]|$)/g;
+    var m;
+    while ((m = re.exec(text))) {
+      var sentence = m[0].trim();
+      if (sentence && NEGATIVE.test(sentence)) return sentence.slice(0, 240);
+    }
+    return '';
+  }
+
+  // --- B6: which skill would answer this? -------------------------------------
+  //
+  // A preview of the router's likely pick, scored the way routing itself
+  // works: the skill's own quoted triggers, its name, and its significant
+  // description words, counted where the draft actually contains them.
+  // Display only -- the engine's router is the authority; this is the
+  // person's glimpse before pressing Send.
+
+  function wordsOf(text) {
+    var raw = String(text == null ? '' : text).toLowerCase().split(/[^a-z0-9+#.]+/);
+    var out = [];
+    for (var i = 0; i < raw.length; i += 1) {
+      var w = raw[i].replace(/^[.]+|[.]+$/g, '');
+      if (w && w.length > 1 && !GENERIC.has(w)) out.push(w);
+    }
+    return out;
+  }
+
+  /**
+   * rankCandidates(draft, skills, limit) -> [{ name, description, score, matched }]
+   *
+   * Top `limit` (default 3) skills the draft points at, best first; nothing
+   * when the draft is too short to mean anything or no skill matches. Quoted
+   * triggers weigh 3, the name 2, description words 1 -- a draft that says
+   * "disk full" should rank the skill that quotes "disk full" above one that
+   * merely mentions disks.
+   */
+  function rankCandidates(draft, skills, limit) {
+    var text = String(draft == null ? '' : draft).trim().toLowerCase();
+    if (text.length < 12) return [];
+    var draftWords = new Set(text.split(/[^a-z0-9+#.]+/).filter(Boolean));
+    var out = [];
+    var rows = Array.isArray(skills) ? skills : [];
+    for (var i = 0; i < rows.length; i += 1) {
+      var s = rows[i];
+      if (!s || !s.name || !s.description) continue;
+      var score = 0;
+      var matched = [];
+      var seen = new Set();
+      var add = function (word, weight) {
+        if (!word || seen.has(word)) return;
+        seen.add(word);
+        if (draftWords.has(word)) { score += weight; matched.push(word); }
+      };
+      triggers(s.description).forEach(function (word) { add(word, 3); });
+      wordsOf(s.name).forEach(function (word) { add(word, 2); });
+      wordsOf(s.description).forEach(function (word) { if (word.length >= 4) add(word, 1); });
+      if (score > 0) out.push({ name: String(s.name), description: String(s.description), score: score, matched: matched });
+    }
+    out.sort(function (a, b) { return b.score - a.score || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    var cap = Number(limit);
+    if (!isFinite(cap) || cap <= 0) cap = 3;
+    return out.slice(0, Math.floor(cap));
+  }
+
   return {
     MAX_DESC: MAX_DESC,
     MAX_BODY_LINES: MAX_BODY_LINES,
     TOKEN_BUDGET: TOKEN_BUDGET,
     parseSkill: parseSkill,
     triggers: triggers,
+    negative: negative,
+    rankCandidates: rankCandidates,
     lintSkill: lintSkill,
     lintRouting: lintRouting,
     pairKey: pairKey,

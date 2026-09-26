@@ -3,9 +3,15 @@ import Icon from './Icon';
 import ApprovalMenu from './ApprovalMenu';
 import '../composer.js';
 import '../approval.js';
+// B6: which installed skill would answer this — read off the records the
+// Library keeps (MintPackCard already pulls hf-skills into this bundle).
+import '../hf-skills.js';
+import '../skill-lint.js';
 
 const grammar: typeof import('../composer.js') = (globalThis as any).FreeAI4UComposer;
 const approval: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
+const hfSkills: typeof import('../hf-skills.js') = (globalThis as any).FreeAI4UHfSkills;
+const skillLint: typeof import('../skill-lint.js') = (globalThis as any).FreeAI4USkillLint;
 
 type GroupId = import('../approval.js').GroupId;
 
@@ -85,6 +91,19 @@ export default function Composer(props: Props) {
     [at?.query, at?.start, mentionSources],
   );
   const menuKind: 'slash' | 'mention' | null = dismissed === value ? null : slash.length ? 'slash' : mentions.length ? 'mention' : null;
+  // B6: which skill would answer this? A glimpse of the router's likely pick
+  // while the draft is being written — display only, hidden while a turn
+  // runs and for a draft too short to mean anything (rankCandidates decides).
+  const skillPicks = useMemo(() => {
+    if (sending || menuKind) return [];
+    try {
+      const records = hfSkills.readInstalled();
+      const rows = Object.values(records).filter((r) => r && r.name && r.description);
+      return skillLint.rankCandidates(value, rows, 3);
+    } catch {
+      return [];
+    }
+  }, [value, sending, menuKind]);
   const rows: Array<{ key: string; title: string; hint: string; kind?: string }> = menuKind === 'slash'
     ? slash.map((c) => ({ key: c.id, title: `/${c.id}`, hint: c.hint + (c.keys ? ` · ${c.keys}` : '') }))
     : menuKind === 'mention'
@@ -182,6 +201,14 @@ export default function Composer(props: Props) {
               <span className="composer-menu-title mono">{row.title}</span>
               <span className="composer-menu-hint">{row.hint}</span>
             </button>
+          ))}
+        </div>
+      )}
+      {skillPicks.length > 0 && (
+        <div className="skill-preview" title="The installed skills this draft points at — a preview; the router still decides">
+          <span className="skill-preview-label">Would answer this:</span>
+          {skillPicks.map((p) => (
+            <span key={p.name} className="skill-preview-name" title={p.matched.join(', ')}>{p.name}</span>
           ))}
         </div>
       )}

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import HfSignIn from '../components/HfSignIn';
 import { api } from '../api';
 import Icon from '../components/Icon';
-import { runLocal, writeLocalFile } from '../bridge';
+import { runLocal, writeLocalFile, readLocalFile } from '../bridge';
+import { renderMarkdown } from '../markdown';
 import { isLinux } from '../platform';
 import { pushToast } from '../components/Toasts';
 import { OPEN_CHAT_EVENT, type ChatSession } from './ChatScreen';
@@ -131,6 +132,10 @@ export default function LibraryScreen() {
 
   // --- B12: save a chat as a skill ---------------------------------------
   const [saveState, setSaveState] = useState<Record<string, string>>({});
+
+  // --- B9: manuals — each installed SKILL.md as a readable page ------------
+  const [manual, setManual] = useState<{ name: string; text: string } | null>(null);
+  const [manualQuery, setManualQuery] = useState('');
 
   useEffect(() => {
     const onAuth = () => setHfSignedIn(hfAuth.signedIn());
@@ -277,6 +282,23 @@ export default function LibraryScreen() {
     }
   }, [localRoot, installed]);
 
+  // B9: an installed skill's own SKILL.md, read from the open folder and
+  // rendered as a page — offline, because the file is already on this disk.
+  const openManual = useCallback(async (slug: string, record: { name?: string; dir?: string }) => {
+    if (!localRoot) { pushToast('warn', 'Open a folder first — the manual is a file in it.'); return; }
+    let dir = String(record?.dir || (hfSkills.SKILLS_DIR + '/' + slug)).trim();
+    if (localRoot && dir.startsWith(localRoot)) dir = dir.slice(localRoot.length);
+    dir = dir.replace(/^\/+|\/+$/g, '');
+    setManual({ name: record?.name || slug, text: 'Loading…' });
+    try {
+      const file = await readLocalFile(localRoot, dir + '/SKILL.md');
+      setManual({ name: record?.name || slug, text: file.text || '(empty SKILL.md)' });
+    } catch (err) {
+      setManual(null);
+      pushToast('error', 'Could not read the manual: ' + ((err as Error).message || String(err)));
+    }
+  }, [localRoot]);
+
   const load = () => {
     setLoading(true);
     setError('');
@@ -383,6 +405,59 @@ export default function LibraryScreen() {
             </div>
           </div>
         )}
+      </section>
+
+      {/* B9: the manuals — every installed SKILL.md as a readable page,
+          searchable without the network because the files are already on
+          this disk. The records are the Library's own (hf-skills.js); the
+          text comes from the open folder when a manual is opened. */}
+      <section className="library-installed">
+        <h3 className="col-title"><Icon name="check" size={14} /> Installed manuals ({Object.keys(installed).length})</h3>
+        {(() => {
+          const rows = Object.entries(installed)
+            .filter(([, r]: [string, any]) => r && r.name)
+            .filter(([, r]: [string, any]) => {
+              const q = manualQuery.trim().toLowerCase();
+              if (!q) return true;
+              return (String(r.name) + ' ' + String(r.description || '')).toLowerCase().includes(q);
+            })
+            .sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)));
+          return (
+            <>
+              <div className="gh-install">
+                <input
+                  value={manualQuery}
+                  onChange={(e) => setManualQuery(e.target.value)}
+                  placeholder="Search the installed skills — offline, this folder only"
+                  aria-label="Search installed skills"
+                />
+              </div>
+              {!Object.keys(installed).length && (
+                <div className="empty">Nothing installed in this folder yet — install from the catalogue above, or save a chat as a skill.</div>
+              )}
+              {!!Object.keys(installed).length && !rows.length && (
+                <div className="empty">No installed skill matches “{manualQuery}”.</div>
+              )}
+              <div className="skill-list">
+                {rows.map(([slug, r]: [string, any]) => (
+                  <div key={slug} className="installed-row">
+                    <div className="skill-name">{r.name}</div>
+                    <div className="skill-desc">{r.description}</div>
+                    {skillLint.negative(r.description) ? (
+                      <div className="skill-neg">{skillLint.negative(r.description)}</div>
+                    ) : null}
+                    <div className="skill-src" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button onClick={() => void openManual(slug, r)} title="Read this skill's SKILL.md as a page">
+                        <Icon name="library" size={12} /> Manual
+                      </button>
+                      <span>{r.repo || 'local'}{r.dir ? ' · ' + r.dir : ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </section>
 
       <div className="library-layout">
@@ -496,6 +571,13 @@ export default function LibraryScreen() {
                       )}
                     </div>
                     <div className="skill-desc">{s.description}</div>
+                    {(() => {
+                      // B5: the description's own "Do not use when…", shown
+                      // where the install decision is made. Display only —
+                      // honouring it in routing is the engine's call (upstream).
+                      const neg = skillLint.negative(s.description);
+                      return neg ? <div className="skill-neg">{neg}</div> : null;
+                    })()}
                     <div className="skill-src">{s.repo}{s.tags?.length ? ' · ' + s.tags.join(', ') : ''}</div>
                   </button>
                   <div className="skill-src" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -548,7 +630,20 @@ export default function LibraryScreen() {
         </section>
 
         <section className="library-col">
-          {open ? (
+          {manual ? (
+            <>
+              <h3 className="col-title">
+                {manual.name} · manual
+                <button className="hf-link" onClick={() => setManual(null)}>close</button>
+              </h3>
+              <div
+                className="skill-manual"
+                // B9: the file is on this disk and renderMarkdown escapes
+                // every character before any tag is emitted (markdown.ts).
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(manual.text) }}
+              />
+            </>
+          ) : open ? (
             <>
               <h3 className="col-title">{open.name}</h3>
               <pre className="skill-content">{content}</pre>
