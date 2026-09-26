@@ -120,6 +120,123 @@ fn sd_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Where LoRAs live: <app data>/sd-loras, handed to sd-server as
+/// --lora-model-dir. A job names a LoRA by its file name in here, because
+/// sd-server takes "a relative path under the configured LoRA directory" and
+/// never parses <lora:...> tags from a prompt (examples/server/api.md).
+pub fn loras_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data directory: {}", e))?
+        .join("sd-loras");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+    Ok(dir)
+}
+
+/// A LoRA the page named, checked: a bare file name (no folder, no "..")
+/// with a weights extension, that exists in `dir`. The multiplier is kept
+/// to the range sd.cpp users actually work in.
+pub fn valid_lora(dir: &Path, name: &str, multiplier: f64) -> Result<(String, f64), String> {
+    let name = name.trim();
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.starts_with('.') {
+        return Err(format!("{} is not a LoRA file name", name));
+    }
+    if !is_model_name(name) {
+        return Err(format!("{} is not a .safetensors or .gguf LoRA", name));
+    }
+    if !dir.join(name).is_file() {
+        return Err(format!("The LoRA {} is not in the LoRA folder any more.", name));
+    }
+    let multiplier = if multiplier.is_finite() { multiplier.clamp(-2.0, 2.0) } else { 1.0 };
+    Ok((name.to_string(), multiplier))
+}
+
+/// The `lora` field of a job: [{path, multiplier}], absent when there are none.
+pub fn with_loras(mut body: serde_json::Value, loras: &[(String, f64)]) -> serde_json::Value {
+    if !loras.is_empty() {
+        body["lora"] = serde_json::Value::Array(
+            loras
+                .iter()
+                .map(|(path, multiplier)| serde_json::json!({ "path": path, "multiplier": multiplier }))
+                .collect(),
+        );
+    }
+    body
+}
+
+#[derive(serde::Serialize)]
+pub struct SdLora {
+    pub name: String,
+    pub bytes: u64,
+}
+
+/// The LoRAs in the LoRA folder, by name.
+#[tauri::command(async)]
+pub fn sd_loras(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let dir = loras_dir(&app)?;
+    let mut out: Vec<SdLora> = std::fs::read_dir(&dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().is_file())
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    is_model_name(&name).then(|| SdLora { name, bytes: e.metadata().map(|m| m.len()).unwrap_or(0) })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort_by_key(|a| a.name.to_lowercase());
+    Ok(serde_json::json!({ "dir": dir.display().to_string(), "loras": out }))
+}
+
+/// Move LoRA files the person picks into the LoRA folder (a rename on the
+/// same disk is instant; across disks it copies, then removes the original).
+#[tauri::command(async)]
+pub fn sd_import_loras(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let dir = loras_dir(&app)?;
+    let picked = rfd::FileDialog::new()
+        .set_title("Choose LoRA files (.safetensors or .gguf)")
+        .add_filter("LoRA", &["safetensors", "gguf"])
+        .pick_files()
+        .unwrap_or_default();
+    let mut moved = Vec::new();
+    for source in picked {
+        let name = source.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if !is_model_name(&name) {
+            continue;
+        }
+        let target = dir.join(&name);
+        if target.exists() {
+            return Err(format!("{} is already in the LoRA folder.", name));
+        }
+        if std::fs::rename(&source, &target).is_err() {
+            std::fs::copy(&source, &target).map_err(|e| format!("could not copy {}: {}", name, e))?;
+            let _ = std::fs::remove_file(&source);
+        }
+        moved.push(name);
+    }
+    Ok(serde_json::json!({ "moved": moved }))
+}
+
+/// Delete one LoRA from the LoRA folder.
+#[tauri::command(async)]
+pub fn sd_delete_lora(app: tauri::AppHandle, name: String) -> Result<serde_json::Value, String> {
+    let dir = loras_dir(&app)?;
+    let (name, _) = valid_lora(&dir, &name, 1.0)?;
+    let path = dir.join(&name);
+    let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    std::fs::remove_file(&path).map_err(|e| format!("could not delete {}: {}", name, e))?;
+    Ok(serde_json::json!({ "name": name, "bytes": bytes }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct LoraPick {
+    pub name: String,
+    pub multiplier: Option<f64>,
+}
+
 /// Where weights are looked for: <app data>/sd-models.
 pub fn models_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -897,9 +1014,34 @@ pub fn explain_tail(tail: &str) -> String {
         })
         .collect();
     let mut out = if errors.is_empty() { tail.trim().to_string() } else { errors.join(" · ") };
+    let lower = tail.to_ascii_lowercase();
     if tail.contains("get sd version from file failed") {
-        out.push_str(
-            " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
+        if lower.contains("controlnet") {
+            out.push_str(
+                " -- this file is a ControlNet, an add-on that guides a model, not a model that draws on its own: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
+        } else if lower.contains("lora") {
+            out.push_str(
+                " -- this file looks like a LoRA, an add-on for a model, not a model that draws on its own: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
+        } else if ["pulid", "ip-adapter", "ip_adapter", "ipadapter", "instantid", "t2i-adapter", "t2i_adapter"]
+            .iter()
+            .any(|k| lower.contains(k))
+        {
+            out.push_str(
+                " -- this file is an adapter (PuLID, IP-Adapter, InstantID and the like) that a ComfyUI workflow adds to a model; it does not draw on its own and stable-diffusion.cpp does not load it: pick a checkpoint (SD 1.5, SDXL, FLUX) instead.",
+            );
+        } else {
+            out.push_str(
+                " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
+            );
+        }
+    } else if tail.contains("VAE tensor") && tail.contains("not in model metadata") {
+        // Collapse the hundreds of per-tensor lines to the first one.
+        let first = errors.first().cloned().unwrap_or_default();
+        out = format!(
+            "{} (and more) -- this checkpoint was published without its VAE. Download the VAE it was made for (sdxl_vae.safetensors from stabilityai/sdxl-vae for an SDXL model) and use \"Add files as a set\" with both files.",
+            first
         );
     }
     out
@@ -999,6 +1141,10 @@ pub async fn sd_start(
         _ => args_for(&model, port, threads),
     };
     argv.extend(small_card_args(crate::models::vram_mb()));
+    if let Ok(dir) = loras_dir(&app) {
+        argv.push("--lora-model-dir".to_string());
+        argv.push(dir.display().to_string());
+    }
     command.args(argv);
     command.stdin(Stdio::null());
     // The server's own log is the only place a load failure explains itself.
@@ -1184,6 +1330,11 @@ pub struct Family {
     pub shift: Option<f64>,
 }
 
+/// Z-Image in the spellings its files use (z_image_turbo, Z-Image-Turbo).
+fn is_z_image(name: &str) -> bool {
+    name.contains("z_image") || name.contains("z-image") || name.contains("zimage")
+}
+
 pub fn family_of(model: &Path) -> Option<Family> {
     let name = model_name_of(model);
     let klein = name.contains("klein");
@@ -1200,6 +1351,10 @@ pub fn family_of(model: &Path) -> Option<Family> {
         Some(Family { label: "FLUX.2 [klein]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if is_flux2(&name) {
         Some(Family { label: "FLUX.2 [dev]", cfg: 1.0, steps: 20, sampler: None, shift: None })
+    } else if is_z_image(&name) && name.contains("turbo") {
+        // Z-Image Turbo is distilled for ~8 steps with no guidance; sd.cpp's
+        // defaults (20 steps, cfg 7) wash it out.
+        Some(Family { label: "Z-Image Turbo", cfg: 1.0, steps: 8, sampler: None, shift: None })
     } else if flux1 && name.contains("schnell") {
         Some(Family { label: "FLUX.1 [schnell]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if flux1 {
@@ -1401,6 +1556,7 @@ fn running_model() -> Option<PathBuf> {
 /// minutes an image takes.
 #[tauri::command(async)]
 pub async fn sd_generate(
+    app: tauri::AppHandle,
     prompt: String,
     negative_prompt: Option<String>,
     width: u32,
@@ -1413,6 +1569,8 @@ pub async fn sd_generate(
     strength: Option<f64>,
     // White where the picture may change. Checked exactly like the picture.
     mask_image: Option<String>,
+    // LoRAs from the LoRA folder, each with its strength.
+    loras: Option<Vec<LoraPick>>,
 ) -> Result<serde_json::Value, String> {
     let prompt = prompt.trim().to_string();
     if prompt.is_empty() {
@@ -1441,6 +1599,15 @@ pub async fn sd_generate(
         strength,
     );
     body = with_mask(body, mask.as_deref());
+    let picks = loras.unwrap_or_default();
+    if !picks.is_empty() {
+        let dir = loras_dir(&app)?;
+        let checked = picks
+            .iter()
+            .map(|p| valid_lora(&dir, &p.name, p.multiplier.unwrap_or(1.0)))
+            .collect::<Result<Vec<_>, _>>()?;
+        body = with_loras(body, &checked);
+    }
     let model = running_model().unwrap_or_default();
     if edits_by_reference(&model) {
         body = by_reference(body);
@@ -1528,6 +1695,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_lora_travels_by_name_from_the_lora_folder_only() {
+        let dir = std::env::temp_dir().join(format!("neuraos-loras-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("style.safetensors"), b"x").unwrap();
+        assert_eq!(valid_lora(&dir, "style.safetensors", 0.8).unwrap(), ("style.safetensors".to_string(), 0.8));
+        assert_eq!(valid_lora(&dir, "style.safetensors", 9.0).unwrap().1, 2.0, "strength kept in range");
+        assert_eq!(valid_lora(&dir, "style.safetensors", f64::NAN).unwrap().1, 1.0);
+        assert!(valid_lora(&dir, "../style.safetensors", 1.0).is_err(), "no climbing out");
+        assert!(valid_lora(&dir, "/etc/passwd", 1.0).is_err());
+        assert!(valid_lora(&dir, "notes.txt", 1.0).is_err());
+        assert!(valid_lora(&dir, "gone.safetensors", 1.0).is_err());
+        let body = with_loras(job_body("a cat", "", 512, 512, None, None, None, None), &[("style.safetensors".to_string(), 0.8)]);
+        assert_eq!(body["lora"], serde_json::json!([{ "path": "style.safetensors", "multiplier": 0.8 }]));
+        assert!(!body["prompt"].as_str().unwrap().contains("<lora"), "sd-server does not read prompt tags");
+        let plain = with_loras(job_body("a cat", "", 512, 512, None, None, None, None), &[]);
+        assert!(plain.get("lora").is_none(), "no LoRA, no field");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn z_image_turbo_draws_in_eight_steps_without_guidance() {
+        for name in ["z_image_turbo_bf16.safetensors", "Z-Image-Turbo-Q4_K.gguf"] {
+            let fam = family_of(Path::new(name)).expect(name);
+            assert_eq!(fam.label, "Z-Image Turbo");
+            assert_eq!(fam.steps, 8);
+            assert_eq!(fam.cfg, 1.0);
+        }
+        // Its set: the FLUX.1 autoencoder and a Qwen3-4B encoder beside it.
+        let files = vec![
+            (PathBuf::from("z/z_image_turbo_bf16.safetensors"), 12_300_000_000),
+            (PathBuf::from("z/qwen_3_4b.safetensors"), 8_044_982_048),
+            (PathBuf::from("z/ae.safetensors"), 335_000_000),
+        ];
+        let parts = set_roles(&files).expect("a set");
+        assert_eq!(parts.diffusion, PathBuf::from("z/z_image_turbo_bf16.safetensors"));
+        assert_eq!(parts.vae, Some(PathBuf::from("z/ae.safetensors")));
+        assert_eq!(parts.llm, Some(PathBuf::from("z/qwen_3_4b.safetensors")));
+    }
+
+    #[test]
     fn a_small_card_encodes_on_the_cpu() {
         assert_eq!(small_card_args(Some(4096)), vec!["--vae-on-cpu"], "the PC's GTX 1050 Ti");
         assert_eq!(small_card_args(Some(6144)), vec!["--vae-on-cpu"]);
@@ -1568,6 +1775,16 @@ mod tests {
         assert!(said.contains("new_sd_ctx_t failed"));
         assert!(!said.contains("Vulkan devices"));
         assert!(said.contains("UNet-only GGUF made for ComfyUI"));
+        // The PC's two next tries: a ControlNet, and a checkpoint without its VAE.
+        let cn = "[INFO   ] model_loader.cpp:221  - load /m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors using safetensors format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: '/m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors'";
+        assert!(explain_tail(cn).contains("is a ControlNet"));
+        let pulid = "[INFO   ] model_loader.cpp:221  - load /m/pulid_flux_v0.9.1.safetensors using safetensors format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: '/m/pulid_flux_v0.9.1.safetensors'";
+        assert!(explain_tail(pulid).contains("is an adapter (PuLID"));
+        let novae = "[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.bias' not in model metadata\n[ERROR  ] model_manager.cpp:761  - VAE tensor 'first_stage_model.encoder.norm_out.weight' not in model metadata\n[ERROR  ] diffusion_engine.cpp:1247 - model metadata validation failed";
+        let said = explain_tail(novae);
+        assert!(said.contains("published without its VAE"), "{}", said);
+        assert!(said.contains("Add files as a set"));
+        assert_eq!(said.matches("not in model metadata").count(), 1, "one line, not hundreds");
         // No error lines: the tail as it was.
         assert_eq!(explain_tail("  just info\n"), "just info");
         // An assert is an error too (the FP4 crash).

@@ -2,8 +2,84 @@ import { useEffect, useRef, useState } from 'react';
 import { pushToast } from './Toasts';
 import SelectPill from './SelectPill';
 import '../flux-setup.js';
+import '../image-run.js';
 
 const fluxSetup: typeof import('../flux-setup.js') = (globalThis as any).FreeAI4UFluxSetup;
+const imageRun: typeof import('../image-run.js') = (globalThis as any).FreeAI4UImageRun;
+type LoraPick = import('../image-run.js').LoraPick;
+
+/**
+ * LoRAs: small add-ons that steer the model drawing (a style, a subject).
+ * They live in <app data>/sd-loras, which the shell hands sd-server as
+ * --lora-model-dir; ticked ones travel with every job on this PC, each at
+ * its strength. A LoRA only works with the base model it was trained for.
+ */
+function LoraSection({ disabled }: { disabled: boolean }) {
+  const [loras, setLoras] = useState<{ name: string; bytes: number }[]>([]);
+  const [dir, setDir] = useState('');
+  const [picks, setPicks] = useState<LoraPick[]>(() => imageRun.readLoras());
+  const [deleteAsk, setDeleteAsk] = useState('');
+  const load = () => call<{ dir: string; loras: { name: string; bytes: number }[] }>('sd_loras')
+    .then((r) => { setLoras(r.loras); setDir(r.dir); })
+    .catch(() => setLoras([]));
+  useEffect(() => { void load(); }, []);
+  const save = (next: LoraPick[]) => setPicks(imageRun.writeLoras(next));
+  const pickOf = (name: string) => picks.find((p) => p.name === name);
+  const toggle = (name: string) => {
+    const on = pickOf(name);
+    save(on ? picks.filter((p) => p.name !== name) : [...picks, { name, multiplier: 1 }]);
+  };
+  const strength = (name: string, value: number) => save(picks.map((p) => (p.name === name ? { ...p, multiplier: value } : p)));
+  const add = () => call<{ moved: string[] }>('sd_import_loras')
+    .then((r) => { if (r.moved.length) pushToast('ok', `${r.moved.length} LoRA${r.moved.length === 1 ? '' : 's'} added.`); return load(); })
+    .catch((e: unknown) => pushToast('error', ((e as Error).message || String(e)).split('\n')[0]));
+  const remove = (name: string) => {
+    if (deleteAsk !== name) { setDeleteAsk(name); return; }
+    setDeleteAsk('');
+    call<{ name: string; bytes: number }>('sd_delete_lora', { name })
+      .then((r) => { pushToast('ok', `Deleted ${r.name} (${sizeOf(r.bytes)} freed).`); save(picks.filter((p) => p.name !== name)); return load(); })
+      .catch((e: unknown) => pushToast('error', ((e as Error).message || String(e)).split('\n')[0]));
+  };
+  return (
+    <div className="lora-section">
+      <div className="dictation-field">
+        <span>LoRAs</span>
+        <button onClick={add} disabled={disabled}>Add LoRA files…</button>
+      </div>
+      {loras.length === 0 && (
+        <p className="settings-hint">No LoRAs yet. A LoRA is a small add-on (usually 20–500 MB) that steers a model toward a style or subject; add it here, tick it, and it applies to every picture this PC draws. It only works with the base model it was made for.</p>
+      )}
+      {loras.map((l) => {
+        const on = pickOf(l.name);
+        return (
+          <div key={l.name} className="lora-row">
+            <label className="lora-name" title={l.name}>
+              <input type="checkbox" checked={!!on} onChange={() => toggle(l.name)} disabled={disabled} />
+              <span className="mono">{l.name}</span>
+              <span className="settings-hint">{sizeOf(l.bytes)}</span>
+            </label>
+            {on && (
+              <label className="lora-strength" title="How strongly the LoRA pulls the picture (1 is its full effect)">
+                strength
+                <input
+                  type="number" min={-2} max={2} step={0.05} value={on.multiplier}
+                  onChange={(e) => strength(l.name, Number(e.target.value))} disabled={disabled}
+                />
+              </label>
+            )}
+            <button
+              onClick={() => remove(l.name)} onBlur={() => setDeleteAsk('')} disabled={disabled}
+              title={deleteAsk === l.name ? 'Click again: this deletes the LoRA file' : 'Delete this LoRA from the LoRA folder'}
+            >
+              {deleteAsk === l.name ? 'Sure? Delete' : 'Delete'}
+            </button>
+          </div>
+        );
+      })}
+      {loras.length > 0 && dir && <p className="settings-hint">In <span className="mono">{dir}</span>. Ticked ones apply to every picture drawn on this PC.</p>}
+    </div>
+  );
+}
 import {
   call,
   hasShell,
@@ -521,6 +597,7 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
             Add files as a set…
           </button>
         </div>
+        <LoraSection disabled={!!busy || drawing} />
         <p className="settings-hint">
           Put weights (.safetensors, .ckpt or .gguf) in{' '}
           <span className="mono">{facts?.models_dir || '<app data>/sd-models'}</span> or beside sd-server, or pick any file.

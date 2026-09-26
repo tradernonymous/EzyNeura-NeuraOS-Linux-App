@@ -173,3 +173,25 @@ test('a picture saves through the native dialog, opens large, and can be removed
   assert.match(save, /export async function savePictureUrl/);
   assert.match(save, /invoke\('save_file_dialog'/);
 });
+
+test('LoRAs: kept per machine, sent by name with a clamped strength, never as prompt tags', () => {
+  require('../desktop/src/image-run.js');
+  const run = globalThis.FreeAI4UImageRun;
+  const store = new Map();
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+  assert.deepEqual(run.readLoras(storage), []);
+  run.writeLoras([{ name: 'style.safetensors', multiplier: 5 }, { name: '' }], storage);
+  assert.deepEqual(run.readLoras(storage), [{ name: 'style.safetensors', multiplier: 2 }], 'clamped, blanks dropped');
+  const body = { prompt: 'a cat', width: 512, height: 512 };
+  const job = run.withLoras(body, [{ name: 'style.safetensors', multiplier: 0.8 }], ['style.safetensors']);
+  assert.deepEqual(job.loras, [{ name: 'style.safetensors', multiplier: 0.8 }]);
+  assert.equal(job.prompt, 'a cat', 'no <lora:> tag: sd-server ignores them');
+  assert.equal(run.withLoras(body, [{ name: 'gone.safetensors', multiplier: 1 }], ['other.safetensors']).loras, undefined, 'a LoRA no longer there is dropped');
+  const src = card();
+  assert.match(src, /call<[^>]*>\('sd_import_loras'\)/);
+  assert.match(src, /'sd_delete_lora', \{ name \}/);
+  const rs = sdRs();
+  assert.match(rs, /"--lora-model-dir"/);
+  assert.match(rs, /pub fn sd_loras/);
+  assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_import_loras,/);
+});
