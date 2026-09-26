@@ -18,6 +18,11 @@ import '../audit.js';
 import '../approval.js';
 // C7: the local traces — model and tool calls, one line each.
 import '../traces.js';
+// C5: the comparison of parallel worktree runs (the numbers are read back
+// long after the worktrees themselves are gone).
+import '../parallel-compare.js';
+// C5: elapsed() for each run's column header.
+import '../worktrees.js';
 // C2: the changed files a run left, for its evidence folder.
 import '../turn.js';
 import { OPEN_CHAT_EVENT } from './ChatScreen';
@@ -30,6 +35,8 @@ const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4UR
 const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
 const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
 const tracesLib: typeof import('../traces.js') = (globalThis as any).FreeAI4UTraces;
+const compareLib: typeof import('../parallel-compare.js') = (globalThis as any).FreeAI4UParallelCompare;
+const worktreesLib: typeof import('../worktrees.js') = (globalThis as any).FreeAI4UWorktrees;
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 
 // The folder the local surfaces work in (App.tsx owns it; this screen only
@@ -90,6 +97,8 @@ export default function ActivityScreen({ onOpen }: Props) {
   const [, setPresetAt] = useState(0);
   // C7: the same for clearing the traces.
   const [, setTraceAt] = useState(0);
+  // C5: and the same for clearing the parallel comparison.
+  const [, setCompareAt] = useState(0);
   const busy = useBusyChats();
   const { model, engine } = useShellStatus();
   const [recipes] = useState(() => recipesLib.list().filter((r) => r.schedule && r.schedule.enabled !== false));
@@ -440,6 +449,85 @@ export default function ActivityScreen({ onOpen }: Props) {
         </p>
       </section>
       </>)}
+
+      {/* C5: the Activity board compares the parallel worktree runs — which
+          run touched which file, and where two runs collided — so the winner
+          can be picked here and merged on the Parallel screen. The numbers
+          are read from this app's own store: the worktrees may already be
+          discarded, the comparison is what outlives them. */}
+      <section className="activity-section">
+        <h2><Icon name="activity" size={14} /> Parallel runs</h2>
+        {(() => {
+          const root = readLocalRoot();
+          const groups = compareLib.batches(compareLib.list(root));
+          if (!groups.length) {
+            return (
+              <p className="settings-hint">
+                Nothing compared yet. Start two or more agents in Code → Parallel; when they finish, every
+                batch gets a table here — one column per run, one row per file, collisions listed first —
+                and you merge the winner there.
+              </p>
+            );
+          }
+          return (
+            <>
+              {groups.map((group) => {
+                const table = compareLib.compare(group.runs);
+                return (
+                  <div key={group.batch} className="compare-batch">
+                    <div className="compare-batch-head">
+                      <span className="compare-batch-when">{new Date(group.at).toLocaleString()}</span>
+                      <span className="compare-batch-note">
+                        {table.overlap
+                          ? `${table.overlap} file${table.overlap === 1 ? '' : 's'} touched by more than one run`
+                          : 'no file was touched twice'}
+                      </span>
+                    </div>
+                    <div className="compare-scroll">
+                      <table className="compare-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">File</th>
+                            {table.columns.map((col) => (
+                              <th key={col.slug} scope="col" title={col.branch}>
+                                {col.task}
+                                <span className="compare-col-meta">
+                                  {col.merged ? 'merged' : col.status || '—'} · {col.totals.files} file{col.totals.files === 1 ? '' : 's'}
+                                  {' '}· +{col.totals.add} −{col.totals.del} · {worktreesLib.elapsed(col.ms)}
+                                </span>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {table.rows.slice(0, 60).map((row) => (
+                            <tr key={row.path} className={row.by >= 2 ? 'is-shared' : ''}>
+                              <th scope="row" className="compare-path mono" title={row.path}>{row.path}</th>
+                              {row.cells.map((cell, i) => (
+                                <td key={i} className={cell ? 'is-hit' : ''}>
+                                  {cell ? (cell.binary ? 'binary' : `+${cell.add} −${cell.del}`) : ''}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {table.rows.length > 60 && (
+                      <p className="settings-hint">…and {table.rows.length - 60} more files (the collisions are listed first).</p>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
+        <p className="settings-hint">
+          Each run's numbers are taken from its own worktree when it finished and kept on this machine only.
+          {' '}<button type="button" className="link-button" onClick={() => onOpen('parallel')}>Open Parallel</button>
+          {' '}<button type="button" className="link-button" onClick={() => { compareLib.clear(readLocalRoot()); setCompareAt((n) => n + 1); }}>Clear</button>
+        </p>
+      </section>
     </div>
   );
 }

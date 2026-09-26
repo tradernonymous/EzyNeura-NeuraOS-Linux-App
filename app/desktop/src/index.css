@@ -4718,6 +4718,19 @@ body.quick-body { background: var(--bg-1); }
 .parallel-steps li.is-failed { color: var(--danger, #d9534f); }
 .parallel-stat, .parallel-approval pre { max-height: 140px; overflow: auto; margin: 0; padding: 6px 8px; font-size: 11px; background: var(--bg-1); border-radius: 6px; }
 .parallel-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* C5: the Activity board's comparison of parallel worktree runs. */
+.compare-batch { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.compare-batch-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 11px; color: var(--text-3); }
+.compare-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.compare-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.compare-table th, .compare-table td { border-bottom: 1px solid var(--border); padding: 4px 8px; text-align: left; vertical-align: top; }
+.compare-table thead th { background: var(--bg-2); font-weight: 600; min-width: 120px; }
+.compare-col-meta { display: block; font-weight: 400; font-size: 10px; color: var(--text-3); }
+.compare-path { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.compare-table tbody tr.is-shared { background: color-mix(in srgb, var(--accent-mid, #7c6cf0) 8%, transparent); }
+.compare-table td { color: var(--text-3); }
+.compare-table td.is-hit { color: var(--accent-mid); }
+.compare-table tbody tr:last-child th, .compare-table tbody tr:last-child td { border-bottom: none; }
 .quick-continue { align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .hf-signin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .hf-token-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }

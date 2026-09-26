@@ -18,15 +18,20 @@ import '../coding-agent.js';
 import '../saved-models.js';
 import '../worktrees.js';
 import '../docker-sandbox.js';
+// C5: what each run changed, kept for the Activity board's comparison.
+import '../parallel-compare.js';
 
 const agent: typeof import('../coding-agent.js') = (globalThis as any).FreeAI4UCodingAgent;
 const dockerSandbox: typeof import('../docker-sandbox.js') = (globalThis as any).FreeAI4UDockerSandbox;
 const worktrees: typeof import('../worktrees.js') = (globalThis as any).FreeAI4UWorktrees;
+const compareLib: typeof import('../parallel-compare.js') = (globalThis as any).FreeAI4UParallelCompare;
 
 type Row = import('../worktrees.js').WorktreeRow;
 
 interface Card {
   row: Row;
+  /** The batch this run was started in — its key in the comparison store. */
+  batch: string;
   status: string;
   startedAt: number;
   endedAt: number | null;
@@ -91,8 +96,19 @@ export default function ParallelScreen({ localRoot }: Props) {
       else streamChat(provider, { model, messages, stream: true }, onFrame).then(done, reject);
     });
 
-  const runOne = async (row: Row, provider: string, model: string) => {
+  const runOne = async (row: Row, provider: string, model: string, batch: string, startedAt: number) => {
     const root = worktrees.absolute(localRoot, row.dir);
+    // C5: the numbers the Activity board compares. Recorded when the run
+    // ends — success or not — because the worktree itself may be discarded
+    // a minute later and the comparison has to outlive it.
+    const remember = async (status: string) => {
+      const num = await git(compareLib.numstatCommand(), row.dir).catch(() => null);
+      compareLib.record({
+        batch, root: localRoot, at: Date.now(), slug: row.slug, branch: row.branch,
+        task: row.task, ms: Date.now() - startedAt, status,
+        files: compareLib.parseNumstat(num?.stdout || ''),
+      });
+    };
     const send = ask(provider, model);
     const session = agent.createSession(root, model, provider);
     session.plan = [{ id: 0, title: row.task, status: 'running', tool: 'user_request', args: {}, result: null, diff: null }];
@@ -126,8 +142,10 @@ export default function ParallelScreen({ localRoot }: Props) {
         },
       });
       const stat = await git(worktrees.statCommand(), row.dir).catch(() => null);
+      await remember(session.status === 'error' ? 'error' : 'done').catch(() => {});
       patch(row.slug, { endedAt: Date.now(), status: session.status === 'error' ? 'error' : 'done', stat: (stat?.stdout || '').trim() || 'No changes.' });
     } catch (e) {
+      await remember('error').catch(() => {});
       patch(row.slug, { endedAt: Date.now(), status: 'error', error: ((e as Error).message || String(e)).split('\n')[0] });
     }
   };
@@ -144,7 +162,10 @@ export default function ParallelScreen({ localRoot }: Props) {
     if (!inside || !/true/.test(inside.stdout || '')) { pushToast('error', 'The open folder is not a git repository; worktrees need one (git init, then commit once).'); return; }
     await writeLocalFile(localRoot, '.neuraos/.gitignore', '*\n').catch(() => {});
     const now = Date.now();
-    setCards((prev) => [...rows.map((row) => ({ row, status: 'creating', startedAt: now, endedAt: null, steps: [], approval: null, stat: '', error: '', merged: false })), ...prev]);
+    // C5: every run of this press shares a batch, so the Activity board
+    // compares runs that answered the same set of tasks.
+    const batch = now.toString(36);
+    setCards((prev) => [...rows.map((row) => ({ row, batch, status: 'creating', startedAt: now, endedAt: null, steps: [], approval: null, stat: '', error: '', merged: false })), ...prev]);
     setText('');
     for (const row of rows) {
       const made = await git(worktrees.addCommand(row)).catch((e: Error) => ({ exitCode: 1, stderr: e.message, stdout: '' } as any));
@@ -153,7 +174,7 @@ export default function ParallelScreen({ localRoot }: Props) {
         continue;
       }
       patch(row.slug, { status: 'planning' });
-      void runOne(row, provider, model);
+      void runOne(row, provider, model, batch, now);
     }
   };
 
@@ -175,6 +196,8 @@ export default function ParallelScreen({ localRoot }: Props) {
       return;
     }
     patch(card.row.slug, { merged: true });
+    // C5: the board's comparison names the winner.
+    compareLib.markMerged(card.batch, card.row.slug);
     pushToast('ok', `Merged ${card.row.branch}.`);
   };
 
@@ -182,6 +205,9 @@ export default function ParallelScreen({ localRoot }: Props) {
     for (const command of worktrees.discardCommands(card.row)) {
       await git(command, undefined, true).catch(() => null);
     }
+    // C5: a discarded run's row leaves the comparison with it. A merged
+    // run's stays — its work is in the main tree, and the record says who won.
+    if (!card.merged) compareLib.remove(card.batch, card.row.slug);
     setCards((prev) => prev.filter((c) => c.row.slug !== card.row.slug));
   };
 
