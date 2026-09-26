@@ -9,6 +9,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   /** The set the first step offers: FLUX.2 [klein] 4B, the size most GPUs take. */
   var DEFAULT_REPO = 'Comfy-Org/flux2-klein-4B';
+  /** E5: the other image model's set — diffusion model, VAE and 7B encoder
+   *  under the folders hf-models.js reads as roles, so it lands as one set. */
+  var QWEN_REPO = 'Comfy-Org/Qwen-Image_ComfyUI';
 
   /** FLUX.2 in any of its spellings (the same rule as sd.rs is_flux2). */
   function isFlux2(name) {
@@ -47,15 +50,15 @@
       },
       {
         id: 'model',
-        label: 'FLUX.2 model',
+        label: 'Image model',
         done: hasFlux,
         detail: hasFlux
           ? baseName(model)
           : fluxOnDisk.length
             ? 'A FLUX.2 set is on disk: pick it as the model.'
             : model
-              ? baseName(model) + ' is chosen; FLUX.2 [klein] 4B is one click away.'
-              : 'Download FLUX.2 [klein] 4B from Hugging Face (three files, one folder).',
+              ? baseName(model) + ' is chosen; an image model is one click away.'
+              : 'Download an image model from Hugging Face — FLUX.2 [klein] 4B or Qwen-Image, each one folder.',
         action: hasFlux ? '' : fluxOnDisk.length ? 'pick-flux' : 'get-model',
         pick: fluxOnDisk.length ? fluxOnDisk[0].path : '',
       },
@@ -75,5 +78,5 @@
     return null;
   }
 
-  return { DEFAULT_REPO: DEFAULT_REPO, isFlux2: isFlux2, baseName: baseName, steps: steps, next: next };
+  return { DEFAULT_REPO: DEFAULT_REPO, QWEN_REPO: QWEN_REPO, isFlux2: isFlux2, baseName: baseName, steps: steps, next: next };
 });

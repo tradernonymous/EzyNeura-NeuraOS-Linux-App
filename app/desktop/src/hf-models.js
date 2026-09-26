@@ -269,12 +269,33 @@
 
   /** The name with its format, quant and precision taken off: two files with
    *  the same stem are alternatives (Q4 or Q8 of one encoder), two with
-   *  different stems are both needed (clip_l and t5xxl). */
+   *  different stems are both needed (clip_l and t5xxl). NVFP4 is a
+   *  precision like FP8, so the same encoder in the two lands in one group. */
   function stemOf(name) {
     return baseOf(name)
       .replace(/\.[^.]+$/, '')
-      .replace(/[-_.]?(IQ\d+_[A-Z0-9_]+|Q\d+_[A-Z0-9_]+|Q\d+|BF16|FP16|FP32|F16|F32|FP8(_E4M3FN|_E5M2)?(_SCALED)?)$/i, '')
+      .replace(/[-_.]?(IQ\d+_[A-Z0-9_]+|Q\d+_[A-Z0-9_]+|Q\d+|BF16|FP16|FP32|F16|F32|FP8(_E4M3FN|_E5M2)?(_SCALED)?|NVFP4|FP4)$/i, '')
       .toLowerCase();
+  }
+
+  /**
+   * The precision family two parts of one set should share: an FP8 model
+   * with the FP8 encoder, NVFP4 with NVFP4, and the Q/BF quants as
+   * parseQuant spells them. Used where the parts are matched ("the part
+   * whose quant matches the model's"): smallest-within-the-family beats
+   * smallest-overall, so a Qwen fp8 set does not end up with two encoders
+   * or with the bf16 one.
+   */
+  function quantFamily(name) {
+    var b = String(name || '').toUpperCase();
+    if (b.indexOf('NVFP4') >= 0 || /(^|[^A-Z0-9])FP4/.test(b)) return 'FP4';
+    if (b.indexOf('FP8') >= 0) return 'FP8';
+    var q = parseQuant(name);
+    if (q) return q;
+    // No quant named: an unquantized .safetensors is the original bf16
+    // weights, so a bf16 diffusion model pairs with the plain encoder
+    // beside it rather than with whichever quant is merely smallest.
+    return /\.SAFETENSORS$/.test(b) ? 'BF16' : '';
   }
 
   function folderName(name) {
@@ -329,13 +350,13 @@
         (groups[key] = groups[key] || []).push(f);
       });
       byRole.diffusion.forEach(function (d) {
-        var quant = parseQuant(d.name);
+        var family = quantFamily(d.name);
         var files = [d];
         Object.keys(groups).sort().forEach(function (key) {
           var options = groups[key].slice().sort(function (a, b) { return a.size - b.size; });
-          // The part whose quant matches the model's, else the smallest:
-          // the first person this is for has a 4 GB card.
-          var match = quant ? options.filter(function (o) { return parseQuant(o.name) === quant; })[0] : null;
+          // The part whose precision family matches the model's, else the
+          // smallest: the first person this is for has a 4 GB card.
+          var match = family ? options.filter(function (o) { return quantFamily(o.name) === family; })[0] : null;
           files.push(match || options[0]);
         });
         rows.push({
@@ -429,6 +450,7 @@
     getModel: getModel,
     ggufFiles: ggufFiles,
     parseQuant: parseQuant,
+    quantFamily: quantFamily,
     estimateFitsRam: estimateFitsRam,
     fileUrl: fileUrl,
     formatSize: formatSize,

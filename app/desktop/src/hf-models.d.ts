@@ -35,6 +35,8 @@ export declare function getModel(modelId: string, opts?: {
 }): Promise<HfModelCard>;
 export declare function ggufFiles(card: HfModelCard): GgufFile[];
 export declare function parseQuant(filename: string): string;
+/** The precision family two parts of one set should share (FP8, FP4, Q4_K_M…). */
+export declare function quantFamily(filename: string): string;
 export declare function estimateFitsRam(sizeBytes: number, quant: string): string;
 export declare function fileUrl(modelId: string, filename: string): string;
 export declare function formatSize(bytes: number): string;

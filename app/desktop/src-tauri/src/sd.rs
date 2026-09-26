@@ -693,6 +693,7 @@ pub fn args_for(model: &Path, port: u16, threads: Option<u32>) -> Vec<String> {
         args.push("-t".to_string());
         args.push(threads.to_string());
     }
+    args.extend(model_args_for(model));
     args
 }
 
@@ -843,6 +844,7 @@ pub fn args_for_set(parts: &SetParts, port: u16, threads: Option<u32>) -> Vec<St
         args.push("-t".to_string());
         args.push(threads.to_string());
     }
+    args.extend(model_args_for(&parts.diffusion));
     args
 }
 
@@ -1053,6 +1055,11 @@ pub struct Family {
     pub label: &'static str,
     pub cfg: f64,
     pub steps: u32,
+    /// The sampling method the family draws best with (api.md's
+    /// `sample_method`); None leaves sd-server's own default.
+    pub sampler: Option<&'static str>,
+    /// The flow shift (api.md's `flow_shift`): Qwen-Image wants 3.
+    pub shift: Option<f64>,
 }
 
 pub fn family_of(model: &Path) -> Option<Family> {
@@ -1060,25 +1067,53 @@ pub fn family_of(model: &Path) -> Option<Family> {
     let klein = name.contains("klein");
     let base = name.contains("base");
     let flux1 = name.contains("flux1") || name.contains("flux-1") || name.contains("flux.1");
-    if klein && base {
-        Some(Family { label: "FLUX.2 [klein] base", cfg: 4.0, steps: 20 })
+    if is_qwen_image(&name) {
+        // stable-diffusion.cpp's own docs/qwen_image.md example: --cfg-scale
+        // 2.5, --sampling-method euler, --flow-shift 3. The 20 steps are its
+        // default, written down here so the number is chosen, not assumed.
+        Some(Family { label: "Qwen-Image", cfg: 2.5, steps: 20, sampler: Some("euler"), shift: Some(3.0) })
+    } else if klein && base {
+        Some(Family { label: "FLUX.2 [klein] base", cfg: 4.0, steps: 20, sampler: None, shift: None })
     } else if klein {
-        Some(Family { label: "FLUX.2 [klein]", cfg: 1.0, steps: 4 })
+        Some(Family { label: "FLUX.2 [klein]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if is_flux2(&name) {
-        Some(Family { label: "FLUX.2 [dev]", cfg: 1.0, steps: 20 })
+        Some(Family { label: "FLUX.2 [dev]", cfg: 1.0, steps: 20, sampler: None, shift: None })
     } else if flux1 && name.contains("schnell") {
-        Some(Family { label: "FLUX.1 [schnell]", cfg: 1.0, steps: 4 })
+        Some(Family { label: "FLUX.1 [schnell]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if flux1 {
-        Some(Family { label: "FLUX.1", cfg: 1.0, steps: 20 })
+        Some(Family { label: "FLUX.1", cfg: 1.0, steps: 20, sampler: None, shift: None })
     } else {
         None
     }
 }
 
+/// Qwen-Image in any spelling: "qwen_image_fp8", "qwen-image-2512",
+/// "qwen_image_edit_2511". Its Qwen2.5-VL encoder (qwen_2.5_vl) does not
+/// match, and for a set model_name_of reads the diffusion part, never the
+/// encoder beside it.
+fn is_qwen_image(name: &str) -> bool {
+    name.contains("qwen-image") || name.contains("qwen_image")
+}
+
+/// `--model-args qwen_image_zero_cond_t=true`, which stable-diffusion.cpp's
+/// docs/qwen_image_edit.md says Qwen-Image-Edit-2511 needs or editing comes
+/// out wrong. Named by the weights themselves: 2509 predates the mode and
+/// 2512 changed the convention, so neither takes it, and nothing else does.
+pub fn model_args_for(model: &Path) -> Vec<String> {
+    let name = model_name_of(model);
+    if name.contains("qwen") && name.contains("edit") && name.contains("2511") {
+        vec!["--model-args".to_string(), "qwen_image_zero_cond_t=true".to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
 /// The job with the family's own numbers where the caller left them out:
-/// `sample_params.sample_steps` (only if absent) and `guidance.txt_cfg`
-/// (api.md's name for the classifier-free guidance scale). A model with no
-/// known family gets sd-server's defaults, exactly as before.
+/// `sample_params.sample_steps` and, for a family that names them,
+/// `sample_method` and `flow_shift` (only if absent) — plus
+/// `guidance.txt_cfg` (api.md's name for the classifier-free guidance
+/// scale), which the family always states. A model with no known family
+/// gets sd-server's defaults, exactly as before.
 pub fn with_family(mut body: serde_json::Value, family: Option<Family>) -> serde_json::Value {
     let Some(family) = family else {
         return body;
@@ -1090,6 +1125,16 @@ pub fn with_family(mut body: serde_json::Value, family: Option<Family>) -> serde
         body["sample_params"]["sample_steps"] = serde_json::json!(family.steps);
     }
     body["sample_params"]["guidance"] = serde_json::json!({ "txt_cfg": family.cfg });
+    if let Some(sampler) = family.sampler {
+        if body["sample_params"].get("sample_method").is_none() {
+            body["sample_params"]["sample_method"] = serde_json::json!(sampler);
+        }
+    }
+    if let Some(shift) = family.shift {
+        if body["sample_params"].get("flow_shift").is_none() {
+            body["sample_params"]["flow_shift"] = serde_json::json!(shift);
+        }
+    }
     body
 }
 
@@ -1595,6 +1640,46 @@ mod tests {
         assert_eq!(bare["sample_params"]["sample_steps"], 4);
         let plain = job_body("a cat", "", 512, 512, None, None, None, None);
         assert_eq!(with_family(plain.clone(), None), plain, "an unknown model keeps sd-server's defaults");
+    }
+
+    #[test]
+    fn qwen_image_brings_its_own_numbers_and_only_edit_2511_gets_model_args() {
+        let q = family_of(Path::new("m/qwen_image_fp8_e4m3fn.safetensors")).unwrap();
+        assert_eq!(q.label, "Qwen-Image");
+        assert_eq!((q.cfg, q.steps), (2.5, 20));
+        assert_eq!(q.sampler, Some("euler"));
+        assert_eq!(q.shift, Some(3.0));
+        assert!(family_of(Path::new("m/Qwen2.5-VL-7B-Instruct-q4_0.gguf")).is_none(), "the encoder is not a family");
+
+        let body = with_family(job_body("a cat", "", 512, 512, None, None, None, None), Some(q));
+        assert_eq!(body["sample_params"]["sample_method"], "euler");
+        assert_eq!(body["sample_params"]["flow_shift"], 3.0);
+        assert_eq!(body["sample_params"]["guidance"]["txt_cfg"], 2.5);
+        assert_eq!(body["sample_params"]["sample_steps"], 20);
+        // The caller's own numbers still win.
+        let asked = with_family(job_body("a cat", "", 512, 512, Some(40), None, None, None), Some(q));
+        assert_eq!(asked["sample_params"]["sample_steps"], 40);
+
+        assert_eq!(
+            model_args_for(Path::new("m/q/qwen_image_edit_2511_fp8_e4m3fn.safetensors")),
+            vec!["--model-args".to_string(), "qwen_image_zero_cond_t=true".to_string()]
+        );
+        assert!(model_args_for(Path::new("m/q/qwen_image_edit_2509_fp8.safetensors")).is_empty());
+        assert!(model_args_for(Path::new("m/q/qwen_image_2512_fp8.safetensors")).is_empty(), "2512 changed the convention");
+        assert!(model_args_for(Path::new("m/flux-2-klein-4b.safetensors")).is_empty());
+        let args = args_for_set(
+            &SetParts {
+                diffusion: PathBuf::from("q/qwen_image_edit_2511_fp8.safetensors"),
+                vae: None,
+                llm: None,
+                llm_vision: None,
+                clip_l: None,
+                t5xxl: None,
+            },
+            1234,
+            None,
+        );
+        assert!(args.windows(2).any(|w| w[0] == "--model-args" && w[1] == "qwen_image_zero_cond_t=true"));
     }
 
     #[test]

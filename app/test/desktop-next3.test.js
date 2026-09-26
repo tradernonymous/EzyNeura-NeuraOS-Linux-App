@@ -42,6 +42,19 @@ test('the card draws the steps and the Get button looks the set up at once', () 
   assert.match(card, /autoLookup\?: string;/);
 });
 
+test('E5: the model step is the image step, and Qwen-Image is the other get', () => {
+  assert.equal(setup.QWEN_REPO, 'Comfy-Org/Qwen-Image_ComfyUI');
+  const model = setup.steps(null, null)[1];
+  assert.equal(model.id, 'model');
+  assert.equal(model.label, 'Image model', 'the step is about both families now');
+  assert.equal(model.action, 'get-model');
+  const card = read('desktop', 'src', 'components', 'LocalImagesCard.tsx');
+  assert.match(card, />\s*Get Qwen-Image\s*</, 'the second get is on the step');
+  assert.match(card, /setWantRepo\(fluxSetup\.QWEN_REPO\)/, 'and it fills the Hugging Face box with the set');
+  assert.match(card, /aria-label="Image models on this PC"/);
+  assert.match(read('desktop', 'src', 'index.css'), /\.flux-step-actions/, 'the two buttons lay out side by side');
+});
+
 test('commit from the Changes panel: checked paths and message, commit itself never pushes', () => {
   const rust = read('desktop', 'src-tauri', 'src', 'git.rs');
   assert.match(rust, /pub fn local_git_commit\(/);

@@ -78,5 +78,42 @@ test('the Comfy-Org split layout is offered as one set, and FLUX.2 [klein] is on
   const source = card();
   assert.match(source, /repo: 'Comfy-Org\/flux2-klein-4B'/);
   assert.match(source, /repo: 'Comfy-Org\/flux2-klein-9B'/);
-  assert.match(source, /suggestions=\{FLUX2_SUGGESTIONS\}/);
+  assert.match(source, /suggestions=\{\[\.\.\.FLUX2_SUGGESTIONS, \.\.\.QWEN_SUGGESTIONS\]\}/);
+});
+
+test('Qwen-Image lands as one set with exactly one encoder per row (E5)', () => {
+  const repo = {
+    id: 'Comfy-Org/Qwen-Image_ComfyUI',
+    siblings: [
+      { rfilename: 'split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors', size: 20_430_000_000 },
+      { rfilename: 'split_files/diffusion_models/qwen_image_bf16.safetensors', size: 40_861_000_000 },
+      { rfilename: 'split_files/diffusion_models/qwen_image_nvfp4.safetensors', size: 19_769_000_000 },
+      { rfilename: 'split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors', size: 20_430_000_000 },
+      { rfilename: 'split_files/text_encoders/qwen_2.5_vl_7b.safetensors', size: 16_584_000_000 },
+      { rfilename: 'split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors', size: 9_384_000_000 },
+      { rfilename: 'split_files/text_encoders/qwen_2.5_vl_7b_nvfp4.safetensors', size: 6_114_000_000 },
+      { rfilename: 'split_files/vae/qwen_image_vae.safetensors', size: 253_000_000 },
+      { rfilename: 'README.md', size: 4_000 },
+    ],
+  };
+  const offer = hfModels.imageOffer(repo);
+  assert.equal(offer.rows.length, 4, 'one row per diffusion model');
+  const byName = {};
+  offer.rows.forEach((r) => { byName[r.label] = r; });
+  const encoderOf = (label) => byName[label].files.find((f) => f.name.includes('qwen_2.5_vl')).name;
+  for (const row of offer.rows) {
+    assert.equal(row.files.filter((f) => f.name.includes('qwen_2.5_vl')).length, 1,
+      `${row.label}: exactly one encoder — the three spellings are one group, not three parts`);
+    assert.equal(row.files.filter((f) => f.name.includes('vae')).length, 1, 'one VAE');
+  }
+  // The part that matches the model's precision, not merely the smallest.
+  assert.equal(encoderOf('qwen_image_fp8_e4m3fn.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors');
+  assert.equal(encoderOf('qwen_image_2512_fp8_e4m3fn.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors');
+  assert.equal(encoderOf('qwen_image_bf16.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b.safetensors');
+  assert.equal(encoderOf('qwen_image_nvfp4.safetensors'), 'split_files/text_encoders/qwen_2.5_vl_7b_nvfp4.safetensors');
+  // Smallest first: the ~26 GB fp8-free set is the one offered first.
+  assert.ok(offer.rows[0].size < 30_000_000_000, 'the smallest row is offered first');
+  const source = card();
+  assert.match(source, /repo: 'Comfy-Org\/Qwen-Image_ComfyUI'/);
+  assert.match(source, /about 30 GB as fp8, 26 GB for the lightest set/, 'the size is said before the download');
 });

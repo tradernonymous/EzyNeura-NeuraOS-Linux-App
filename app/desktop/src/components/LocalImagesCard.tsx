@@ -61,6 +61,21 @@ const FLUX2_SUGGESTIONS = [
   { label: 'FLUX.2 [klein] 9B', repo: 'Comfy-Org/flux2-klein-9B', note: 'sharper, needs a bigger card; non-commercial licence' },
 ];
 
+// E5: Qwen-Image next to them (BACKLOG "Qwen-Image on this PC"): the
+// Comfy-Org split repo carries the 20B diffusion model (fp8 ~20 GB,
+// bf16 ~41 GB), its VAE and the Qwen2.5-VL 7B encoder (fp8 ~9 GB) under
+// folders hf-models.js reads as roles, so the set lands in one download.
+// The rows the downloader draws carry each size and a fit note before
+// anything is fetched; sd.rs family_of sets cfg 2.5, euler and flow
+// shift 3 for it (stable-diffusion.cpp docs/qwen_image.md).
+const QWEN_SUGGESTIONS = [
+  {
+    label: 'Qwen-Image',
+    repo: 'Comfy-Org/Qwen-Image_ComfyUI',
+    note: '20B model + VAE + 7B encoder: about 30 GB as fp8, 26 GB for the lightest set — each row says what it costs on this PC',
+  },
+];
+
 function sizeOf(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
@@ -416,7 +431,7 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
       </summary>
       <div className="providers-note-body">
         {/* The guided path: three steps, the state of each, one button. */}
-        <ol className="flux-steps" aria-label="FLUX.2 on this PC">
+        <ol className="flux-steps" aria-label="Image models on this PC">
           {setupSteps.map((step, i) => (
             <li key={step.id} className={`flux-step ${step.done ? 'is-done' : setupNext && setupNext.id === step.id ? 'is-next' : ''}`}>
               <span className="flux-step-no" aria-hidden="true">{step.done ? '✓' : i + 1}</span>
@@ -425,14 +440,27 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
                 <span className="flux-step-detail">{step.detail}</span>
               </span>
               {!step.done && step.action && (
-                <button type="button" className="raised" disabled={!!busy || drawing} onClick={() => doStep(step)}>
-                  {step.action === 'pick-server' ? 'Choose sd-server…' : step.action === 'get-model' ? 'Get FLUX.2 [klein] 4B' : step.action === 'pick-flux' ? 'Use it' : 'Start'}
-                </button>
+                <span className="flux-step-actions">
+                  <button type="button" className="raised" disabled={!!busy || drawing} onClick={() => doStep(step)}>
+                    {step.action === 'pick-server' ? 'Choose sd-server…' : step.action === 'get-model' ? 'Get FLUX.2 [klein] 4B' : step.action === 'pick-flux' ? 'Use it' : 'Start'}
+                  </button>
+                  {step.action === 'get-model' && (
+                    <button
+                      type="button"
+                      className="raised"
+                      disabled={!!busy || drawing}
+                      title="Fill the Hugging Face box with the Qwen-Image set (model, VAE, encoder)"
+                      onClick={() => setWantRepo(fluxSetup.QWEN_REPO)}
+                    >
+                      Get Qwen-Image
+                    </button>
+                  )}
+                </span>
               )}
             </li>
           ))}
         </ol>
-        {!setupNext && <p className="settings-hint flux-ready">FLUX.2 is ready: pick Image or Edit image above and describe the picture.</p>}
+        {!setupNext && <p className="settings-hint flux-ready">Image models are ready: pick Image or Edit image above and describe the picture.</p>}
         <p className="settings-hint">
           stable-diffusion.cpp draws here: no account, no network. You supply the <span className="mono">sd-server</span>{' '}
           build and the model file; the app starts it on 127.0.0.1 when you draw and stops it when you quit.
@@ -471,12 +499,14 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
           A model that comes in parts (FLUX.2, Krea2, Qwen-Image) goes in its own folder there, with its VAE and
           text encoder beside it; it then shows up as one model marked "set of N files". FLUX.2 [klein] draws
           and changes pictures with the same weights, in four steps; the app sets its steps and cfg for it.
+          Qwen-Image comes the same way from the button above, and the app sets its cfg 2.5, euler sampling and
+          flow shift 3 for it (and the edit-2511 flag when that is the model).
         </p>
 
         <HubDownloader
           kind="image"
           placeholder="Comfy-Org/flux2-klein-4B, a model page link, or a .safetensors or .gguf link"
-          suggestions={FLUX2_SUGGESTIONS}
+          suggestions={[...FLUX2_SUGGESTIONS, ...QWEN_SUGGESTIONS]}
           disabled={drawing}
           onDownloaded={downloaded}
           autoLookup={wantRepo}
