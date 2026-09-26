@@ -177,7 +177,9 @@ fn remote_url(root: &Path) -> String {
 
 fn remote_name(root: &Path) -> Result<String, String> {
     let out = git(root, &["remote"])?;
-    let mut names = String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty());
+    // The lossy Cow outlives the iterator built from it.
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut names = text.lines().map(str::trim).filter(|l| !l.is_empty());
     let preferred = names.clone().find(|n| *n == "origin").map(str::to_string);
     preferred
         .or_else(|| names.next().map(str::to_string))
