@@ -812,6 +812,28 @@ fn log_file(app: &tauri::AppHandle) -> Option<PathBuf> {
     Some(dir.join("sd-server.log"))
 }
 
+/// What a failed start says, error lines first. The log opens with the
+/// Vulkan device lines, and the screen shows the first line of a message, so
+/// "Found 1 Vulkan devices" used to be all anyone saw of a model that would
+/// not load. A known failure also gets the sentence that says what to do.
+pub fn explain_tail(tail: &str) -> String {
+    let errors: Vec<String> = tail
+        .lines()
+        .filter(|l| l.contains("[ERROR") || l.contains("GGML_ASSERT"))
+        .map(|l| match l.rfind(" - ") {
+            Some(i) if l.contains("[ERROR") => l[i + 3..].trim().to_string(),
+            _ => l.trim().to_string(),
+        })
+        .collect();
+    let mut out = if errors.is_empty() { tail.trim().to_string() } else { errors.join(" · ") };
+    if tail.contains("get sd version from file failed") {
+        out.push_str(
+            " -- stable-diffusion.cpp does not recognise this file as a model. Most often it is a UNet-only GGUF made for ComfyUI: use the full .safetensors checkpoint instead, or add the file with its VAE and text encoders as a set.",
+        );
+    }
+    out
+}
+
 fn log_tail(app: &tauri::AppHandle) -> String {
     let Some(path) = log_file(app) else {
         return String::new();
@@ -945,9 +967,9 @@ pub async fn sd_start(
             }
         };
         if let Some(reason) = exited {
-            let tail = log_tail(&app);
+            let tail = explain_tail(&log_tail(&app));
             shutdown();
-            return Err(format!("{}. {}", reason, tail));
+            return Err(format!("{}: {}", reason, tail));
         }
         let (ok, detail) = ready(port).await;
         if ok {
@@ -967,7 +989,7 @@ pub async fn sd_start(
             return Ok(snapshot(&guard, true, detail));
         }
         if Instant::now() >= deadline {
-            let tail = log_tail(&app);
+            let tail = explain_tail(&log_tail(&app));
             shutdown();
             return Err(format!(
                 "sd-server did not become ready within {} s. {}",
@@ -1420,6 +1442,21 @@ pub async fn sd_cancel(id: String) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_start_leads_with_the_error_not_the_vulkan_banner() {
+        // The PC's log for a ComfyUI-style SDXL GGUF.
+        let tail = "ggml_vulkan: Found 1 Vulkan devices:\nggml_vulkan: 0 = NVIDIA GeForce GTX 1050 Ti (NVIDIA) | uma: 0\n[INFO   ] model_loader.cpp:215  - load x.gguf using gguf format\n[ERROR  ] diffusion_engine.cpp:974  - get sd version from file failed: 'x.gguf'\n[ERROR  ] main.cpp:93   - new_sd_ctx_t failed";
+        let said = explain_tail(tail);
+        assert!(said.starts_with("get sd version from file failed"), "{}", said);
+        assert!(said.contains("new_sd_ctx_t failed"));
+        assert!(!said.contains("Vulkan devices"));
+        assert!(said.contains("UNet-only GGUF made for ComfyUI"));
+        // No error lines: the tail as it was.
+        assert_eq!(explain_tail("  just info\n"), "just info");
+        // An assert is an error too (the FP4 crash).
+        assert!(explain_tail("x\n/src/ggml_block.hpp:173: GGML_ASSERT(scale_nelements == 1) failed\n").starts_with("/src/ggml_block.hpp:173: GGML_ASSERT"));
+    }
 
     #[test]
     fn a_set_never_takes_an_fp4_part() {
