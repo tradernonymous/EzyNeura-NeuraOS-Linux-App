@@ -196,6 +196,16 @@
     return out;
   }
 
+  /**
+   * pairKey(a, b) — B4: one identity for a collision, whatever order it was
+   * found in, so the written reason for keeping both is found again.
+   */
+  function pairKey(a, b) {
+    var x = String(a == null ? '' : a);
+    var y = String(b == null ? '' : b);
+    return x < y ? x + '||' + y : y + '||' + x;
+  }
+
   /** B2: what one skill costs in every prompt, in tokens. */
   function contextCost(skill) {
     var s = skill || {};
@@ -283,6 +293,7 @@
     triggers: triggers,
     lintSkill: lintSkill,
     lintRouting: lintRouting,
+    pairKey: pairKey,
     contextCost: contextCost,
     catalogCost: catalogCost,
     prereqTools: prereqTools,

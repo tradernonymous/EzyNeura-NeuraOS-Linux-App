@@ -6761,6 +6761,12 @@ input, textarea, select { border-radius: 8px; }
 .gh-install { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .gh-install input { flex: 1 1 220px; min-width: 0; padding: 7px 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12.5px; }
 .gh-install button { flex: none; }
+/* B4: a collision the router cannot separate, and the written reason for keeping both. */
+.skill-routing { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.skill-warn { padding: 8px 10px; border: 1px solid var(--edge); border-left: 3px solid #f5b642; border-radius: 8px; background: var(--bg-2); font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+.skill-reason { display: flex; flex-wrap: wrap; gap: 6px; }
+.skill-reason input { flex: 1 1 180px; min-width: 0; padding: 5px 8px; border: 1px solid var(--edge); border-radius: 6px; background: var(--bg-1); color: var(--text-1); font: inherit; font-size: 12px; }
+.skill-reason button { flex: none; font-size: 11.5px; }
 
 /* ---- Push and pull, unstage, discard (the Changes panel, E1/E2) -------- */
 .chat-output-sync { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }

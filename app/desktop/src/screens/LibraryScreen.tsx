@@ -4,6 +4,7 @@ import { api } from '../api';
 import Icon from '../components/Icon';
 import { runLocal, writeLocalFile } from '../bridge';
 import { isLinux } from '../platform';
+import { pushToast } from '../components/Toasts';
 import { OPEN_CHAT_EVENT, type ChatSession } from './ChatScreen';
 // UMD modules: loaded for their side effect, read off globalThis.
 import '../chats.js';
@@ -12,11 +13,13 @@ import '../hf-models.js';
 import '../skill-lint.js';
 import '../hf-skills.js';
 import '../gh-skills.js';
+import '../save-as-skill.js';
 
 const hfAuth: typeof import('../hf-auth.js') = (globalThis as any).FreeAI4UHfAuth;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
 const hfSkills: typeof import('../hf-skills.js') = (globalThis as any).FreeAI4UHfSkills;
 const ghSkills: typeof import('../gh-skills.js') = (globalThis as any).FreeAI4UGhSkills;
+const saveSkill: typeof import('../save-as-skill.js') = (globalThis as any).FreeAI4USaveAsSkill;
 const skillLint: typeof import('../skill-lint.js') = (globalThis as any).FreeAI4USkillLint;
 
 // Single-quote a path for the one shell line below (chmod). POSIX-correct for
@@ -44,6 +47,28 @@ function readLocalRoot(): string {
     return localStorage.getItem(LOCAL_ROOT_KEY) || '';
   } catch {
     return '';
+  }
+}
+
+// B4: a collision that stays, stays for a written reason — kept on this
+// machine, never in a file the engine reads (a reason for the router would
+// be a second thing the router could misread).
+const REASON_KEY = 'freeai4u.skillRouting.reasons';
+
+function readReasons(): Record<string, string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REASON_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function keepReasons(map: Record<string, string>): void {
+  try {
+    localStorage.setItem(REASON_KEY, JSON.stringify(map));
+  } catch {
+    /* private or full store: the reason lasts this session, the files stay */
   }
 }
 
@@ -99,6 +124,13 @@ export default function LibraryScreen() {
   const [ghError, setGhError] = useState('');
   const [ghFound, setGhFound] = useState<string>('');
   const [ghCatalog, setGhCatalog] = useState<any[]>([]);
+
+  // --- B4: routing collisions and their written reasons ------------------
+  const [reasons, setReasons] = useState<Record<string, string>>(readReasons);
+  const [reasonDraft, setReasonDraft] = useState<Record<string, string>>({});
+
+  // --- B12: save a chat as a skill ---------------------------------------
+  const [saveState, setSaveState] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const onAuth = () => setHfSignedIn(hfAuth.signedIn());
@@ -208,6 +240,40 @@ export default function LibraryScreen() {
       // The whole point of the error path: say what failed, in the words
       // hf-skills.js already chose, instead of a silent no-op.
       setInstallState((s) => ({ ...s, [slug]: { phase: 'error', text: (err as Error).message } }));
+    }
+  }, [localRoot, installed]);
+
+  // B12: a finished chat becomes a SKILL.md — built here, lint-gated inside
+  // build(), written only when the lint passes, then recorded like any other
+  // installed skill so the running total and the duplicate rule see it.
+  const saveChatAsSkill = useCallback(async (c: ChatSession) => {
+    if (!localRoot) { pushToast('warn', 'Open a folder first — a skill lands in the folder you are working in.'); return; }
+    const built = saveSkill.build(
+      { title: c.title, messages: c.messages as any },
+      { others: Object.values(installed).map((r: any) => r.description).filter(Boolean) },
+    );
+    if ('error' in built) {
+      pushToast('error', built.error);
+      setSaveState((s) => ({ ...s, [c.id]: built.error }));
+      return;
+    }
+    try {
+      const dir = `${hfSkills.SKILLS_DIR}/${built.slug}`;
+      const path = `${dir}/SKILL.md`;
+      const text = saveSkill.render(built);
+      await writeLocalFile(localRoot, path, text);
+      setInstalled(hfSkills.rememberInstalled(
+        { name: built.name, description: built.description, content: built.body, repo: 'chat:' + (c.title || c.id) },
+        { dir, files: [path], bytes: text.length },
+      ));
+      const note = `Saved as ${built.slug} (${text.length} bytes)` +
+        (built.warnings.length ? ` — ${built.warnings[0]}` : '');
+      setSaveState((s) => ({ ...s, [c.id]: note }));
+      pushToast('ok', note);
+    } catch (err) {
+      const why = (err as Error).message || String(err);
+      setSaveState((s) => ({ ...s, [c.id]: why }));
+      pushToast('error', why);
     }
   }, [localRoot, installed]);
 
@@ -351,6 +417,55 @@ export default function LibraryScreen() {
               </div>
             ) : null;
           })()}
+          {(() => {
+            // B4: two skills sharing two or more triggers compete on every
+            // prompt. The pair is flagged; keeping both is allowed, but only
+            // with a written reason on this machine.
+            const rows = Object.values(installed)
+              .filter((r: any) => r && r.name && r.description)
+              .map((r: any) => ({ name: String(r.name), description: String(r.description) }));
+            const collisions = skillLint.lintRouting(rows);
+            if (!collisions.length) return null;
+            return (
+              <div className="skill-routing">
+                {collisions.map((c) => {
+                  const key = skillLint.pairKey(c.a, c.b);
+                  const reason = reasons[key] || '';
+                  const draft = reasonDraft[key] ?? reason;
+                  return (
+                    <div className="skill-warn" key={key}>
+                      <div>
+                        <strong>{c.a}</strong> and <strong>{c.b}</strong> both claim{' '}
+                        {c.shared.map((w: string) => `“${w}”`).join(', ')} — on every prompt the router
+                        cannot tell them apart. Re-word one description to narrow it, or remove one folder.
+                      </div>
+                      <div className="skill-reason">
+                        <input
+                          value={draft}
+                          onChange={(e) => setReasonDraft((d) => ({ ...d, [key]: e.target.value }))}
+                          placeholder="Why keep both? (a written reason)"
+                          aria-label={`Why keep ${c.a} and ${c.b}`}
+                        />
+                        <button
+                          onClick={() => {
+                            const next = { ...reasons };
+                            if (draft.trim()) next[key] = draft.trim();
+                            else delete next[key];
+                            setReasons(next);
+                            keepReasons(next);
+                          }}
+                          disabled={draft.trim() === reason}
+                        >
+                          {reason ? 'Update' : 'Save reason'}
+                        </button>
+                      </div>
+                      {reason && <div className="skill-src">Keeping both: {reason}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {hfCatalogLoading && <div className="empty">Loading HF skills…</div>}
           <div className="skill-list">
             {[...hfCatalog, ...ghCatalog].map((s: any) => {
@@ -443,10 +558,22 @@ export default function LibraryScreen() {
               <h3 className="col-title">Chats on this machine ({chats.length})</h3>
               <div className="skill-list">
                 {chats.map((c) => (
-                  <button key={c.id} className="skill-item" onClick={() => openChat(c.id)}>
-                    <div className="skill-name">{c.title || 'Untitled'}</div>
-                    <div className="skill-src">{c.messages.length} messages · {new Date(c.updatedAt).toLocaleString()}</div>
-                  </button>
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <button className="skill-item" onClick={() => openChat(c.id)}>
+                      <div className="skill-name">{c.title || 'Untitled'}</div>
+                      <div className="skill-src">{c.messages.length} messages · {new Date(c.updatedAt).toLocaleString()}</div>
+                    </button>
+                    <div className="skill-src" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        onClick={() => void saveChatAsSkill(c)}
+                        title="Turn this chat into a SKILL.md in .neuraos/skills — the same lint gates it as an install"
+                      >
+                        <Icon name="download" size={12} /> Save as skill
+                      </button>
+                      {saveState[c.id] && <span>{saveState[c.id]}</span>}
+                      {!localRoot && <span>Open a folder to save</span>}
+                    </div>
+                  </div>
                 ))}
                 {!chats.length && <div className="empty">Chats you start appear here, saved on this device only.</div>}
               </div>

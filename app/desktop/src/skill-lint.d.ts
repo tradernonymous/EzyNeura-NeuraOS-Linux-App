@@ -43,6 +43,8 @@ export declare function parseSkill(text: string | null | undefined): { front: Re
 export declare function triggers(description: string | null | undefined): Set<string>;
 export declare function lintSkill(input: SkillLintInput): SkillLintFindings;
 export declare function lintRouting(skills: Array<{ name: string; description: string }>): RoutingCollision[];
+/** B4: one order-independent key for a collision pair (the written reason's handle). */
+export declare function pairKey(a: string, b: string): string;
 export declare function contextCost(skill: { name?: string; description?: string }): { tokens: number; chars: number };
 export declare function catalogCost(
   skills: Array<{ name?: string; description?: string }>,
