@@ -24,7 +24,7 @@ to. Later waves follow `docs/APP_UPGRADE_PLAN.md`.
 | L3 | Engine on your machine (Cloud/Local/Offline) | **Local mode working end-to-end** (below); one-click Node 24 (sha256-checked from nodejs.org) and the engine as a systemd user service on 127.0.0.1:47831 (below); Offline mode is the existing local-runtime chat (llama-server / Ollama targets) |
 | L4 | Local AI on Linux (Vulkan llama.cpp, whisper.cpp, sd.cpp) | In progress — one-click llama.cpp (Vulkan or CPU) into the app's folder, a GPU/VRAM hardware line with a size suggestion (below), plus the earlier discovery and .so fixes; **FLUX.2 on this PC** (below): the Images space draws and changes pictures with FLUX.2 [klein] / [dev] through the user's sd-server, one click from Hugging Face; a Mint hardware run, tokens/s, whisper and sd.cpp one-click still open |
 | L5 | Linux-native features (Voice Type, notifications, Nemo, systemd, sandbox) | Code done (below): Voice Type, Approve/Reject on notifications, Nemo actions, tray states, bubblewrap, the engine service (L3); none of it yet demonstrated on Mint hardware; systemd-timer schedules and screenshot→ask not started |
-| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; **NeuraOS as an MCP server built** (below): `freeai4u-desktop --mcp` serves neuraos_status / neuraos_models / neuraos_chat / neuraos_image / neuraos_open over stdio, with copy-paste commands for Claude Code, Gemini CLI and a config JSON in Settings → Connectors; the Activity-board compare not started |
+| L6 | Agent mission control (ACP, parallel worktrees, MCP server) | ACP client working to the handshake against a real agent (below): Code → Agents (ACP) runs Gemini CLI / Claude Code / Codex / any ACP command in the open folder behind NeuraOS's approval cards and notification buttons; Parallel worktrees already in the `.exe`; **NeuraOS as an MCP server built** (below): `freeai4u-desktop --mcp` serves neuraos_status / neuraos_models / neuraos_chat / neuraos_image / neuraos_open over stdio, with copy-paste commands for Claude Code, Gemini CLI and a config JSON in Settings → Connectors; the Activity-board compare **built** (`docs/UPGRADE_WAVE_2.md`) |
 | L7 | Distribution and updates (apt repo, AppImage feed, Flatpak) | **Release pipeline built** (below): `release.yml` on a `v*` tag publishes the `.deb`, the AppImage, `SHA256SUMS` and a signed `desktop-version.json` to Releases and rebuilds the apt repository on GitHub Pages; the installed app updates itself from it (a `.deb` through Mint's package installer, an AppImage in place). Needs the maintainer to run `packaging/release/make-keys.sh` once and enable Pages; Flatpak not started |
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland; **the same over MCP** (below, "The PC plan, built"): `neuraos_screenshot` and `neuraos_desktop` on the `--mcp` server behind a second toggle in Settings → Desktop control |
@@ -242,9 +242,10 @@ Not verified: a live turn on Mint hardware.
 
 ## Approved for later: the next four
 
-Approved after the "next three" merged (PR #15); not started. On hold,
-folded into `docs/APP_UPGRADE_PLAN.md` as phase E (the PC side is
-`docs/PC_UPGRADE_PLAN.md`).
+Approved after the "next three" merged (PR #15). Folded into
+`docs/APP_UPGRADE_PLAN.md` as phase E (the PC side is
+`docs/PC_UPGRADE_PLAN.md`); **all five are now built** — see
+`docs/UPGRADE_WAVE_2.md`.
 
 1. **Push and pull from the Changes panel**, with the ahead/behind count
    already on the branch line and the remote's host checked before any
@@ -257,7 +258,8 @@ folded into `docs/APP_UPGRADE_PLAN.md` as phase E (the PC side is
 4. **A Hugging Face token test** next to the paste field that reports
    which Inference Providers the token can reach, so an empty Model
    column never looks like a bug.
-5. **Qwen-Image on this PC.** `sd.rs` already resolves a Qwen-Image set
+5. **Qwen-Image on this PC — built (wave 2, `5159903`;**
+   `docs/UPGRADE_WAVE_2.md`). `sd.rs` already resolves a Qwen-Image set
    (the Qwen2.5-VL 7B encoder and its vision projector as `--llm` and
    `--llm_vision`; a model named "edit" edits by reference), and
    stable-diffusion.cpp documents Qwen-Image, Qwen-Image-Edit, Edit-2509
@@ -269,7 +271,14 @@ folded into `docs/APP_UPGRADE_PLAN.md` as phase E (the PC side is
    with a FLUX.2 / Qwen-Image choice; a size warning before the download
    (the 7B encoder alone is about 8 GB at fp8; the 20B model needs
    roughly 12 GB at Q4). File names and sizes to be read from the repo
-   listings at build time.
+   listings at build time. Built: the suggestion row beside the FLUX.2
+   ones with the sizes said before the download, the `family_of` entry
+   with those numbers, the Edit-2511 `--model-args`, the stepper's
+   "Image model" step with both gets, and a set matcher that keeps the
+   three encoder spellings in one group. Not done as written: the sizes
+   are read from the repo listing when the box is looked up, not baked at
+   build time, and QuantStack GGUF rows were left out — that repo carries
+   no VAE or encoder, so it would not form a set.
 
 ## The next three: FLUX.2 steps, commit from Changes, recent projects
 
@@ -1093,3 +1102,21 @@ and the NVIDIA/DMA-BUF guard on a machine that actually has an NVIDIA GPU.
 None of this can be ticked off from a headless container with no display,
 no session bus user session, and no GPU — say so plainly rather than
 claiming it, and treat it as this phase's real remaining work.
+
+## Upgrade wave 2: the plan's phases B–E are built (2026-09-26)
+
+Every phase of `docs/APP_UPGRADE_PLAN.md` — B (skills), C (agents and
+runs), D (release and security hardening) and E (the five held
+follow-ups) — is implemented and pushed to `main`. The per-phase detail,
+the three defects the work exposed (the scanner reading libraries as
+secrets, the set matcher double-loading encoders, the broker needing two
+CI rounds to compile), and the honest verified / not-verified split are
+in `docs/UPGRADE_WAVE_2.md`; the plan's own header says so now too.
+
+Verified: every push's Linux CI run green (last `36223336659`, covering
+`cargo test --locked`, `clippy -D warnings`, the node tests, both builds
+and both scans); locally `tsc --noEmit`, 247 node tests, `npm run build`,
+the bundle-size check and the dist secrets scan. Not verified here: real
+Mint hardware, a real GPU draw of FLUX.2 or Qwen-Image, and a live SSH
+host or API credential pushed through the C10 broker — its rules are
+unit-tested, the call itself is not.

@@ -2,7 +2,9 @@
 
 The NeuraOS app's half of the upgrade plan. The machine-side half (Claude
 Code, its GUI, skills and safety on this PC) is `PC_UPGRADE_PLAN.md`.
-Researched 2026-09-25; nothing here is built yet. The five follow-ups
+Researched 2026-09-25; **built 2026-09-26** — every phase below is
+implemented. What landed, what CI proved, and what is still unverified
+is written down in `docs/UPGRADE_WAVE_2.md`. The five follow-ups
 approved earlier (push/pull, amend/unstage, FLUX.2 first run, HF token
 test, Qwen-Image) are phase E.
 
