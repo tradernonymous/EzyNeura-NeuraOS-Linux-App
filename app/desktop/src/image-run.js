@@ -45,6 +45,50 @@
     try { return root && root.localStorage ? root.localStorage : null; } catch { return null; }
   }
 
+  // ---- LoRAs for local jobs ------------------------------------------------
+  //
+  // Which LoRAs from the LoRA folder a job on this PC carries, and at what
+  // strength: [{ name, multiplier }]. Kept per machine; the shell checks each
+  // name against the folder again when the job goes out.
+  var LORAS_KEY = 'freeai4u.sd.loras';
+
+  function clampMultiplier(value) {
+    var n = Number(value);
+    if (!isFinite(n)) return 1;
+    return Math.max(-2, Math.min(2, Math.round(n * 100) / 100));
+  }
+
+  function readLoras(storage) {
+    var store = storageOf(storage);
+    if (!store) return [];
+    try {
+      var list = JSON.parse(store.getItem(LORAS_KEY) || '[]');
+      if (!Array.isArray(list)) return [];
+      return list
+        .filter(function (p) { return p && typeof p.name === 'string' && p.name; })
+        .map(function (p) { return { name: p.name, multiplier: clampMultiplier(p.multiplier) }; });
+    } catch {
+      return [];
+    }
+  }
+
+  function writeLoras(list, storage) {
+    var store = storageOf(storage);
+    var clean = (Array.isArray(list) ? list : [])
+      .filter(function (p) { return p && p.name; })
+      .map(function (p) { return { name: String(p.name), multiplier: clampMultiplier(p.multiplier) }; });
+    try { if (store) store.setItem(LORAS_KEY, JSON.stringify(clean)); } catch { /* full or private */ }
+    return clean;
+  }
+
+  /** A local job's body with the chosen LoRAs, dropping any no longer on disk. */
+  function withLoras(body, picks, available) {
+    var names = Array.isArray(available) ? available : null;
+    var list = (picks || []).filter(function (p) { return !names || names.indexOf(p.name) >= 0; });
+    if (!list.length) return body;
+    return Object.assign({}, body, { loras: list });
+  }
+
   // ---- the Images screen's choice ---------------------------------------
 
   /** { choiceId, size, model, editModel } -- blanks when nothing was kept. */
@@ -223,7 +267,8 @@
       })
       .then(function (sized) {
         if (sized === '' || stopped()) { onJob(null); return ''; }
-        return Promise.resolve(call('sd_generate', sized)).then(function (submitted) {
+        var job = withLoras(sized, readLoras());
+        return Promise.resolve(call('sd_generate', job)).then(function (submitted) {
           id = String((submitted && submitted.id) || '');
           if (!id) throw new Error('The local server accepted the job without an id.');
           onJob({ id: id, label: 'Queued', since: Date.now() });
@@ -378,6 +423,9 @@
   return {
     CHOICE_KEY: CHOICE_KEY,
     HANDOFF_EVENT: HANDOFF_EVENT,
+    readLoras: readLoras,
+    writeLoras: writeLoras,
+    withLoras: withLoras,
     readChoice: readChoice,
     writeChoice: writeChoice,
     modelFor: modelFor,

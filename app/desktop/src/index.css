@@ -6911,3 +6911,11 @@ input, textarea, select { border-radius: 8px; }
   cursor: default;
 }
 .image-preview-bar .image-prompt { flex: 1 1 240px; color: var(--text, #c9d1d9); font-size: 13px; }
+
+/* LoRAs in the "On this PC" card. */
+.lora-section { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.lora-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lora-name { display: flex; align-items: center; gap: 6px; flex: 1 1 180px; min-width: 0; }
+.lora-name .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lora-strength { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.lora-strength input { width: 64px; }

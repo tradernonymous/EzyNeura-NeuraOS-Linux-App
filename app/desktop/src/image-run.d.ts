@@ -61,3 +61,10 @@ export declare function savePicture(url: string, doc?: Document): boolean;
 export declare function measurePicture(url: string, ImageCtor?: any): Promise<{ width: number; height: number }>;
 export declare function handOff(url: string, announce?: (event: string) => void): boolean;
 export declare function takeHandoff(): string | null;
+
+export interface LoraPick { name: string; multiplier: number }
+/** The LoRAs a job on this PC carries (per machine). */
+export declare function readLoras(storage?: Storage): LoraPick[];
+export declare function writeLoras(list: LoraPick[], storage?: Storage): LoraPick[];
+/** The job body with the chosen LoRAs; names not in `available` are dropped. */
+export declare function withLoras<T extends object>(body: T, picks: LoraPick[], available?: string[]): T & { loras?: LoraPick[] };
