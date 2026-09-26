@@ -29,6 +29,17 @@ to. Later waves follow `docs/APP_UPGRADE_PLAN.md`.
 | L8 | Hardening and Mint 23 / Wayland | The Xvfb smoke test is a CI gate with a screenshot artifact (below); **Wayland portals built** (below): Screenshot, GlobalShortcuts for the four chords, RemoteDesktop for Voice Type, and `wl-paste` for the selection; WebDriver e2e and the performance budget not started |
 | L9 | Desktop control (optional) | **Built** (below): screen-ask (`Ctrl+Alt+S`, the palette, Settings) attaches a screenshot to the chat; with Desktop control on, a model gets screen_capture / desktop_click / desktop_type / desktop_key / desktop_scroll, each behind an Allow card, through xdotool on X11 and the RemoteDesktop portal on Wayland; **the same over MCP** (below, "The PC plan, built"): `neuraos_screenshot` and `neuraos_desktop` on the `--mcp` server behind a second toggle in Settings → Desktop control |
 
+## UI/UX upgrade plan, drafted (2026-09-26)
+
+`docs/UI_UPGRADE_PLAN.md`: the pasted shadcn/Next.js/Tailwind proposal,
+checked against the code. Its premises that do not hold (no shared UI
+package, no Next.js or Tailwind, a native-Compose phone app) and the
+parts already built (palette, steps fold, approvals, grouped Settings,
+AA sweep) are listed; the open work is phases U0 to U6: U0 folds the 127
+always-open help paragraphs (mostly Settings) behind an info toggle,
+then U1 fixes the chat re-rendering and re-parsing the whole thread on
+every streamed token. Nothing built yet.
+
 ## Check for updates: "no release yet" is an answer (2026-09-25)
 
 Found on the first Mint machine: "Check for updates" ended on a server
