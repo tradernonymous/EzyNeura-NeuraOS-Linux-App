@@ -14,11 +14,14 @@ import ChatOutput from '../components/ChatOutput';
 import '../turn.js';
 import '../built-in-skills.js';
 import '../audit.js';
+// C7: one local line per model call and tool call (Activity reads it).
+import '../traces.js';
 import MintPackCard from '../components/MintPackCard';
 
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
 const builtIn: typeof import('../built-in-skills.js') = (globalThis as any).FreeAI4UBuiltInSkills;
 const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
+const traceLib: typeof import('../traces.js') = (globalThis as any).FreeAI4UTraces;
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -825,6 +828,8 @@ export default function ChatScreen() {
       onText: (piece) => { last += piece; run.onText?.(piece); },
       onTool: (event) => { last = ''; upsert({ ...event, id: prefix + event.id, summary: `${agent.name}: ${event.summary}` }); },
       onNote: (note) => pushToast('info', `${agent.name}: ${note}`),
+      // C7: a sub-agent's calls are calls too, tagged with the agent.
+      onTrace: (event) => traceLib.append({ ...event, provider: target.provider, model: target.model, agent: agent.name }),
       signal: run.signal,
     });
     return agentsLib.formatResult(agent, last);
@@ -1507,6 +1512,9 @@ _${done.notes.join(' · ')}_` : said,
         asks: (name, nameArgs) => (name === 'run_command' && approval.presetAllows(root, name, nameArgs)
           ? ''
           : toolsLib.needsApproval(name)),
+        // C7: a local line per model round and tool call — timing, size and
+        // outcome, never arguments or text, and never sent anywhere.
+        onTrace: (event) => traceLib.append({ ...event, provider: asked.provider, model: asked.model }),
         onNote: (note) => pushToast('info', note),
         signal: controller.signal,
       };

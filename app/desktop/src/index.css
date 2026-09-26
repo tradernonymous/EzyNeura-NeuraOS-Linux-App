@@ -4389,6 +4389,14 @@ button.linkish {
 /* C11: the folders where the read-only preset is on. */
 .audit-readonly { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border, #26263a); }
 .audit-readonly .audit-row { gap: 8px; }
+/* C7: one trace line per call. */
+.trace-row { display: flex; gap: 10px; align-items: baseline; font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.trace-row:last-child { border-bottom: 0; }
+.trace-when { flex: none; color: var(--text-3, #80849a); }
+.trace-kind { flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 999px; background: var(--bg-3, #1c1c28); color: var(--text-3, #80849a); }
+.trace-kind.is-model { background: var(--accent-dim, #26263a); color: var(--accent, #7aa2ff); }
+.trace-what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.trace-meta { flex: none; color: var(--text-3, #80849a); }
 .audit-summary { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-family: var(--font-mono, monospace); font-size: 12px; }
 .audit-when { flex: none; color: var(--text-3, #80849a); font-size: 11px; }
 

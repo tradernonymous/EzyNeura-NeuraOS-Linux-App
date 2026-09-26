@@ -15,6 +15,8 @@ import '../runs.js';
 import '../audit.js';
 // C11: the read-only preset's folder list (with its way off).
 import '../approval.js';
+// C7: the local traces — model and tool calls, one line each.
+import '../traces.js';
 import { OPEN_CHAT_EVENT } from './ChatScreen';
 
 const runsLib: typeof import('../runs.js') = (globalThis as any).FreeAI4URuns;
@@ -24,6 +26,7 @@ const LAYOUT_KEY = 'freeai4u.runs.layout';
 const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4URecipes;
 const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
 const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
+const tracesLib: typeof import('../traces.js') = (globalThis as any).FreeAI4UTraces;
 const threadsLib: typeof import('../threads.js') = (globalThis as any).FreeAI4UThreads;
 
 type Props = { onOpen: (view: ViewId) => void };
@@ -63,6 +66,8 @@ export default function ActivityScreen({ onOpen }: Props) {
   useEffect(() => recipesLib.approvals.subscribe(setPending), []);
   // C11: turning a folder's read-only preset off has to redraw the list.
   const [, setPresetAt] = useState(0);
+  // C7: the same for clearing the traces.
+  const [, setTraceAt] = useState(0);
   const busy = useBusyChats();
   const { model, engine } = useShellStatus();
   const [recipes] = useState(() => recipesLib.list().filter((r) => r.schedule && r.schedule.enabled !== false));
@@ -243,6 +248,40 @@ export default function ActivityScreen({ onOpen }: Props) {
             </div>
           );
         })()}
+      </section>
+
+      {/* C7: local traces — one line per model call and tool call, kept in
+          this app's own store and read by nothing else. Timing, size and
+          outcome only: the prompt, the arguments and the result are not in
+          any line, so there is nothing here to leak or to send. */}
+      <section className="activity-section">
+        <h2><Icon name="activity" size={14} /> Traces</h2>
+        {(() => {
+          const rows = tracesLib.recent(30);
+          if (!rows.length) {
+            return <p className="settings-hint">Nothing traced yet. Every model call and tool call in a chat writes one line here — on this machine only, never sent anywhere.</p>;
+          }
+          return (
+            <ul className="activity-list trace-list">
+              {rows.map((r, i) => (
+                <li key={`${r.at}-${i}`} className="trace-row mono">
+                  <span className="trace-when">{new Date(r.at).toLocaleTimeString()}</span>
+                  <span className={`trace-kind is-${r.kind}`}>{r.kind === 'model' ? 'model' : 'tool'}</span>
+                  <span className="trace-what">
+                    {r.kind === 'model'
+                      ? [r.provider, r.model].filter(Boolean).join(' · ') + (r.agent ? ` (${r.agent})` : '') + (r.error ? ` — ${r.error}` : '')
+                      : `${(r as import('../traces.js').TraceTool).name} · ${(r as import('../traces.js').TraceTool).status}${r.agent ? ` (${r.agent})` : ''}`}
+                  </span>
+                  <span className="trace-meta">{r.ms}ms{r.kind === 'model' ? ` · ${r.chars} chars` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
+        <p className="settings-hint">
+          One line per call — when, which, how long, whether it worked. Never the prompt, the arguments or the result.
+          {' '}<button type="button" className="link-button" onClick={() => { tracesLib.clear(); setTraceAt((n) => n + 1); }}>Clear traces</button>
+        </p>
       </section>
       </>)}
     </div>

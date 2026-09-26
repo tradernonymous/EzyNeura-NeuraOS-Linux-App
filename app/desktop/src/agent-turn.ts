@@ -33,6 +33,15 @@ export type Message = { role: string; content: any; tool_calls?: any[]; tool_cal
 
 export type ToolStatus = 'asking' | 'running' | 'done' | 'denied' | 'error';
 
+/**
+ * C7: one local trace line per model call and per tool call. The shape is
+ * deliberately small — when, which, how long, whether it worked — because
+ * a trace must never hold a prompt, an argument or a result.
+ */
+export type TraceEvent =
+  | { kind: 'model'; chars: number; ms: number; error?: string }
+  | { kind: 'tool'; name: string; status: string; ms: number };
+
 export interface ToolEvent {
   id: string;
   name: string;
@@ -61,6 +70,8 @@ export interface TurnOptions {
    * without asking. Without it the decision is tools.needsApproval, as always.
    */
   asks?: (name: string, args: Record<string, any>) => string;
+  /** C7: a local line for every model round and tool call — Activity only. */
+  onTrace?: (event: TraceEvent) => void;
   onText: (piece: string) => void;
   onTool: (event: ToolEvent) => void;
   onNote?: (note: string) => void;
@@ -107,6 +118,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
   for (let round = 0; round < tools.MAX_ROUNDS; round += 1) {
     let text = '';
     let pending: any[] = [];
+    const startedAt = Date.now();
     const onFrame = (frame: StreamFrame) => {
       if (frame.content) {
         text += frame.content;
@@ -127,8 +139,11 @@ export async function runTurn(options: TurnOptions): Promise<void> {
         round -= 1;
         continue;
       }
+      // The round never produced anything: the trace still says when and why.
+      options.onTrace?.({ kind: 'model', chars: text.length, ms: Date.now() - startedAt, error: message.slice(0, 200) });
       throw err;
     }
+    options.onTrace?.({ kind: 'model', chars: text.length, ms: Date.now() - startedAt });
 
     const calls = tools.finish(pending);
     if (!calls.length) {
@@ -175,6 +190,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
         event.status = 'running';
       }
       options.onTool({ ...event });
+      const toolStartedAt = Date.now();
       try {
         result = await options.execute(call, args);
         event.status = 'done';
@@ -182,6 +198,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
         result = `Error: ${(err as Error)?.message || String(err)}`;
         event.status = 'error';
       }
+      options.onTrace?.({ kind: 'tool', name: call.name, status: event.status, ms: Date.now() - toolStartedAt });
       event.result = tools.clip(result);
       options.onTool({ ...event });
       // C8: a result from the web, a repository or somebody else's file is
