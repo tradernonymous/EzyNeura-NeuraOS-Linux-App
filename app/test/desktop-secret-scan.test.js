@@ -43,6 +43,44 @@ test('a planted secret fails the scan — and the report never contains it', () 
   }
 });
 
+test('a compiled symbol that merely contains hf_ is not a token', () => {
+  // What the CI binary actually holds: a mangled Rust symbol from the
+  // phf_shared crate. The prefix must sit at a word boundary or the gate
+  // fails on a crate name instead of a secret.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-test-'));
+  try {
+    fs.writeFileSync(
+      path.join(dir, 'freeai4u-desktop'),
+      '_RINvCs6dQGkCeM81d_10phf_shared4hasheECsiGsAxuHuhs1_11tauri_utils\0',
+    );
+    const clean = run(['--dist', dir]);
+    assert.equal(clean.code, 0, `a crate name is not a token: ${clean.out}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the distro libs the AppImage bundles are not ours to gate', () => {
+  // libgnutls compiles PEM test vectors into itself; scanning it would fail
+  // every release on someone else's fixtures. Our own files stay scanned.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-test-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'libgnutls.so.30'), '-----BEGIN EC PRIVATE KEY-----\nMIGkAgEBBD\n');
+    fs.writeFileSync(path.join(dir, 'our-config.json'), '-----BEGIN PRIVATE KEY-----\nMIGkAgEBBD\n');
+    const res = run(['--dist', dir]);
+    assert.equal(res.code, 1, 'a private key in our own file still fails');
+    assert.match(res.out, /our-config\.json — private key block/);
+    assert.ok(!res.out.includes('libgnutls'), `the distro lib is not reported: ${res.out}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the AppImage is exec\'d by an absolute path (cwd would hide it)', () => {
+  const src = read('scripts', 'check-dist-secrets.mjs');
+  assert.match(src, /execFileSync\(path\.resolve\(image\), \['--appimage-extract'\]/);
+});
+
 test('the patterns cover the providers the app can hold keys for', () => {
   const src = read('scripts', 'check-dist-secrets.mjs');
   for (const name of [

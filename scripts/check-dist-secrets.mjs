@@ -20,9 +20,15 @@ import path from 'node:path';
 // fixing, broad enough to catch a real key pasted into a file. Public-key
 // material (an ssh public key's AAAA…, minisign) is deliberately NOT matched: only
 // the private halves are secrets.
+// The token patterns start at a word boundary (no letter/underscore just
+// before the prefix): the compiled binary is full of mangled Rust symbols,
+// and a crate named e.g. phf_shared mangles to ..._10phf_shared4hash… —
+// without the boundary that reads as an "hf_" token and fails the gate on
+// a name, not a secret. A real token is always delimited: quote, space, =.
+const BOUND = '(?<![A-Za-z0-9_])';
 const PATTERNS = [
-  { name: 'Hugging Face token', re: /hf_[A-Za-z0-9]{20,}/g },
-  { name: 'GitHub token', re: /gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}/g },
+  { name: 'Hugging Face token', re: new RegExp(BOUND + 'hf_[A-Za-z0-9]{20,}', 'g') },
+  { name: 'GitHub token', re: new RegExp(BOUND + 'gh[pousr]_[A-Za-z0-9]{36,}|' + BOUND + 'github_pat_[A-Za-z0-9_]{20,}', 'g') },
   { name: 'Slack token', re: /xox[baprs]-[A-Za-z0-9-]{10,}/g },
   { name: 'AWS access key id', re: /\bAKIA[0-9A-Z]{16}\b/g },
   { name: 'Google API key', re: /AIza[0-9A-Za-z_-]{35}/g },
@@ -36,12 +42,19 @@ const PATTERNS = [
 const SKIP_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.otf', '.mp3', '.wav', '.ogg', '.zip', '.gz', '.xz', '.7z']);
 const MAX_FILE = 64 * 1024 * 1024;
 
+// Third-party shared libraries: the AppImage bundles the distro's runtime
+// (libgnutls, libgio, …), which is not ours to gate — and which legitimately
+// carries its own key material fixtures (GnuTLS compiles PEM test vectors
+// into libgnutls). Everything that is ours — the app binary, the frontend,
+// our config — is still scanned in full; the binary holds no .so suffix.
+const isThirdPartyLib = (name) => /\.so(\.|$)/.test(name);
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const full = path.join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) walk(full, out);
-    else if (st.size <= MAX_FILE && !SKIP_EXT.has(path.extname(name).toLowerCase())) out.push(full);
+    else if (st.size <= MAX_FILE && !SKIP_EXT.has(path.extname(name).toLowerCase()) && !isThirdPartyLib(name)) out.push(full);
   }
   return out;
 }
@@ -89,10 +102,12 @@ function extractDeb(deb, into) {
   }
 }
 
-/** An AppImage: --appimage-extract needs no FUSE, only the ability to exec. */
+/** An AppImage: --appimage-extract needs no FUSE, only the ability to exec.
+ *  The path must be absolute: with a relative one and cwd set, exec
+ *  resolves it against `into`, where the file obviously is not (ENOENT). */
 function extractAppImage(image, into) {
   try {
-    execFileSync(image, ['--appimage-extract'], { cwd: into, stdio: 'pipe' });
+    execFileSync(path.resolve(image), ['--appimage-extract'], { cwd: into, stdio: 'pipe' });
     return existsSync(path.join(into, 'squashfs-root'));
   } catch (e) {
     console.error(`note: could not unpack ${image}: ${(e && e.message) || e}`);
