@@ -17,6 +17,8 @@ export declare function signIn(options?: {
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   timeoutMs?: number;
+  /** Checked before each poll: true stops the wait with 'Puter sign-in cancelled.' */
+  cancelled?: () => boolean;
 }): Promise<boolean>;
 export declare function signOut(): Promise<void>;
 export declare function onAuthChange(handler: (who: any) => void): () => void;
