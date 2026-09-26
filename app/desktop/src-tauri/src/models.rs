@@ -504,6 +504,30 @@ pub async fn local_model_start(
     };
     let api_key = new_api_key();
 
+    // "Every layer on the GPU" on a card the weights do not fit makes the
+    // Vulkan/CUDA allocation fail and the server exit before /health: a 7B Q4
+    // (~4.4 GB) on a 4 GB card never starts. Offload only what fits and leave
+    // the rest in RAM; with no context given, 8192 rather than the trained
+    // context, whose KV cache alone can be larger than the card.
+    let mut ctx = ctx;
+    let mut gpu_layers = gpu_layers;
+    let mut fit_note = String::new();
+    if let ModelSource::File(path) = &source {
+        if ctx.is_none() {
+            ctx = Some(8192);
+        }
+        if gpu_layers.map(|n| n < 0).unwrap_or(false) {
+            if let (Some(vram_mb), Ok(info)) = (vram_mb(), crate::gguf::read_header(path)) {
+                let layers = info.block_count.unwrap_or(0);
+                let fit = fit_gpu_layers(weights_bytes(path), layers, kv_bytes_per_token(&info), ctx.unwrap_or(8192), vram_mb);
+                if let Some(n) = fit {
+                    gpu_layers = Some(n as i32);
+                    fit_note = format!("{} of {} layers on the GPU ({} MB VRAM), the rest in RAM. ", n, layers, vram_mb);
+                }
+            }
+        }
+    }
+
     let mut command = Command::new(&binary);
     command.args(args_for(&source, port, ctx, gpu_layers, threads, &api_key));
     command.stdin(Stdio::null());
@@ -576,7 +600,7 @@ pub async fn local_model_start(
                 Ok(g) => g,
                 Err(p) => p.into_inner(),
             };
-            return Ok(snapshot(&guard, true, detail));
+            return Ok(snapshot(&guard, true, format!("{}{}", fit_note, detail)));
         }
         if Instant::now() >= deadline {
             let tail = log_tail(&app);
@@ -607,6 +631,83 @@ fn log_tail(app: &tauri::AppHandle) -> String {
 /// absolute path to a .gguf that exists (one the scan found). Anything else
 /// is refused, so "start this file" cannot become "run llama-server on
 /// whatever path a page says".
+/// The GPU's memory in MB, when the machine reports it.
+fn vram_mb() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::gpu::facts().get("vram_mb").and_then(|v| v.as_u64())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// The weights' size: every part of a split `-00001-of-0000N.gguf` set.
+fn weights_bytes(path: &Path) -> u64 {
+    let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let Some(cut) = name.find("-00001-of-") else {
+        return size(path);
+    };
+    let prefix = &name[..cut];
+    let Some(dir) = path.parent() else {
+        return size(path);
+    };
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| {
+                    let n = e.file_name().to_string_lossy().to_string();
+                    n.starts_with(prefix) && n[prefix.len()..].contains("-of-") && n.ends_with(".gguf")
+                })
+                .map(|e| size(&e.path()))
+                .sum()
+        })
+        .unwrap_or_else(|_| size(path))
+}
+
+/// KV cache per token in f16, from the header; a typical 7-8B GQA model's
+/// 128 KiB when the header does not say.
+fn kv_bytes_per_token(info: &crate::gguf::GgufInfo) -> u64 {
+    let layers = info.block_count.unwrap_or(0);
+    let kv_heads = info.head_count_kv.or(info.head_count).unwrap_or(0);
+    let per_head = match (info.embedding_length, info.head_count) {
+        (Some(e), Some(h)) if h > 0 => e / h,
+        _ => 0,
+    };
+    let key = info.key_length.unwrap_or(per_head);
+    let value = info.value_length.unwrap_or(per_head);
+    if layers == 0 || kv_heads == 0 || key + value == 0 {
+        return 32 * 8 * (128 + 128) * 2;
+    }
+    layers * kv_heads * (key + value) * 2
+}
+
+/// How many layers fit the card, or None when the whole model does.
+///
+/// Budget: 90% of VRAM less ~700 MB for the driver context, the compute
+/// buffers and the desktop. Each layer costs its share of the weights (the
+/// output and embedding tensors counted as one more layer) plus its share of
+/// the KV cache.
+pub fn fit_gpu_layers(weights: u64, layers: u64, kv_per_token: u64, ctx: u32, vram_mb: u64) -> Option<u64> {
+    if layers == 0 || vram_mb == 0 {
+        return None;
+    }
+    const MB: u64 = 1024 * 1024;
+    let kv = kv_per_token.saturating_mul(ctx as u64);
+    let budget = (vram_mb * MB * 9 / 10).saturating_sub(700 * MB);
+    if weights + kv <= budget {
+        return None;
+    }
+    let per_layer = weights / (layers + 1) + kv / layers;
+    if per_layer == 0 {
+        return None;
+    }
+    Some((budget / per_layer).min(layers))
+}
+
 fn resolve_model_file(app: &tauri::AppHandle, file: &str) -> Result<PathBuf, String> {
     let candidate = Path::new(file);
     let path = if candidate.is_absolute() {
@@ -1174,6 +1275,26 @@ pub fn local_model_stop() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_7b_q4_on_a_4gb_card_is_split_and_a_small_model_is_not() {
+        const GB: u64 = 1024 * 1024 * 1024;
+        let kv = 32 * 8 * (128 + 128) * 2; // Llama/Qwen 7-8B GQA, f16
+        // 7B Q4_K_M: ~4.4 GB, 32 layers, 16k context, a 4 GB card.
+        let n = fit_gpu_layers(4_400_000_000, 32, kv, 16384, 4096).expect("does not fit whole");
+        assert!(n > 0 && n < 32, "some layers on the GPU, not all: {}", n);
+        let per_layer = 4_400_000_000 / 33 + kv * 16384 / 32;
+        assert!(n * per_layer <= 4096 * 1024 * 1024 * 9 / 10 - 700 * 1024 * 1024);
+        // A 3B Q4 (~2 GB; Qwen2.5-3B: 36 layers, 2 KV heads) at 8k fits whole: keep -1.
+        assert_eq!(fit_gpu_layers(2 * GB, 36, 36 * 2 * (128 + 128) * 2, 8192, 4096), None);
+        // A big card takes the 7B whole.
+        assert_eq!(fit_gpu_layers(4_400_000_000, 32, kv, 16384, 12288), None);
+        // Unknown VRAM or layer count: leave the caller's choice alone.
+        assert_eq!(fit_gpu_layers(4_400_000_000, 32, kv, 16384, 0), None);
+        assert_eq!(fit_gpu_layers(4_400_000_000, 0, kv, 16384, 4096), None);
+        // Weights larger than the card: CPU only, never a negative count.
+        assert_eq!(fit_gpu_layers(40 * GB, 80, kv, 8192, 1024), Some(0));
+    }
 
     #[test]
     fn the_binary_has_one_expected_name_per_platform() {
