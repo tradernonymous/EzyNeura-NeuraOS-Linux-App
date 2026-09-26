@@ -9,8 +9,9 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
-    // ../shared holds modules the web app loads too (docs/adr/0002).
-    fs: { allow: ['.', '../shared'] },
+    // ../shared holds modules the web app loads too (docs/adr/0002);
+    // ../../pc is the Linux Mint pack, imported ?raw for B10.
+    fs: { allow: ['.', '../shared', '../../pc'] },
   },
   build: {
     outDir: 'dist',

@@ -12,8 +12,11 @@ import { DICTATION_EVENT, NAVIGATE_EVENT, ORB_EVENT } from '../Sidebar';
 import StepsFold from '../components/StepsFold';
 import ChatOutput from '../components/ChatOutput';
 import '../turn.js';
+import '../built-in-skills.js';
+import MintPackCard from '../components/MintPackCard';
 
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
+const builtIn: typeof import('../built-in-skills.js') = (globalThis as any).FreeAI4UBuiltInSkills;
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -207,6 +210,8 @@ export interface ChatSession {
   project?: string;
   /** A goal pinned above the composer, sent with every turn. */
   goal?: string;
+  /** B11: Concise mode — the built-in meta skill's line rides every turn of this chat. */
+  concise?: boolean;
 }
 
 // The chat store lives in ../chats.js -- key, cap, validation, merge, export.
@@ -1431,6 +1436,11 @@ _${done.notes.join(' · ')}_` : said,
           content: 'Plan mode: reply with a short numbered plan (files, steps, risks) and change nothing. Read-only tools are available for looking around.',
         });
       }
+      // B11: the Concise pill's line, from the built-in meta skill, sits with
+      // Plan mode's — same system role, same "this chat is different" intent.
+      if (active.concise) {
+        turns.unshift({ role: 'system', content: builtIn.conciseLine() });
+      }
       // One request, to whichever provider the session is on. The turn calls
       // it again after every round of tool results.
       const streamOnce = streamer(active.provider, active.model);
@@ -2252,6 +2262,8 @@ _${done.notes.join(' · ')}_` : said,
                 </button>
               ))}
             </div>
+            {/* B10: the pack is offered where the app begins — an empty chat. */}
+            <MintPackCard root={openFolder()} />
           </div>
         )}
         {active.messages.map((msg, i) => (
@@ -2564,6 +2576,15 @@ _${done.notes.join(' · ')}_` : said,
               title={active.goal ? `Goal: ${active.goal}` : 'Pin a goal for the whole conversation'}
             >
               Goal{active.goal ? ' · set' : ''}
+            </button>
+            <button
+              type="button"
+              className={`composer-pill ${active.concise ? 'is-set' : ''}`}
+              onClick={() => patchSession(active.id, { concise: !active.concise })}
+              aria-pressed={!!active.concise}
+              title="Concise mode: short answers, result first — the built-in meta skill rides this chat's turns"
+            >
+              Concise{active.concise ? ' · on' : ''}
             </button>
           </>
         )}
