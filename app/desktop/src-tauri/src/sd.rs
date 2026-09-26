@@ -158,10 +158,15 @@ fn remembered(path: Result<PathBuf, String>) -> Option<PathBuf> {
 /// from `remembered`, which the binary shares and where a folder is never
 /// valid.
 fn remembered_model(app: &tauri::AppHandle) -> Option<PathBuf> {
-    if let Some(file) = remembered(model_file(app)) {
-        return Some(file);
+    remembered_model_at(model_file(app))
+}
+
+fn remembered_model_at(path: Result<PathBuf, String>) -> Option<PathBuf> {
+    let file = path.ok()?;
+    if let Some(found) = remembered(Ok(file.clone())) {
+        return Some(found);
     }
-    let saved = std::fs::read_to_string(model_file(app).ok()?).ok()?;
+    let saved = std::fs::read_to_string(&file).ok()?;
     let candidate = PathBuf::from(saved.trim());
     if candidate.is_dir() && set_in(&candidate).is_some() {
         Some(candidate)
@@ -420,7 +425,9 @@ pub fn sd_find(app: tauri::AppHandle) -> SdFacts {
         }
     }
     // The chosen model belongs in the list even when it lives somewhere else.
-    if let Some(chosen) = remembered(model_file(&app)) {
+    // `remembered_model`, not `remembered`: a set is a folder, and `remembered`
+    // refuses anything that is not a file.
+    if let Some(chosen) = remembered_model(&app) {
         let shown = chosen.display().to_string();
         if !models.iter().any(|m| m.path == shown) {
             models.push(SdModel {
@@ -438,7 +445,7 @@ pub fn sd_find(app: tauri::AppHandle) -> SdFacts {
         found: found.is_some(),
         binary: found.as_ref().map(|(p, _)| p.display().to_string()).unwrap_or_default(),
         source: found.as_ref().map(|(_, s)| s.to_string()).unwrap_or_default(),
-        model: remembered(model_file(&app)).map(|p| p.display().to_string()).unwrap_or_default(),
+        model: remembered_model(&app).map(|p| p.display().to_string()).unwrap_or_default(),
         models,
         models_dir: dir.map(|d| d.display().to_string()).unwrap_or_default(),
         expected_name: binary_name().to_string(),
@@ -1404,6 +1411,24 @@ pub async fn sd_cancel(id: String) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chosen_set_folder_is_remembered_as_the_model() {
+        let root = std::env::temp_dir().join(format!("neuraos-sd-set-{}", std::process::id()));
+        let set = root.join("flux-2-klein-4b");
+        std::fs::create_dir_all(&set).unwrap();
+        for (name, bytes) in [("flux-2-klein-4b.safetensors", 8usize), ("qwen_3_4b.safetensors", 4), ("flux2-vae.safetensors", 2)] {
+            std::fs::write(set.join(name), vec![0u8; bytes]).unwrap();
+        }
+        let saved = root.join("model.txt");
+        std::fs::write(&saved, set.display().to_string()).unwrap();
+        assert_eq!(remembered(Ok(saved.clone())), None, "the binary's reader never takes a folder");
+        assert_eq!(remembered_model_at(Ok(saved.clone())), Some(set.clone()), "a set folder is the chosen model");
+        std::fs::remove_file(set.join("flux2-vae.safetensors")).unwrap();
+        std::fs::remove_file(set.join("qwen_3_4b.safetensors")).unwrap();
+        assert_eq!(remembered_model_at(Ok(saved)), None, "a folder that is no longer a set is not a model");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn krea2s_three_files_are_one_set_by_role() {
