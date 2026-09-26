@@ -21,6 +21,7 @@
 // The profiles arrive from the OS keyring, but a keyring entry is not proof
 // of good intentions: everything below is validated against fixed rules
 // before a process is spawned or a request is sent.
+use crate::secrets;
 use serde::Deserialize;
 use std::time::{Duration, Instant};
 
@@ -215,9 +216,12 @@ fn op_ssh_run(target: &str, command: &str, timeout_ms: u64) -> Result<String, St
         write_key(&path, &identity)?;
         key_path = Some(path);
     }
-    let args = ssh_args(&profile, command, key_path.as_ref().map(|p| p.to_string_lossy().to_string()));
+    let key_str = key_path
+        .as_ref()
+        .map(|p| p.to_string_lossy().into_owned());
+    let args = ssh_args(&profile, command, key_str.as_deref());
     let timeout = Duration::from_millis(timeout_ms.clamp(1_000, 300_000));
-    let ran = run_argv("ssh", &args, timeout).await;
+    let ran = run_argv("ssh", &args, timeout);
     if let Some(path) = &key_path {
         let _ = std::fs::remove_file(path);
     }
@@ -311,10 +315,11 @@ pub fn parse_api(json: &str) -> Result<ApiProfile, String> {
         return Err("the saved header name is not a header name".into());
     }
     p.header = Some(header);
-    p.prefix = Some(p.prefix.unwrap_or_else(|| "Bearer ".into()));
-    if p.prefix.len() > 64 || p.prefix.contains('\0') || p.prefix.contains(['\r', '\n']) {
+    let prefix = p.prefix.unwrap_or_else(|| "Bearer ".into());
+    if prefix.len() > 64 || prefix.contains('\0') || prefix.contains(['\r', '\n']) {
         return Err("the saved prefix does not belong in a header".into());
     }
+    p.prefix = Some(prefix);
     if p.secret.is_empty() || p.secret.len() > 16_384 || p.secret.contains('\0') {
         return Err("the saved secret is not usable".into());
     }
