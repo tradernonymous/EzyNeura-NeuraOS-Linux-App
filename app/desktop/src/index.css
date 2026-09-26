@@ -4397,6 +4397,16 @@ button.linkish {
 .trace-kind.is-model { background: var(--accent-dim, #26263a); color: var(--accent, #7aa2ff); }
 .trace-what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .trace-meta { flex: none; color: var(--text-3, #80849a); }
+/* C1/C3: a run card's contract ticks and its budget against the limit. */
+.runs-contract { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.runs-tick { display: flex; gap: 6px; align-items: baseline; font-size: 11px; color: var(--text-3, #80849a); }
+.runs-tick > span:first-child { flex: none; font-weight: 700; }
+.runs-tick.is-ok { color: var(--ok, #34d399); }
+.runs-tick.is-missing { color: #f5b642; }
+.runs-tick.is-missing > span:first-child { color: #f5b642; }
+.runs-budget { font-size: 11px; font-weight: 600; margin-top: 4px; color: var(--text-3, #80849a); }
+.runs-budget.is-near { color: #f5b642; }
+.runs-budget.is-over { color: var(--err, #f26d6d); }
 .audit-summary { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-family: var(--font-mono, monospace); font-size: 12px; }
 .audit-when { flex: none; color: var(--text-3, #80849a); font-size: 11px; }
 

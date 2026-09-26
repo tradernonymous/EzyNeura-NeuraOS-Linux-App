@@ -6,7 +6,8 @@
 // its facts (recipes.js, threads.js, the shell's status commands).
 import { useEffect, useState } from 'react';
 import Icon from '../components/Icon';
-import { engineStatus, hasShell, localModelStatus, type EngineStatus, type LocalModelStatus } from '../bridge';
+import { engineStatus, hasShell, localModelStatus, runLocal, writeLocalFile, type EngineStatus, type LocalModelStatus } from '../bridge';
+import { pushToast } from '../components/Toasts';
 import type { ViewId } from '../Sidebar';
 import '../recipes.js';
 import '../threads.js';
@@ -17,6 +18,8 @@ import '../audit.js';
 import '../approval.js';
 // C7: the local traces — model and tool calls, one line each.
 import '../traces.js';
+// C2: the changed files a run left, for its evidence folder.
+import '../turn.js';
 import { OPEN_CHAT_EVENT } from './ChatScreen';
 
 const runsLib: typeof import('../runs.js') = (globalThis as any).FreeAI4URuns;
@@ -27,6 +30,25 @@ const recipesLib: typeof import('../recipes.js') = (globalThis as any).FreeAI4UR
 const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
 const approvalLib: typeof import('../approval.js') = (globalThis as any).FreeAI4UApproval;
 const tracesLib: typeof import('../traces.js') = (globalThis as any).FreeAI4UTraces;
+const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
+
+// The folder the local surfaces work in (App.tsx owns it; this screen only
+// reads it — evidence has to land in a real folder).
+const LOCAL_ROOT_KEY = 'freeai4u.localRoot';
+const ARTIFACTS_KEY = 'freeai4u.runs.artifacts';
+
+function readLocalRoot(): string {
+  try {
+    return localStorage.getItem(LOCAL_ROOT_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+// POSIX-quote a path for the one shell line that opens the evidence folder.
+function shellQuote(p: string): string {
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
 const threadsLib: typeof import('../threads.js') = (globalThis as any).FreeAI4UThreads;
 
 type Props = { onOpen: (view: ViewId) => void };
@@ -77,8 +99,101 @@ export default function ActivityScreen({ onOpen }: Props) {
   const [layout, setLayout] = useState<'list' | 'board'>(() => { try { return localStorage.getItem(LAYOUT_KEY) === 'board' ? 'board' : 'list'; } catch { return 'list'; } });
   const pickLayout = (next: 'list' | 'board') => { setLayout(next); try { localStorage.setItem(LAYOUT_KEY, next); } catch { /* this session has it */ } };
   const [allRecipes] = useState(() => recipesLib.list());
+  const sessions = chatsLib.readStore() as any[];
+  // The last answer a run produced — its report, the thing a contract is
+  // ticked against and the evidence folder keeps.
+  const reportOf = (chat: any): string => {
+    const msgs = Array.isArray(chat?.messages) ? chat.messages : [];
+    for (let i = msgs.length - 1; i >= 0; i -= 1) {
+      const m = msgs[i];
+      if (m && m.role === 'assistant' && !m.note && !m.error && typeof m.content === 'string' && m.content.trim()) return m.content;
+    }
+    return '';
+  };
+  // C1/C3: what each recipe demanded, and what its last run produced —
+  // the report itself plus an approximate spend (characters/4: not every
+  // provider reports usage, so the card says ≈).
+  const contracts: Record<string, string[]> = {};
+  const budgets: Record<string, number> = {};
+  const reports: Record<string, string> = {};
+  const spend: Record<string, number> = {};
+  {
+    const byId = new Map<string, any>(sessions.map((s) => [s.id, s]));
+    (allRecipes as any[]).forEach((r) => {
+      if (Array.isArray(r.contract) && r.contract.length) contracts[r.id] = r.contract;
+      if (Number(r.budget) > 0) budgets[r.id] = Number(r.budget);
+    });
+    Object.keys(runs).forEach((id) => {
+      const entry = runs[id] || {};
+      const chat = entry.chatId ? byId.get(entry.chatId) : null;
+      if (!chat) return;
+      const report = reportOf(chat);
+      if (report) reports[id] = report;
+      const msgs = Array.isArray(chat.messages) ? chat.messages : [];
+      const chars = msgs.reduce((n: number, m: any) => n + (m && typeof m.content === 'string' ? m.content.length : 0), 0);
+      spend[id] = Math.ceil(chars / 4);
+    });
+  }
+  // C2: the folder each card's evidence was saved in (kept on this machine
+  // so the link still works after a restart).
+  const [artifacts, setArtifacts] = useState<Record<string, string>>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ARTIFACTS_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+  const [savingEvidence, setSavingEvidence] = useState<Record<string, string>>({});
+
+  const saveEvidence = async (card: import('../runs.js').RunCard) => {
+    const root = readLocalRoot();
+    if (!root) {
+      pushToast('warn', 'Open a folder first — a run keeps its evidence in .neuraos/runs of the open folder.');
+      return;
+    }
+    const entry = card.recipeId ? runs[card.recipeId] : null;
+    const chat = entry && entry.chatId ? sessions.find((s) => s.id === entry.chatId) : null;
+    setSavingEvidence((s) => ({ ...s, [card.id]: 'working' }));
+    try {
+      const since = Number(entry && entry.at) || card.at;
+      const plan = runsLib.artifactPlan({
+        recipeName: card.title,
+        at: since,
+        ok: card.ok !== false,
+        chatId: entry && entry.chatId ? entry.chatId : undefined,
+        report: reportOf(chat),
+        contract: contracts[card.recipeId || ''],
+        changes: turnLib.changesOf(Array.isArray(chat?.messages) ? chat.messages : []),
+        // C7's lines inside this run's window, oldest first in the file.
+        traces: tracesLib.recent(500).filter((t) => t.at >= since && t.at <= Date.now()).slice().reverse(),
+        error: entry && entry.error ? entry.error : undefined,
+      });
+      for (const f of plan.files) await writeLocalFile(root, `${plan.dir}/${f.path}`, f.text);
+      const next = { ...artifacts, [card.id]: plan.dir };
+      setArtifacts(next);
+      try { localStorage.setItem(ARTIFACTS_KEY, JSON.stringify(next)); } catch { /* the folder is written either way */ }
+      pushToast('ok', `Evidence saved in ${plan.dir}`);
+    } catch (err) {
+      pushToast('error', `Could not save the evidence: ${((err as Error).message || String(err)).split('\n')[0]}`);
+    } finally {
+      setSavingEvidence((s) => { const n = { ...s }; delete n[card.id]; return n; });
+    }
+  };
+
+  const showEvidence = async (card: import('../runs.js').RunCard) => {
+    const dir = artifacts[card.id];
+    if (!dir) return;
+    try {
+      await runLocal({ root: readLocalRoot(), runId: 'runs-evidence-open', command: `xdg-open ${shellQuote(dir)}` });
+    } catch {
+      pushToast('info', `The evidence is in ${dir} of the open folder.`);
+    }
+  };
+
   const columns = runsLib.board({
-    pending, busy, sessions: chatsLib.readStore(), recipes: allRecipes, runs,
+    pending, busy, sessions, recipes: allRecipes, runs,
+    contracts, reports, budgets, spend,
     nextRun: recipesLib.nextRun, scheduleLabel: recipesLib.scheduleLabel, now,
   });
   const openCard = (card: import('../runs.js').RunCard) => {
@@ -115,6 +230,47 @@ export default function ActivityScreen({ onOpen }: Props) {
                     <span className="runs-card-title">{card.title}</span>
                     <span className="runs-card-meta">{card.meta}</span>
                   </button>
+                  {card.contract && (
+                    <ul className="runs-contract" aria-label="Output contract">
+                      {card.contract.items.map((item, i) => (
+                        <li key={i} className={`runs-tick ${item.ok ? 'is-ok' : 'is-missing'}`}>
+                          <span aria-hidden="true">{item.ok ? '✓' : '·'}</span>
+                          <span>{item.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {card.budget && card.budget.level !== 'none' && (
+                    <div
+                      className={`runs-budget is-${card.budget.level}`}
+                      title="An estimate: characters/4 of the run's chat, against the recipe's budget"
+                    >
+                      {card.budget.label}
+                      {card.budget.level === 'near' && ' — near the limit'}
+                      {card.budget.level === 'over' && ' — over the budget'}
+                    </div>
+                  )}
+                  {card.kind === 'run' && (
+                    <div className="runs-card-actions">
+                      {artifacts[card.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => void showEvidence(card)}
+                          title={`${artifacts[card.id]} in the open folder — click to open the folder`}
+                        >
+                          Evidence
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={savingEvidence[card.id] === 'working'}
+                          onClick={() => void saveEvidence(card)}
+                        >
+                          {savingEvidence[card.id] === 'working' ? 'Saving…' : 'Save evidence'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {card.kind === 'approval' && card.approvalId && (
                     <div className="runs-card-actions">
                       <button type="button" className="primary" onClick={() => recipesLib.approvals.answer(card.approvalId!, 'once')}>Allow</button>

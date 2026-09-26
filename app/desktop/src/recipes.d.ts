@@ -24,6 +24,10 @@ export interface Recipe {
   extensions: string[];
   responseSchema?: Record<string, any>;
   schedule?: Schedule;
+  /** C1: what the final report must contain; ticked on the Runs board. */
+  contract?: string[];
+  /** C3: a token budget for the run; the card shows the spend against it. */
+  budget?: number;
 }
 
 export interface RunEntry {

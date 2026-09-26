@@ -23,7 +23,7 @@
   var CONSENT_KEY = 'freeai4u.recipes.consent';
   var CHANGED_EVENT = 'freeai4u:recipes-changed';
   var MINUTE = 60000;
-  var FIELDS = ['id', 'name', 'systemPrompt', 'prompt', 'params', 'model', 'extensions', 'responseSchema', 'schedule'];
+  var FIELDS = ['id', 'name', 'systemPrompt', 'prompt', 'params', 'model', 'extensions', 'responseSchema', 'schedule', 'contract', 'budget'];
   // The same refusal agents.js makes: nothing imported may run code.
   var CODE_FIELDS = ['handlesteps', 'handle_steps', 'code', 'script', 'scripts', 'source', 'function', 'functions',
     'fn', 'eval', 'exec', 'handler', 'handlers', 'js', 'javascript', 'onstep', 'hooks'];
@@ -116,6 +116,27 @@
     if (raw.responseSchema != null) {
       if (!isPlainObject(raw.responseSchema)) errors.push('responseSchema is a JSON schema object.');
       else recipe.responseSchema = JSON.parse(JSON.stringify(raw.responseSchema));
+    }
+    // C1: what the final report must contain — a person's list of
+    // must-haves, ticked on the Runs board when the run finishes.
+    if (raw.contract != null) {
+      if (!Array.isArray(raw.contract)) {
+        errors.push('contract is a list of strings — what the final report must contain.');
+      } else {
+        var items = [];
+        raw.contract.slice(0, 12).forEach(function (item) {
+          var text = str(item, 120);
+          if (text && items.indexOf(text) < 0) items.push(text);
+        });
+        if (items.length) recipe.contract = items;
+        if (raw.contract.length > 12) warnings.push('contract: only the first 12 items are kept.');
+      }
+    }
+    // C3: a token ceiling for the run. 0 or absent means no budget.
+    if (raw.budget != null) {
+      var budget = Number(raw.budget);
+      if (!Number.isFinite(budget) || budget < 0) errors.push('budget is a token count (a number 0 or above), or leave it out for none.');
+      else if (budget > 0) recipe.budget = Math.round(budget);
     }
     if (raw.schedule != null) {
       var s = raw.schedule;
