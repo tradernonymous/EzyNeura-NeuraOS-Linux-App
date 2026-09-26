@@ -158,3 +158,18 @@ test('an image model can be deleted from the card, with a second click to confir
   assert.match(rs, /"--vae-tiling"\.to_string\(\)/, 'a single-file model encodes in tiles too');
   assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_delete_model,/);
 });
+
+test('a picture saves through the native dialog, opens large, and can be removed', () => {
+  const screen = read('desktop', 'src', 'screens', 'ImagesScreen.tsx');
+  // <a download> does nothing in the Linux webview: Save goes through save_file_dialog.
+  assert.match(screen, /savePictureUrl\(job\.url, job\.ts\)/);
+  assert.doesNotMatch(screen, /imageRun\.savePicture\(/);
+  assert.match(screen, /className="image-preview" role="dialog"/);
+  assert.match(screen, /e\.key === 'Escape'\) setPreview\(null\)/);
+  assert.match(screen, /setGallery\(\(prev\) => prev\.filter\(\(j\) => j\.ts !== job\.ts\)\)/);
+  const chat = read('desktop', 'src', 'screens', 'ChatScreen.tsx');
+  assert.doesNotMatch(chat, /imageRun\.savePicture\(/, 'Chat pictures save the same way');
+  const save = read('desktop', 'src', 'files', 'save.ts');
+  assert.match(save, /export async function savePictureUrl/);
+  assert.match(save, /invoke\('save_file_dialog'/);
+});

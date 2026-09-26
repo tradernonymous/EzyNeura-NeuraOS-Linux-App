@@ -6893,3 +6893,21 @@ input, textarea, select { border-radius: 8px; }
 .topnav-menu-head { margin-top: 4px; padding: 6px 10px 2px; border-top: 1px solid var(--edge); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 .topnav-menu-project .topnav-menu-label { display: inline-flex; align-items: center; gap: 6px; }
 .topnav-menu-project .topnav-menu-hint { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A gallery picture opens large on click. */
+.image-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.image-open img { display: block; width: 100%; }
+.image-preview {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 24px; background: rgba(5, 7, 10, 0.88); cursor: zoom-out;
+}
+.image-preview img {
+  max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain;
+  border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); cursor: default;
+}
+.image-preview-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: min(900px, 100%);
+  cursor: default;
+}
+.image-preview-bar .image-prompt { flex: 1 1 240px; color: var(--text, #c9d1d9); font-size: 13px; }

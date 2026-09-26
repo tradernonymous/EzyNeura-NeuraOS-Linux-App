@@ -51,3 +51,25 @@ export function base64ToBytes(b64: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
+
+/**
+ * Save a generated picture (a data: URL, or any URL the webview can fetch)
+ * through the same native dialog. An <a download> click is silently ignored
+ * by the Linux webview, which is why Save on a picture "did nothing".
+ */
+export async function savePictureUrl(url: string, stamp: number = Date.now()): Promise<string> {
+  let mime = 'image/png';
+  let bytes: Uint8Array;
+  const data = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(url);
+  if (data) {
+    mime = data[1] || mime;
+    bytes = data[2] ? base64ToBytes(data[3]) : new TextEncoder().encode(decodeURIComponent(data[3]));
+  } else {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('could not fetch the picture');
+    mime = response.headers.get('content-type') || mime;
+    bytes = new Uint8Array(await response.arrayBuffer());
+  }
+  const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png';
+  return saveFile({ name: `neuraos-${stamp}.${ext}`, bytes, mime });
+}

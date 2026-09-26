@@ -13,6 +13,8 @@ import '../failure.js';
 import '../puter.js';
 import '../image-run.js';
 import { call, hasShell, puterSigninOpen } from '../bridge';
+import { pushToast } from '../components/Toasts';
+import { savePictureUrl } from '../files/save';
 
 const images: typeof import('../images.js') = (globalThis as any).FreeAI4UImages;
 const failure: typeof import('../failure.js') = (globalThis as any).FreeAI4UFailure;
@@ -378,7 +380,30 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
 
   // One Save for a picture, wherever it is shown (Chat's picture actions use
   // the same one).
-  const save = (url: string) => imageRun.savePicture(url);
+  // The native save dialog (save_file_dialog); an <a download> click does
+  // nothing in the Linux webview. Cancelling the dialog is not an error.
+  const save = (job: Job) => {
+    savePictureUrl(job.url, job.ts)
+      .then((said) => pushToast('ok', said))
+      .catch((e: unknown) => {
+        const text = (e as Error)?.message || String(e);
+        if (!/cancel/i.test(text)) pushToast('error', `Could not save: ${text}`);
+      });
+  };
+  // A picture opened large, over the screen, until Esc or a click outside.
+  const [preview, setPreview] = useState<Job | null>(null);
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreview(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [preview]);
+  // Pictures live only in this session's gallery (never on disk unless
+  // saved), so removing one is just taking it off the list.
+  const removeJob = (job: Job) => {
+    setGallery((prev) => prev.filter((j) => j.ts !== job.ts));
+    setPreview((open) => (open && open.ts === job.ts ? null : open));
+  };
 
   const readyCount = rows.filter((r) => r.kind === 'server' && r.ready).length;
   const editable = images.canEdit(choice || {});
@@ -677,7 +702,9 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
           )}
           {gallery.map((job) => (
             <figure key={job.ts} className="image-card">
-              <img src={job.url} alt={job.prompt} loading="lazy" />
+              <button className="image-open" onClick={() => setPreview(job)} title="Open it large">
+                <img src={job.url} alt={job.prompt} loading="lazy" />
+              </button>
               <figcaption>
                 <span className="image-prompt">{job.prompt}</span>
                 <span className="image-meta">
@@ -685,11 +712,13 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                     <Icon name="activity" size={11} /> {job.who || 'the engine'}
                   </span>
                   <span className="image-size">{images.sizeLabel(job.size)}</span>
-                  <button onClick={() => save(job.url)}>Save</button>
+                  <button onClick={() => setPreview(job)}>Preview</button>
+                  <button onClick={() => save(job)}>Save</button>
                   {/* Change this one next, without saving it and finding it
                       again: it becomes the source in the composer, where it
                       sits beside whatever comes back. */}
                   <button onClick={() => changeThis(job)}>Change this</button>
+                  <button onClick={() => removeJob(job)} title="Remove it from this list (a saved copy is not touched)">Delete</button>
                 </span>
                 {job.from && (
                   <span className="image-notes">Changed from a picture you chose</span>
@@ -702,6 +731,18 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
           ))}
         </div>
       </div>
+      {preview && (
+        <div className="image-preview" role="dialog" aria-label="Picture preview" onClick={() => setPreview(null)}>
+          <img src={preview.url} alt={preview.prompt} onClick={(e) => e.stopPropagation()} />
+          <div className="image-preview-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="image-prompt">{preview.prompt}</span>
+            <button onClick={() => save(preview)}>Save</button>
+            <button onClick={() => { changeThis(preview); setPreview(null); }}>Change this</button>
+            <button onClick={() => removeJob(preview)}>Delete</button>
+            <button onClick={() => setPreview(null)} title="Close (Esc)">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
