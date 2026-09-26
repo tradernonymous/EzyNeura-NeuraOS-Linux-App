@@ -571,7 +571,7 @@ mod tests {
         // The key material itself is never in argv.
         assert!(args.iter().all(|a| !a.contains("PRIVATE KEY")));
 
-        let p2 = parse_ssh(&ssh_json(None)).unwrap();
+        let p2 = parse_ssh(&serde_json::json!({"user": "u", "host": "h"}).to_string()).unwrap();
         let args2 = ssh_args(&p2, "ls", None);
         assert!(!args2.contains(&"-i".to_string()));
         assert!(!args2.contains(&"-p".to_string()), "no port means no -p");
