@@ -1202,6 +1202,11 @@ pub struct Family {
     pub shift: Option<f64>,
 }
 
+/// Z-Image in the spellings its files use (z_image_turbo, Z-Image-Turbo).
+fn is_z_image(name: &str) -> bool {
+    name.contains("z_image") || name.contains("z-image") || name.contains("zimage")
+}
+
 pub fn family_of(model: &Path) -> Option<Family> {
     let name = model_name_of(model);
     let klein = name.contains("klein");
@@ -1218,6 +1223,10 @@ pub fn family_of(model: &Path) -> Option<Family> {
         Some(Family { label: "FLUX.2 [klein]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if is_flux2(&name) {
         Some(Family { label: "FLUX.2 [dev]", cfg: 1.0, steps: 20, sampler: None, shift: None })
+    } else if is_z_image(&name) && name.contains("turbo") {
+        // Z-Image Turbo is distilled for ~8 steps with no guidance; sd.cpp's
+        // defaults (20 steps, cfg 7) wash it out.
+        Some(Family { label: "Z-Image Turbo", cfg: 1.0, steps: 8, sampler: None, shift: None })
     } else if flux1 && name.contains("schnell") {
         Some(Family { label: "FLUX.1 [schnell]", cfg: 1.0, steps: 4, sampler: None, shift: None })
     } else if flux1 {
@@ -1544,6 +1553,26 @@ pub async fn sd_cancel(id: String) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn z_image_turbo_draws_in_eight_steps_without_guidance() {
+        for name in ["z_image_turbo_bf16.safetensors", "Z-Image-Turbo-Q4_K.gguf"] {
+            let fam = family_of(Path::new(name)).expect(name);
+            assert_eq!(fam.label, "Z-Image Turbo");
+            assert_eq!(fam.steps, 8);
+            assert_eq!(fam.cfg, 1.0);
+        }
+        // Its set: the FLUX.1 autoencoder and a Qwen3-4B encoder beside it.
+        let files = vec![
+            (PathBuf::from("z/z_image_turbo_bf16.safetensors"), 12_300_000_000),
+            (PathBuf::from("z/qwen_3_4b.safetensors"), 8_044_982_048),
+            (PathBuf::from("z/ae.safetensors"), 335_000_000),
+        ];
+        let parts = set_roles(&files).expect("a set");
+        assert_eq!(parts.diffusion, PathBuf::from("z/z_image_turbo_bf16.safetensors"));
+        assert_eq!(parts.vae, Some(PathBuf::from("z/ae.safetensors")));
+        assert_eq!(parts.llm, Some(PathBuf::from("z/qwen_3_4b.safetensors")));
+    }
 
     #[test]
     fn a_small_card_encodes_on_the_cpu() {
