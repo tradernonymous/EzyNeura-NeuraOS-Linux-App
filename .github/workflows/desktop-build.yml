@@ -143,6 +143,17 @@ jobs:
         working-directory: app/desktop
         run: npx tauri build --bundles deb,appimage
 
+      # D1: a Tauri app's assets are trivially unpacked, so a secret that
+      # reached a build is public the moment it ships. Scans what was built —
+      # dist always, and the bundles when they were made — and reports file
+      # and pattern name, never the matched text (a log line is also a place
+      # secrets travel). Skips bundle paths silently on a bundle:false run.
+      - name: Secrets never travel (scan the built assets and bundles)
+        run: |
+          node scripts/check-dist-secrets.mjs --dist app/desktop/dist \
+            --deb 'app/desktop/src-tauri/target/release/bundle/deb/*.deb' \
+            --appimage 'app/desktop/src-tauri/target/release/bundle/appimage/*.AppImage'
+
       # L8: the built binary must actually start a window, not just link. A
       # virtual X server and a session bus are enough for WebKitGTK to
       # create the webview; a PANIC or FATAL line in the app's own log, or
