@@ -11,10 +11,12 @@ import '../hf-auth.js';
 import '../hf-models.js';
 import '../skill-lint.js';
 import '../hf-skills.js';
+import '../gh-skills.js';
 
 const hfAuth: typeof import('../hf-auth.js') = (globalThis as any).FreeAI4UHfAuth;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
 const hfSkills: typeof import('../hf-skills.js') = (globalThis as any).FreeAI4UHfSkills;
+const ghSkills: typeof import('../gh-skills.js') = (globalThis as any).FreeAI4UGhSkills;
 const skillLint: typeof import('../skill-lint.js') = (globalThis as any).FreeAI4USkillLint;
 
 // Single-quote a path for the one shell line below (chmod). POSIX-correct for
@@ -91,6 +93,13 @@ export default function LibraryScreen() {
   const [hfLoading, setHfLoading] = useState(false);
   const [hfError, setHfError] = useState('');
 
+  // --- GitHub skills (B1): paste a repository, get its bundles -----------
+  const [ghInput, setGhInput] = useState('');
+  const [ghBusy, setGhBusy] = useState(false);
+  const [ghError, setGhError] = useState('');
+  const [ghFound, setGhFound] = useState<string>('');
+  const [ghCatalog, setGhCatalog] = useState<any[]>([]);
+
   useEffect(() => {
     const onAuth = () => setHfSignedIn(hfAuth.signedIn());
     window.addEventListener(hfAuth.AUTH_CHANGED_EVENT, onAuth);
@@ -122,6 +131,40 @@ export default function LibraryScreen() {
     setHfUser(null);
     setHfResults([]);
   }, []);
+
+  // B1: read the repository once (its tree), then each bundle's SKILL.md —
+  // the same install path as an HF skill from here on, with the same lint,
+  // ceilings and running total. Nothing is fetched until Find is clicked.
+  const findGitHub = useCallback(async () => {
+    const input = ghInput.trim();
+    if (!input || ghBusy) return;
+    setGhBusy(true);
+    setGhError('');
+    setGhFound('');
+    try {
+      const found = await ghSkills.discover(input);
+      if ('error' in found) {
+        setGhCatalog([]);
+        setGhError(found.error);
+        return;
+      }
+      const entries: any[] = [];
+      for (const bundle of found.bundles) {
+        const dir = bundle.dir ? bundle.dir + '/' : '';
+        const text = await ghSkills.fetchText(ghSkills.rawFileUrl(found.rawBase, dir + 'SKILL.md'));
+        const entry = ghSkills.toEntry(bundle, found, text);
+        if (entry) entries.push(entry);
+      }
+      setGhCatalog(entries);
+      if (!entries.length) setGhError('The repository lists skills, but none of their SKILL.md files could be read.');
+      else setGhFound(`${entries.length} skill${entries.length === 1 ? '' : 's'} from ${found.source}${found.ref ? ' @ ' + found.ref : ''}`);
+    } catch (err) {
+      setGhCatalog([]);
+      setGhError((err as Error).message || String(err));
+    } finally {
+      setGhBusy(false);
+    }
+  }, [ghInput, ghBusy]);
 
   // Nothing here runs on its own: this is what the user's click on Install
   // does. The screen supplies the two things hf-skills.js refuses to invent --
@@ -278,7 +321,22 @@ export default function LibraryScreen() {
 
       <div className="library-layout">
         <section className="library-col">
-          <h3 className="col-title">HF Skills ({hfCatalog.length})</h3>
+          <h3 className="col-title">Skills ({hfCatalog.length + ghCatalog.length})</h3>
+          <div className="gh-install">
+            <input
+              value={ghInput}
+              onChange={(e) => setGhInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void findGitHub(); }}
+              placeholder="Install from GitHub — a URL or owner/repo with SKILL.md files"
+              aria-label="A GitHub repository from which to install skills"
+              disabled={ghBusy}
+            />
+            <button onClick={() => void findGitHub()} disabled={ghBusy || !ghInput.trim()}>
+              {ghBusy ? 'Reading…' : 'Find skills'}
+            </button>
+          </div>
+          {ghError && <div className="stream-error">{ghError}</div>}
+          {ghFound && <div className="skill-src">{ghFound}</div>}
           {(() => {
             // B2's running total: the installed skills' names and descriptions
             // are in every prompt, and there is a point past which that is too
@@ -295,7 +353,7 @@ export default function LibraryScreen() {
           })()}
           {hfCatalogLoading && <div className="empty">Loading HF skills…</div>}
           <div className="skill-list">
-            {hfCatalog.map((s: any) => {
+            {[...hfCatalog, ...ghCatalog].map((s: any) => {
               const slug = hfSkills.skillSlug(s.name || '');
               const state = installState[slug];
               const status = hfSkills.installStatus(s, installed);
@@ -314,7 +372,7 @@ export default function LibraryScreen() {
               const blocked = lint.errors.length > 0;
               const prereqs = skillLint.prereqTools(s.content || '');
               return (
-                <div key={s.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div key={`${s.repo || 'hf'}|${s.name}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <button className={`skill-item ${open?.name === s.name ? 'active' : ''}`} onClick={() => { setOpen({ name: s.name, description: s.description, source: s.repo || 'hf' }); setContent(s.content); }}>
                     <div className="skill-name">
                       {s.name}
@@ -355,7 +413,7 @@ export default function LibraryScreen() {
                 </div>
               );
             })}
-            {!hfCatalog.length && !hfCatalogLoading && <div className="empty">No HF skills loaded — sign in to Hugging Face for the full catalog.</div>}
+            {!hfCatalog.length && !ghCatalog.length && !hfCatalogLoading && <div className="empty">No skills loaded yet — sign in to Hugging Face, or paste a GitHub repository above.</div>}
           </div>
         </section>
 

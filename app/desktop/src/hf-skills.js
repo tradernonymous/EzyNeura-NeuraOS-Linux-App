@@ -68,6 +68,25 @@
     return typeof fetchImpl === 'function' ? fetchImpl : fetch;
   }
 
+  // B1: an entry from GitHub carries a `rawBase` instead of a Hub repo, and
+  // every file comes from there -- same ceilings, same plan, one difference
+  // in where the bytes are read from. Each segment is encoded on its own,
+  // exactly as rawUrl does above.
+  async function fetchFromBase(base, relPath, fetchImpl) {
+    var segments = String(relPath == null ? '' : relPath).split('/');
+    var encoded = [];
+    for (var i = 0; i < segments.length; i += 1) {
+      if (segments[i]) encoded.push(encodeURIComponent(segments[i]));
+    }
+    try {
+      var res = await hfFetch(fetchImpl)(String(base).replace(/\/+$/, '') + '/' + encoded.join('/'));
+      if (!res.ok) return null;
+      return await res.text();
+    } catch {
+      return null;
+    }
+  }
+
   // skill-lint.js holds the lint/cost rules (upgrade plan B2/B3), shared with
   // scripts/check-skills.mjs's rules. CommonJS requires it directly; in the
   // browser it arrives as a side-effect import (LibraryScreen imports it).
@@ -358,7 +377,16 @@
     for (var i = 0; i < total; i++) {
       var file = files[i];
       report({ phase: 'fetch', file: file.name, index: i, total: total });
-      var text = await fetchSkill(skill.repo, file.repoPath, options.token, options.fetchImpl);
+      // Three sources, in order: text the caller already holds (the bundled
+      // Mint pack), a GitHub raw base (B1), the Hugging Face Hub.
+      var text = null;
+      if (typeof options.textFor === 'function') text = await options.textFor(file);
+      if (text == null && skill.rawBase) text = await fetchFromBase(skill.rawBase, file.repoPath, options.fetchImpl);
+      // The Hub is only asked when the entry came from the Hub: a GitHub
+      // miss must not turn into a request to a different host entirely.
+      if (text == null && !skill.rawBase && !options.textFor) {
+        text = await fetchSkill(skill.repo, file.repoPath, options.token, options.fetchImpl);
+      }
       if (text == null) {
         throw new Error('Could not download ' + file.repoPath + ' from ' + skill.repo + '.');
       }

@@ -6757,6 +6757,11 @@ input, textarea, select { border-radius: 8px; }
 .chat-output-commit { display: flex; gap: 6px; margin-top: 8px; }
 .chat-output-commit input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
 
+/* ---- Install from GitHub (B1): a URL in, the repo's bundles out ------- */
+.gh-install { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.gh-install input { flex: 1 1 220px; min-width: 0; padding: 7px 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12.5px; }
+.gh-install button { flex: none; }
+
 /* ---- Push and pull, unstage, discard (the Changes panel, E1/E2) -------- */
 .chat-output-sync { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .chat-output-sync button { padding: 3px 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 11px; cursor: pointer; }

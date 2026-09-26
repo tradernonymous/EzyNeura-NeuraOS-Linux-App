@@ -12,6 +12,8 @@ export interface HfSkill {
   content: string;
   repo?: string;
   path?: string;
+  /** GitHub entries fetch every file from here instead of the Hub (B1). */
+  rawBase?: string;
 }
 
 /** Where an installed skill lands, relative to the open folder. */
@@ -71,6 +73,8 @@ export interface InstallOptions {
   skipPowerShell?: boolean;
   /** Descriptions of installed skills, for the lint's duplicate-description rule. */
   otherDescriptions?: string[];
+  /** Text the caller already holds (the bundled pack); null falls through to fetch. */
+  textFor?: (file: PlannedFile) => Promise<string | null> | string | null;
 }
 
 export interface InstallResult {
