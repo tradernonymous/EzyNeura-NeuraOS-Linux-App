@@ -125,5 +125,5 @@ test('"You" is gone from a plain message; the model or agent label is not', () =
   assert.ok(!/: msg\.role === 'user'\s*\n\s*\?\s*'You'/.test(chat), 'a plain user message no longer renders a "You" label');
   assert.match(chat, /'You · command'/, 'a shell command still says whose it was');
   const css = read('desktop', 'src', 'index.css');
-  assert.match(css, /\.message\.user \{ max-width: min\(560px, 88%\); margin-left: auto; margin-right: 0; \}/, 'a user message is narrower and pushed to the right, matching its own bubble shape');
+  assert.match(css, /\.message\.user \{ max-width: min\(560px, 88%\); margin-left: auto; margin-right: max\(0px, calc\(\(100% - var\(--workspace-max\)\) \/ 2\)\); \}/, 'a user message is narrower and pushed to the right edge of the centred column, matching its own bubble shape');
 });

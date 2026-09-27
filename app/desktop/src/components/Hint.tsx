@@ -34,7 +34,7 @@ export default function Hint({ summary, children }: Props) {
         type="button"
         className="linkish hint-toggle"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         onClick={() => setOpen((v) => !v)}
       >
         {open ? 'Less' : 'More'}

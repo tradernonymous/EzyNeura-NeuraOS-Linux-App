@@ -40,6 +40,11 @@ before and after, not just against the source.
    longer wrap the label onto its own line under the icon. Fixed Doctor's
    "Run the checks again", Library's "Save as skill" and "Refresh", and
    any other plain `<button>` with an icon, in one place.
+   **Corrected 2026-09-27 (BACKLOG):** on the bare `button` rule the trio
+   also hit every column button — the sidebar toggle vanished, the Settings
+   rail centred, Create's sketches disappeared, Library's skill cards
+   collapsed to a row. It is `button:where(:has(> svg))` now: the icon
+   buttons only, same specificity as the bare tag.
 18. ✅ Chat titles: `.sidebar .session-title` now sets its own
     `font-family`, overriding a generic `.session-title` rule that was
     monospace (built for a path, not a title). `.session-title` has this
@@ -201,7 +206,10 @@ moved to their own future pass rather than forced into this one.
     render: `index.css` loaded into headless Chromium (`/opt/pw-browsers`,
     already on this machine, no new dependency) against a small fixture
     of the actual message markup — before/after screenshots, not
-    guessed from the CSS text. "Show the model name only when it
+    guessed from the CSS text. **Corrected 2026-09-27:** `margin-right: 0`
+    aligned the bubble to the pane's edge, not the centred column, on a
+    wide window; it is the column's side gap now, and the rewind button
+    moved to the bubble's corner, off the text. "Show the model name only when it
     changes" is not done: a real feature (tracking the previous
     message's model across renders), not a wording change, left open.
 12. ⬜ Fold a finished turn into "Thinking / Commands / Edits" chips
@@ -299,6 +307,10 @@ Nothing here was worth forcing a change to close a checkbox.
     one produces anything (a catalogue entry, a sign-in), `nothingYet` goes
     false on its own and the full screen appears. Verified with a headless
     Chromium render of both states against the real `index.css`.
+    **Corrected 2026-09-27:** it was judged before the first load and from
+    the loading flags, so it flashed on every visit, toggled around each
+    Refresh (remounting the sign-in block) and hid the engine-skills error;
+    it now waits for the first load to settle and never shows over an error.
 31. **Built, folded into the same change.** The screen's own `<h1>Library</h1>`
     header row is gone — the tab bar above it (`SpaceSwitch`, driven by
     `tabsOf('agents')`) already reads "Library" as one of its pills, which a

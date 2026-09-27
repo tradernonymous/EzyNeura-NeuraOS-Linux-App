@@ -78,9 +78,13 @@ export default function TopNav({ active, onNavigate, onOpenPalette, onOpenSettin
 
   return (
     <nav className="topnav" ref={barRef} aria-label="Main">
-      <button type="button" className="topnav-burger" onClick={onToggleSidebar} aria-pressed={!sidebarHidden} aria-label={sidebarHidden ? 'Show the sidebar' : 'Hide the sidebar'} title={`${sidebarHidden ? 'Show' : 'Hide'} the sidebar — Ctrl+B`}>
-        <span /><span /><span />
-      </button>
+      {/* The sidebar it toggles is Chat's own list and draws nowhere else
+          (App.tsx), so outside Chat this button did nothing visible. */}
+      {current === 'chat' && (
+        <button type="button" className="topnav-burger" onClick={onToggleSidebar} aria-pressed={!sidebarHidden} aria-label={sidebarHidden ? 'Show the sidebar' : 'Hide the sidebar'} title={`${sidebarHidden ? 'Show' : 'Hide'} the sidebar — Ctrl+B`}>
+          <span /><span /><span />
+        </button>
+      )}
       <div className="topnav-brand">
         <img className="sidebar-emblem" src={emblem} alt="" width={20} height={20} draggable={false} />
         <span className="topnav-title">NeuraOS</span>

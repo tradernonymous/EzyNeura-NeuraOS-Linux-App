@@ -37,7 +37,7 @@ test('Library dropped its own header row; Refresh lives in the tab bar instead',
 
 test('one empty state replaces five, on a genuinely empty first launch', () => {
   const lib = read('desktop', 'src', 'screens', 'LibraryScreen.tsx');
-  assert.match(lib, /const nothingYet = !hfSignedIn && !hfCatalogLoading && !loading/);
+  assert.match(lib, /const nothingYet = loadedOnce && !hfSignedIn && !error/, 'judged once the first load settled, never over an engine error');
   assert.match(lib, /hfCatalog\.length === 0 && ghCatalog\.length === 0/);
   assert.match(lib, /Object\.keys\(installed\)\.length === 0 && skills\.length === 0 && chats\.length === 0/);
   assert.match(lib, /className="library-empty"/);
