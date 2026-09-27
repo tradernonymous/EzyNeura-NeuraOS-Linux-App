@@ -16,7 +16,7 @@ test('Hint starts collapsed, and the toggle is wired to the expanded text', () =
   const src = read('app', 'desktop', 'src', 'components', 'Hint.tsx');
   assert.match(src, /const \[open, setOpen\] = useState\(false\)/);
   assert.match(src, /aria-expanded=\{open\}/);
-  assert.match(src, /aria-controls=\{id\}/, 'the toggle names the expanded text it opens');
+  assert.match(src, /aria-controls=\{open \? id : undefined\}/, 'the toggle names the expanded text it opens, only while that text exists');
   assert.match(src, /<span id=\{id\}/, 'the expanded text carries that same id');
   assert.match(src, /export const HINT_SUMMARY_MAX = \d+/);
 });

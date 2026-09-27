@@ -1021,12 +1021,20 @@ button {
   cursor: pointer;
   transition: all 0.12s;
   font-family: var(--font);
-  /* An icon plus a label (Doctor's "Run the checks again", Library's "Save
-     as skill") used to wrap onto two lines the moment the button was
-     narrower than its content -- the icon on its own row, the label
-     centred under it. .raised already sets this same trio for exactly
-     this reason; the base rule gets it too so every plain <button> is
-     immune, not only the ones that opted into .raised. */
+}
+
+/* An icon plus a label (Doctor's "Run the checks again", Library's "Save
+   as skill") used to wrap onto two lines the moment the button was
+   narrower than its content -- the icon on its own row, the label centred
+   under it. .raised already sets this same trio for exactly this reason.
+   Scoped to buttons that actually start with an icon: put on every
+   <button>, the trio turned each column button (a group name over its
+   hint in the Settings rail, a sketch over a title in Create, a skill
+   card) into one centred, non-wrapping row, and shrank the top bar's
+   sidebar toggle -- three empty bars in a column -- to nothing at all.
+   :where() keeps the specificity at a bare tag's, so a class rule still
+   wins, exactly as it did against the plain `button` rule above. */
+button:where(:has(> svg)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6447,12 +6455,20 @@ input, textarea, select { border-radius: 8px; }
    rendered as a full-width card no different in shape from the assistant's.
    The "You" label is gone for the same reason: alignment says whose
    message it is now, so a bare chat message no longer needs the word. */
-.message.user { max-width: min(560px, 88%); margin-left: auto; margin-right: 0; }
+/* margin-right is the column's own side gap, not 0: .message is centred
+   with margin auto inside the full-width list, so a bare 0 put the bubble
+   against the pane's right edge, well past the assistant column and the
+   composer on a wide window. Zero once the pane is narrower than the
+   column, which is when the two edges coincide anyway. */
+.message.user { max-width: min(560px, 88%); margin-left: auto; margin-right: max(0px, calc((100% - var(--workspace-max)) / 2)); }
 .message.user .message-content { border-radius: 12px; }
 .message-rewind {
   position: absolute;
-  top: 0;
-  right: 0;
+  /* Just off the corner: it used to sit on the "You" line above the
+     bubble, and with that line gone a 0/0 offset laid it over the first
+     words of the message. */
+  top: -8px;
+  right: -8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6862,15 +6878,20 @@ input, textarea, select { border-radius: 8px; }
 
 /* ---- The next three: FLUX.2 steps, commit from Changes, recent projects -- */
 .flux-steps { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.flux-step { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-2); }
+/* flex-wrap, and the buttons at flex 0 1 auto: at the Create column's
+   width the buttons (flex: none before) kept their full row and squeezed
+   the text column to nothing -- step 2 became a tall blank card with
+   "Get Qwen-Image" clipped at its edge. Now the buttons drop under the
+   text when the row cannot hold both, right-aligned on their own line. */
+.flux-step { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-2); }
 /* E5: the model step's two gets — FLUX.2 and Qwen-Image side by side. */
-.flux-step-actions { display: flex; gap: 6px; flex-wrap: wrap; flex: none; }
+.flux-step-actions { display: flex; gap: 6px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; margin-left: auto; }
 .flux-step.is-next { border-color: var(--accent-mid); background: var(--accent-dim); }
 .flux-step.is-done { opacity: 0.85; }
 .flux-step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-3); color: var(--text-2); font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .flux-step.is-done .flux-step-no { background: rgba(74, 222, 128, 0.18); color: var(--ok); }
 .flux-step.is-next .flux-step-no { background: var(--accent); color: var(--accent-contrast); }
-.flux-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.flux-step-body { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .flux-step-label { font-size: 12.5px; font-weight: 600; }
 .flux-step-detail { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
 .flux-ready { color: var(--ok); }

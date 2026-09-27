@@ -97,8 +97,15 @@ export default function LibraryScreen() {
   const [open, setOpen] = useState<Skill | null>(null);
   const [content, setContent] = useState<string>('');
   const [error, setError] = useState('');
-  const [chats, setChats] = useState<ChatSession[]>([]);
+  // Read synchronously, so a saved chat is on screen from the first paint.
+  const [chats, setChats] = useState<ChatSession[]>(() => chatStore.byRecency(chatStore.readStore()) as ChatSession[]);
   const [loading, setLoading] = useState(false);
+  // True once the first load() has settled, both halves. The first-launch
+  // empty state (nothingYet, below) waits for it: judged from the initial
+  // empty arrays it flashed on every visit, and judged from the loading
+  // flags it came and went around every Refresh, unmounting the sign-in
+  // block (and a one-click sign-in in progress) each time.
+  const [loadedOnce, setLoadedOnce] = useState(false);
 
   // --- HF Skills state ---
   const [hfCatalog, setHfCatalog] = useState<any[]>([]);
@@ -112,7 +119,7 @@ export default function LibraryScreen() {
   const [localRoot] = useState<string>(readLocalRoot);
 
   // --- HuggingFace state ---
-  const [hfSignedIn, setHfSignedIn] = useState(false);
+  const [hfSignedIn, setHfSignedIn] = useState(() => hfAuth.signedIn());
   const [hfUser, setHfUser] = useState<any>(null);
   const [hfQuery, setHfQuery] = useState('');
   const [hfResults, setHfResults] = useState<HfModel[]>([]);
@@ -302,7 +309,7 @@ export default function LibraryScreen() {
   const load = () => {
     setLoading(true);
     setError('');
-    api.skills()
+    const engine = api.skills()
       .then((rows: any) => setSkills(Array.isArray(rows) ? rows : []))
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
@@ -311,10 +318,11 @@ export default function LibraryScreen() {
     // Load HF skills catalog.
     setHfCatalogLoading(true);
     const hfToken = hfAuth.accessToken()?.access_token;
-    hfSkills.loadCatalog(hfToken || undefined)
+    const hub = hfSkills.loadCatalog(hfToken || undefined)
       .then((rows: any) => setHfCatalog(Array.isArray(rows) ? rows : []))
       .catch(() => setHfCatalog([]))
       .finally(() => setHfCatalogLoading(false));
+    void Promise.allSettled([engine, hub]).then(() => setLoadedOnce(true));
   };
 
   useEffect(() => { load(); }, []);
@@ -351,7 +359,9 @@ export default function LibraryScreen() {
   // actionable on their own (HF sign-in, GitHub install) still render in that
   // state; the other three, which only ever say "empty" until one of those two
   // is used, collapse into the one paragraph below instead of repeating it
-  // three times in three boxes.
+  // three times in three boxes. Only once the first load has settled, and
+  // never while the engine's skills errored: that error is rendered in the
+  // full layout, and "Nothing set up yet" over an unreachable engine hid it.
   const hfSignInBlock = (
     <>
       <p>Sign in to browse and download GGUF models (including gated repos).</p>
@@ -373,7 +383,7 @@ export default function LibraryScreen() {
       </button>
     </div>
   );
-  const nothingYet = !hfSignedIn && !hfCatalogLoading && !loading
+  const nothingYet = loadedOnce && !hfSignedIn && !error
     && hfCatalog.length === 0 && ghCatalog.length === 0
     && Object.keys(installed).length === 0 && skills.length === 0 && chats.length === 0;
 

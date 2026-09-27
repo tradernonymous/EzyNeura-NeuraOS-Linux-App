@@ -106,6 +106,9 @@ function readLocalRoot(): string {
 
 export default function App() {
   const [view, setView] = useState<View>('chat');
+  // The view as of the last render, for callbacks created once (toggleSidebar).
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const [theme, setTheme] = useState<Theme>(readTheme);
   const {
     info: updateInfo,
@@ -454,11 +457,22 @@ export default function App() {
   };
 
   const toggleSidebar = useCallback(() => {
+    // The sidebar is Chat's own list and draws only there. From another
+    // space, Ctrl+B and the palette's "Show or hide the left column" used
+    // to flip (and remember) a hidden state with nothing on screen to show
+    // for it -- and the list was then gone on the next visit to Chat. Now
+    // they go to Chat with the list open, which is what was asked for.
+    if (destinationOf(viewRef.current) !== 'chat') {
+      navigate('chat');
+      setSidebarHidden(false);
+      shellLib.writeHidden(false);
+      return;
+    }
     setSidebarHidden((hidden) => {
       shellLib.writeHidden(!hidden);
       return !hidden;
     });
-  }, []);
+  }, [navigate]);
 
   // A new chat starts in a folder. With one named (a group's "+", the orb's
   // long press in a project) it starts at once; otherwise the picker asks.

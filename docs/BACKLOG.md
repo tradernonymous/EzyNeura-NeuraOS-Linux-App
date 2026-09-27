@@ -1120,3 +1120,48 @@ the bundle-size check and the dist secrets scan. Not verified here: real
 Mint hardware, a real GPU draw of FLUX.2 or Qwen-Image, and a live SSH
 host or API credential pushed through the C10 broker — its rules are
 unit-tested, the call itself is not.
+
+## UI plan P1–P8, the bug pass (2026-09-27)
+
+A debug build under Xvfb (every space, every Settings group, both themes,
+the Create → Image column, the Agents tabs, a new chat, the palette) plus
+a static review of the P1–P8 diff, then one PR with every confirmed bug:
+
+- **P1 item 7 was a regression, not a fix.** The trio it put on the bare
+  `button` rule (`inline-flex`, `align-items: center`, `nowrap`) applied to
+  every column button too: the top bar's sidebar toggle (three empty bars)
+  shrank to nothing and vanished, the Settings rail centred each group's
+  name and hint, Create's gallery lost its sketches (an empty span with
+  only an aspect ratio, now zero wide), Library's skill cards and the Build
+  screen's session rows became one clipped row, plan-canvas nodes lost
+  their two-line titles, and wrapped explanation text (approval reasons,
+  palette descriptions) overflowed. All from one rule, all confirmed on
+  screen or in a headless render. It is now `button:where(:has(> svg))`:
+  the buttons that actually start with an icon, at a bare tag's
+  specificity, so the original wrap fix holds and nothing else changes.
+- The toggle also drew outside Chat, where the sidebar it toggles no
+  longer exists (P1 item 1): a no-op that still persisted a hidden state,
+  so the chat list was gone on the next visit to Chat. The burger shows in
+  Chat only; Ctrl+B and the palette entry from another space go to Chat
+  with the list open.
+- P5 item 11's right-aligned bubble aligned to the pane's edge, not the
+  centred column: on a wide window it sat ~200px right of every reply and
+  of the composer. Its right margin is the column's own side gap now. The
+  rewind button, which used to sit on the removed "You" line, was lying
+  over the first words of the bubble; it is at the corner.
+- P8 item 28's first-launch empty state was judged from the initial empty
+  arrays, so it flashed on every visit before the load ran, toggled around
+  every Refresh (unmounting the sign-in block, and a one-click sign-in in
+  progress with it), and hid the engine-skills error outright. It waits for
+  the first load to settle and never shows over an error.
+- The Create → Image "On this PC" stepper, at the Create column's width:
+  the buttons kept their whole row and squeezed the text to nothing, so
+  step 2 was a tall blank card with "Get Qwen-Image" clipped at its edge.
+  The buttons drop under the text when the row cannot hold both.
+- `Hint`'s `aria-controls` named an element that does not exist while
+  collapsed; it names it only while open.
+- The `run-app` skill's `--bundles none` is not a flag this Tauri CLI
+  accepts (`deb`, `rpm`, `appimage` only); `--no-bundle` is.
+
+Pinned in `app/test/desktop-ui-pass-fixes.test.js`. Not verified here, as
+before: real Mint hardware, a real GPU draw.

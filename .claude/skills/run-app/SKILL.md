@@ -20,7 +20,7 @@ Two scripts in `scripts/dev/`:
 ## The loop
 
 ```bash
-cd app/desktop && npm run build && npx tauri build --bundles none --debug; cd ../..
+cd app/desktop && npm run build && npx tauri build --debug --no-bundle; cd ../..
 bash scripts/dev/engine.sh 8787 &
 ENGINE=$!
 NEURAOS_ENGINE_URL=http://127.0.0.1:8787 bash scripts/dev/screenshot.sh \
