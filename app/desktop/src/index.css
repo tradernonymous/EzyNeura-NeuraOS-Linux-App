@@ -6767,12 +6767,19 @@ input, textarea, select { border-radius: 8px; }
 
 .settings-nav { width: 200px; display: flex; flex-direction: column; gap: 4px; }
 .settings-nav-btn { display: flex; flex-direction: column; gap: 1px; border: 1px solid transparent; border-radius: 8px; }
-.settings-nav-hint { font-size: 10.5px; color: var(--text-3); font-weight: 400; }
+/* One line, not two: the button already carries the full hint as its title
+   (a native tooltip), so an ellipsis loses nothing that a second row of
+   text was giving this 200px-wide rail. */
+.settings-nav-hint { font-size: 10.5px; color: var(--text-3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-nav-btn.active .settings-nav-hint { color: var(--text-2); }
 .settings-cheat { margin-top: auto; justify-content: space-between; }
 .settings-cheat kbd { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 
-.settings-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; align-content: start; padding: 16px 18px; }
+/* align-items: start -- a grid row's items stretch to the tallest one by
+   default, and .settings-card's own height:100% (below) then stretched a
+   short card (Appearance) to match a tall sibling in the same row, leaving
+   a blank lower half. Cards now keep their own height. */
+.settings-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; align-content: start; align-items: start; padding: 16px 18px; }
 .settings-main > .settings-section { margin: 0; min-width: 0; }
 .settings-main > .settings-section.is-wide { grid-column: 1 / -1; }
 .settings-main > .settings-section > .settings-card { height: 100%; }

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
-import { APP_VERSION } from '../version';
 import ConnectionCard from '../components/ConnectionCard';
 import DiagnosticsCard from '../components/DiagnosticsCard';
 import DoctorCard from '../components/DoctorCard';
@@ -54,7 +53,6 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
   const [providers, setProviders] = useState<any[]>([]);
   const [limits, setLimits] = useState<any>(null);
   const [memory, setMemory] = useState<Array<any>>([]);
-  const version = APP_VERSION;
 
   const load = () => {
     api.providers().then((rows: any) => setProviders(Array.isArray(rows) ? rows : [])).catch(() => setProviders([]));
@@ -109,11 +107,11 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
 
   return (
     <div className="screen settings">
+      {/* The version stayed here and in the status bar -- the status bar is
+          the one place that names the build (its own header comment,
+          NEURA-076), so this copy was the duplicate. */}
       <header className="screen-header">
         <h1>Settings</h1>
-        <div className="header-actions">
-          <span className="limit-badge">v{version}</span>
-        </div>
       </header>
       <div className="settings-layout">
         <aside className="settings-nav">

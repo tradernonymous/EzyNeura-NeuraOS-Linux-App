@@ -157,10 +157,26 @@ moved to their own future pass rather than forced into this one.
    no fix when a remote engine is healthy, still `fail` when nothing is.
    ⬜ Still open: one row per check folded into "N passing" — the row
    markup itself, a separate, larger change from the wording fix.
-10. ⬜ Settings layout: drop the "SETTINGS · v2.11.0" title row, shorten
-    menu subtitles to one line, let cards flow instead of stretching to
-    the tallest card in their row, replace the full shortcuts grid with
-    a link to the existing Ctrl+/ cheat sheet.
+10. 🔧 Settings layout, three of four done and confirmed on screen (a
+    debug build under Xvfb, before/after):
+    ✅ dropped the "v2.11.0" badge next to the "Settings" title — the
+    status bar is the one place that names the build (NEURA-076), this
+    was the duplicate, not the heading itself.
+    ✅ menu subtitles are one line (`white-space: nowrap; overflow:
+    hidden; text-overflow: ellipsis`); the full text is still there as
+    the button's own `title` tooltip, so nothing is lost, and in
+    practice most now fit without even needing the ellipsis.
+    ✅ cards no longer stretch to match a taller sibling in the same grid
+    row (`align-items: start` on `.settings-main` — the grid's own
+    `align-items: stretch` default, plus the card's `height: 100%`, was
+    the cause; Appearance used to grow a blank lower half to match a
+    taller neighbour).
+    ⬜ Not done: the shortcuts grid already has its own progressive
+    disclosure (`ShortcutsCard.tsx`'s `PEEK` slice + "All N · change"),
+    which a fixed test (`desktop-settings.test.js`) pins as intentional
+    structure, not leftover duplication — collapsing it further to a
+    bare link is a bigger rewrite of already-reasonable behaviour, not a
+    quick win, and is dropped from this item rather than forced.
 
 ### P5 — Chat: message anatomy and performance ⬜
 
