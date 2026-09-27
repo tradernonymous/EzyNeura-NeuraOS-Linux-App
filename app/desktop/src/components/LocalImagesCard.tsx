@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { pushToast } from './Toasts';
 import SelectPill from './SelectPill';
+import Hint from './Hint';
 import '../flux-setup.js';
 import '../image-run.js';
 
@@ -47,7 +48,9 @@ function LoraSection({ disabled }: { disabled: boolean }) {
         <button onClick={add} disabled={disabled}>Add LoRA files…</button>
       </div>
       {loras.length === 0 && (
-        <p className="settings-hint">No LoRAs yet. A LoRA is a small add-on (usually 20–500 MB) that steers a model toward a style or subject; add it here, tick it, and it applies to every picture this PC draws. It only works with the base model it was made for.</p>
+        <Hint summary="No LoRAs yet.">
+          A LoRA is a small add-on (usually 20–500 MB) that steers a model toward a style or subject; add it here, tick it, and it applies to every picture this PC draws. It only works with the base model it was made for.
+        </Hint>
       )}
       {loras.map((l) => {
         const on = pickOf(l.name);

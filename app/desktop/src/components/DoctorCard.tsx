@@ -10,6 +10,7 @@ import {
 } from '../bridge';
 import { isLinux } from '../platform';
 import Icon from './Icon';
+import Hint from './Hint';
 import { pushToast } from './Toasts';
 // UMD modules: loaded for their side effect, read off globalThis.
 import '../doctor.js';
@@ -80,10 +81,9 @@ export default function DoctorCard() {
     <section className="settings-section">
       <h2>Doctor</h2>
       <div className="settings-card">
-        <p className="settings-hint">
-          One check of everything NeuraOS depends on. Nothing is changed or installed here — each
-          failure names the command or the setting that fixes it.
-        </p>
+        <Hint summary="One check of everything NeuraOS depends on.">
+          Nothing is changed or installed here — each failure names the command or the setting that fixes it.
+        </Hint>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
           <button onClick={() => void run()} disabled={busy}>
             <Icon name="settings" size={12} /> {busy ? 'Checking…' : 'Run the checks again'}

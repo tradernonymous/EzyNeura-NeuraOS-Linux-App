@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { pushToast } from './Toasts';
 import SelectPill from './SelectPill';
+import Hint from './Hint';
 import { hasShell, openUrl, whisperFind, whisperPickBinary, type WhisperFacts } from '../bridge';
 import { ENGINE_KEY, LANGUAGE_KEY, MODEL_KEY, normalizeEngine, pickModel, type EngineSetting } from '../dictate';
 import { HubDownloader } from './LocalImagesCard';
@@ -89,10 +90,9 @@ export default function DictationCard() {
     <section className="settings-section dictation-card">
       <h2>Dictation</h2>
       <div className="settings-card">
-        <p className="settings-hint">
-          The mic in the composer turns speech into text with Whisper — on this PC through whisper.cpp (private, no account),
-          or on Hugging Face when you are signed in. {builtInDictationHint()}
-        </p>
+        <Hint summary="The mic turns speech into text with Whisper.">
+          On this PC through whisper.cpp (private, no account), or on Hugging Face when you are signed in. {builtInDictationHint()}
+        </Hint>
 
         <div className="dictation-engines" role="radiogroup" aria-label="Dictation engine">
           {([
