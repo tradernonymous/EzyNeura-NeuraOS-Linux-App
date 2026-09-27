@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
-import { APP_VERSION } from '../version';
 import ConnectionCard from '../components/ConnectionCard';
 import DiagnosticsCard from '../components/DiagnosticsCard';
 import DoctorCard from '../components/DoctorCard';
@@ -29,13 +28,31 @@ interface Props {
   onConnectionChanged?: () => void;
   /** What the shell last concluded about the engine, in the diagnostics report. */
   diagnosticsState?: string;
+  /** The app's current connection is healthy -- Doctor's own "Bundled engine" row. */
+  engineHealthy?: boolean;
 }
 
-export default function SettingsScreen({ onConnectionChanged, diagnosticsState }: Props) {
+/** One row of the Providers list, ready or not. */
+function providerRow(p: any) {
+  return (
+    <div key={p.id} className="provider-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+      <span className="setting-label">
+        {p.configured ? '' : '○ '}{p.label || p.id}
+        {p.kind && p.kind !== 'chat' ? ` (${p.kind})` : ''}
+      </span>
+      <span className={`setting-value ${p.configured ? 'ok' : 'warn'}`}>
+        {p.configured
+          ? ((p.freeTier && (p.freeTier.text || p.freeTier.limitText)) || 'ready')
+          : (p.note || 'no key set')}
+      </span>
+    </div>
+  );
+}
+
+export default function SettingsScreen({ onConnectionChanged, diagnosticsState, engineHealthy }: Props) {
   const [providers, setProviders] = useState<any[]>([]);
   const [limits, setLimits] = useState<any>(null);
   const [memory, setMemory] = useState<Array<any>>([]);
-  const version = APP_VERSION;
 
   const load = () => {
     api.providers().then((rows: any) => setProviders(Array.isArray(rows) ? rows : [])).catch(() => setProviders([]));
@@ -90,11 +107,11 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
 
   return (
     <div className="screen settings">
+      {/* The version stayed here and in the status bar -- the status bar is
+          the one place that names the build (its own header comment,
+          NEURA-076), so this copy was the duplicate. */}
       <header className="screen-header">
         <h1>Settings</h1>
-        <div className="header-actions">
-          <span className="limit-badge">v{version}</span>
-        </div>
       </header>
       <div className="settings-layout">
         <aside className="settings-nav">
@@ -142,19 +159,20 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
             <h2>Providers</h2>
             <div className="settings-card">
               {providers.length === 0 && <div className="empty">No providers reported by the engine.</div>}
-              {providers.map((p: any) => (
-                <div key={p.id} className="provider-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span className="setting-label">
-                    {p.configured ? '' : '○ '}{p.label || p.id}
-                    {p.kind && p.kind !== 'chat' ? ` (${p.kind})` : ''}
-                  </span>
-                  <span className={`setting-value ${p.configured ? 'ok' : 'warn'}`}>
-                    {p.configured
-                      ? ((p.freeTier && (p.freeTier.text || p.freeTier.limitText)) || 'ready')
-                      : (p.note || 'no key set')}
-                  </span>
-                </div>
-              ))}
+              {/* Ready providers first, always shown -- these are the ones a free
+                  tier already answers with, so they are what "Providers" is
+                  mostly for. The rest used to be the same number of rows, each
+                  reading "no key set" in warning yellow, which looked like N
+                  problems rather than N providers nobody has asked to set up. */}
+              {providers.filter((p: any) => p.configured).map(providerRow)}
+              {providers.some((p: any) => !p.configured) && (
+                <details className="provider-more">
+                  <summary>
+                    {providers.filter((p: any) => !p.configured).length} more — add a key
+                  </summary>
+                  {providers.filter((p: any) => !p.configured).map(providerRow)}
+                </details>
+              )}
             </div>
           </section>
 
@@ -224,7 +242,7 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
 
           <DesktopControlCard />
 
-          <DoctorCard />
+          <DoctorCard engineHealthy={engineHealthy} />
 
           <section className="settings-section">
             <h2>Advanced</h2>

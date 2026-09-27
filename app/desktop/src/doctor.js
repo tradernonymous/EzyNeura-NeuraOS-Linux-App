@@ -84,11 +84,17 @@
     var platform = f.platform || 'linux';
     var rows = [];
 
-    // The engine: the app is a shell without it.
+    // The engine: the app is a shell without it. The bundled one not running
+    // is only a problem when nothing else is answering either -- a person on
+    // a remote or cloud engine (f.remoteEngineHealthy) was never going to
+    // start this PC's own copy, and "Bundled engine FAIL" while the app is
+    // connected and working read as a false alarm.
     if (!shell) {
       rows.push(row('engine', 'Bundled engine', 'skip', 'This window has no shell (a plain browser build).'));
     } else if (f.engine && f.engine.running) {
       rows.push(row('engine', 'Bundled engine', 'ok', 'Running on ' + (f.engine.url || '127.0.0.1:' + f.engine.port) + '.'));
+    } else if (f.remoteEngineHealthy) {
+      rows.push(row('engine', 'Bundled engine', 'skip', 'Not in use — connected to a different, healthy engine instead.'));
     } else {
       rows.push(row('engine', 'Bundled engine', 'fail', 'Not running.', 'Settings → Engine → “Run the engine on this machine”.'));
     }

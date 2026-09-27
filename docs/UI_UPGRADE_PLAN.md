@@ -108,28 +108,75 @@ built once, alongside P4's Settings work.
    a mechanical pass, left for a follow-up rather than rushed to hit a
    count.
 
-### P3 — Empty chat and the composer ⬜
+### P3 — a real bug, and the providers list ✅ (recalibrated)
 
-5. Empty chat: one line + a 2×2 suggestion grid; the two promo cards
-   (Mint pack, FLUX.2) become one dismissible "Tip" chip.
-6. Composer: model chip (quota as tooltip) + a **+** menu (attach, skills,
-   goal, search, code, MCP) + one mode chip (approval/concise/reasoning)
-   + mic + send, replacing today's 10 separate controls in two rows.
-19. Fix the empty-chat bug: "Starting one now…" shows under a New chat
-    button that doesn't start anything.
+Re-reading items 5 and 6 against the actual components (not just the
+screenshot) found more real functionality than a quick pass gives credit
+for, so this phase's scope changed before it was built rather than after:
 
-### P4 — Settings screen ⬜
+19. ✅ Fixed the empty-chat bug: `ChatScreen.tsx`'s `!active` state said
+    "Starting one now…" under a New chat button, but nothing calls
+    `startNew()` on mount — only that button, the sidebar's own New chat,
+    and the project picker do. The false promise is gone; the button is
+    now the only, honest next step.
+8. ✅ Pulled forward from P4 (same risk level, same phase's worth doing):
+   the Providers list now shows every provider that already works, and
+   folds the rest behind a native `<details>` "N more — add a key"
+   instead of N rows each reading "no key set" in warning yellow — which
+   read as N problems, not N providers nobody has asked to set up.
+   Nothing is hidden permanently, only collapsed, same as `Hint`. Both
+   changes are small and mechanical (a deleted line of copy; a
+   `.filter()`/`<details>` split of an existing map) and passed the full
+   local gate, but this pass's screenshot attempts kept landing on the
+   connect-retry screen instead of a connected Chat or Settings → AI &
+   Models, so neither is confirmed by a fresh screenshot the way P1 and
+   P2 were — said plainly rather than claimed.
 
-8. Providers list: show the providers that work with no key; fold the
-   rest into one "N more — add a key" row instead of N rows of yellow
-   "no key set".
-9. Doctor: one row per check (dot, name, one line, Fix), passing checks
-   folded into "N passing"; "Bundled engine FAIL" reworded to "not in
-   use" while a remote engine is connected and healthy.
-10. Settings layout: drop the "SETTINGS · v2.11.0" title row, shorten
-    menu subtitles to one line, let cards flow instead of stretching to
-    the tallest card in their row, replace the full shortcuts grid with
-    a link to the existing Ctrl+/ cheat sheet.
+**Re-scoped, not built:** item 5 (empty chat: a 2×2 suggestion grid, one
+"Tip" chip replacing the two promo cards) and item 6 (the composer
+consolidated into a model chip + a `+` menu + one mode chip) turned out
+larger than a phase-3-sized change on inspection. The suggestion pills
+already wrap by content length, not a layout choice, so a strict 2×2
+grid would need shorter prompts or truncation to hold, either a real
+content decision; and the two promo cards (`MintPackCard.tsx`,
+`Flux2OfferCard.tsx`) are not static banners but two independent,
+stateful install flows (progress text, a busy state, their own dismiss)
+— collapsing them into one chip means designing a shared summary UI for
+two different flows, not a CSS change. Both are real, worthwhile, and
+moved to their own future pass rather than forced into this one.
+
+### P4 — Settings screen 🔧 (started)
+
+9. 🔧 Doctor, half built. ✅ "Bundled engine FAIL" now reads "not in use"
+   (state `skip`, no fix prescribed) whenever the app's current
+   connection is healthy on a different engine — `App.tsx` already
+   computes `outcome.kind`, threaded through `SettingsScreen` to
+   `DoctorCard` to a new `remoteEngineHealthy` fact in `doctor.js`,
+   read through a ref so a flip mid-session cannot trigger the whole
+   probe suite to re-run. Pinned in `desktop-doctor.test.js`: `skip` and
+   no fix when a remote engine is healthy, still `fail` when nothing is.
+   ⬜ Still open: one row per check folded into "N passing" — the row
+   markup itself, a separate, larger change from the wording fix.
+10. 🔧 Settings layout, three of four done and confirmed on screen (a
+    debug build under Xvfb, before/after):
+    ✅ dropped the "v2.11.0" badge next to the "Settings" title — the
+    status bar is the one place that names the build (NEURA-076), this
+    was the duplicate, not the heading itself.
+    ✅ menu subtitles are one line (`white-space: nowrap; overflow:
+    hidden; text-overflow: ellipsis`); the full text is still there as
+    the button's own `title` tooltip, so nothing is lost, and in
+    practice most now fit without even needing the ellipsis.
+    ✅ cards no longer stretch to match a taller sibling in the same grid
+    row (`align-items: start` on `.settings-main` — the grid's own
+    `align-items: stretch` default, plus the card's `height: 100%`, was
+    the cause; Appearance used to grow a blank lower half to match a
+    taller neighbour).
+    ⬜ Not done: the shortcuts grid already has its own progressive
+    disclosure (`ShortcutsCard.tsx`'s `PEEK` slice + "All N · change"),
+    which a fixed test (`desktop-settings.test.js`) pins as intentional
+    structure, not leftover duplication — collapsing it further to a
+    bare link is a bigger rewrite of already-reasonable behaviour, not a
+    quick win, and is dropped from this item rather than forced.
 
 ### P5 — Chat: message anatomy and performance ⬜
 

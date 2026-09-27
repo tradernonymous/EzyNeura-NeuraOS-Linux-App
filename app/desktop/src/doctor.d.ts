@@ -20,6 +20,9 @@ export interface DoctorFacts {
   byokKeys?: number;
   probe?: ProbeFacts | null;
   platform?: 'linux' | 'windows';
+  /** The app's current connection is healthy, on whatever engine it names --
+   * so a bundled engine that is not running reads "not in use", not "fail". */
+  remoteEngineHealthy?: boolean;
 }
 
 export interface ProbeFacts {
