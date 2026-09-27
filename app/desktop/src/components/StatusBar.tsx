@@ -46,7 +46,6 @@ export interface StatusBarProps {
   installError: string;
   /** A portable copy's result: where the new exe was saved. */
   installNotice: string;
-  onOpenPalette: () => void;
 }
 
 type CheckPhase = 'idle' | 'checking' | 'current' | 'none' | 'failed';
@@ -265,7 +264,7 @@ function useLocalChip(): import('../local-status.js').LocalChip {
 
 export default function StatusBar({
   engine, state, signedIn, updateAvailable, onCheckUpdates, checkError, onInstallUpdate,
-  installState, installError, installNotice, onOpenPalette,
+  installState, installError, installNotice,
 }: StatusBarProps) {
   const tone = TONE[state] || TONE.checking;
   const local = useLocalChip();
@@ -292,11 +291,8 @@ export default function StatusBar({
         </span>
       )}
       <span className="status-spacer" />
-      <button className="status-item status-button" type="button" onClick={onOpenPalette}>
-        <Icon name="search" size={13} />
-        Commands
-        <span className="palette-keys">Ctrl+K</span>
-      </button>
+      {/* The top bar's Search is the one place to open the palette now
+          (TopNav.tsx); this used to be a second Ctrl+K button beside it. */}
       {/* Always present, whichever installer this copy came from: the hook
           picks the matching artifact (install_kind), the button only asks. */}
       <UpdateButton

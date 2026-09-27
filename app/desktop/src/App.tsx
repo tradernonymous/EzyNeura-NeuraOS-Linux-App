@@ -679,16 +679,17 @@ export default function App() {
         onToggleTheme={toggle}
       />
       <div className="app-body">
-        {!sidebarHidden && (
+        {/* The chat history is Chat's own list -- Code, Create, Agents and
+            Settings each have their own left panel or none, and used to
+            carry this one anyway, 248px of someone else's chats. Ctrl+B
+            still remembers hidden/shown; it just has nothing to draw
+            outside Chat. */}
+        {!sidebarHidden && destinationOf(view) === 'chat' && (
           <Sidebar
-            theme={theme}
-            onToggleTheme={toggle}
             onNewChat={requestNewChat}
-            onHide={toggleSidebar}
             active={view}
             activeChat={activeChat}
             onNavigate={navigate}
-            onOpenPalette={openPalette}
             onTogglePanel={togglePanel}
             panels={panels}
             home={home}
@@ -832,7 +833,6 @@ export default function App() {
         installState={installState}
         installError={installError}
         installNotice={installNotice}
-        onOpenPalette={openPalette}
       />
       <CheatSheet open={cheatOpen} onClose={() => setCheatOpen(false)} />
       <ProjectPicker

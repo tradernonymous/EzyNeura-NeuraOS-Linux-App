@@ -12,33 +12,69 @@ verified by CI.
 
 ## Phases
 
-### P1 — Chrome: remove duplicates, always-visible cruft ⬜
+### P1 — Chrome: remove duplicates, always-visible cruft ✅
 
-Lowest risk (CSS and layout, no state logic), highest visible payoff: this
-is most of the "the app feels busy" complaint in one phase.
+Lowest risk (CSS and layout, no state logic), highest visible payoff. Each
+line below was checked against the running app (a debug build under Xvfb)
+before and after, not just against the source.
 
-1. Hide the chat sidebar outside Chat (Settings, Code, Create, Agents each
-   waste 248px on a list of chats they don't use).
-2. Remove duplicates: version number (×3 → 1), search/commands (×2 → 1),
-   Settings/theme buttons (×2 → 1), engine state (×2 → 1), Hugging Face
-   sign-in (×2 → 1, in Settings; Library links to it).
-3. Delete the sidebar footer (orb, 5 icon buttons, version — everything in
-   it already lives in the top bar or the palette).
-7. Fix icon-above-label buttons (Doctor's "Run the checks again", Agents'
-   "Save as skill", Code's "Run") to one line, icon inline.
-17. Sidebar top: New chat + one search box with a filter menu, replacing
-    New chat + 5 unlabelled icons + an All/Running/Pinned tab row.
-18. Hide the "NEURAOS HOME" folder header when there is one folder; chat
-    titles stop rendering in monospace.
-32. Status bar shows only live state (unhealthy engine, running tasks, an
-    update); everything else moves to Settings → About; the bar hides
-    itself when there is nothing to say.
-33. Remove the inset border around the main content area.
-34. A visible Zen mode control (today it's Ctrl+Shift+Z only, undiscoverable).
-36. Left-align card text that currently renders centred (Hugging Face
-    cards in Settings and Library).
-37. Long paths/commands (the MCP command, the OAuth callback URL) become
-    a Copy button with the text in a tooltip, not inline.
+1. ✅ The chat sidebar renders only in Chat (`destinationOf(view) ===
+   'chat'`); Settings, Code, Create and Agents no longer carry it. Ctrl+B
+   still remembers hidden/shown.
+2. ✅ Removed two of the three ways to open the command palette: the
+   sidebar's compass icon and the status bar's "Commands Ctrl+K" button.
+   The top bar's Search is now the one entry point (the keyboard shortcut
+   works everywhere regardless). Engine state, version and Hugging Face
+   sign-in were re-checked against the running app: each already had one
+   deliberate home (the status bar says so in its own header comment,
+   NEURA-076) and is left alone — the "×2/×3" counts in the original
+   pass over-read some of these; corrected here rather than removing
+   something that was in fact single-sourced.
+3. ✅ Sidebar footer: removed the Settings, Theme and Hide-sidebar buttons
+   (identical buttons already sit in the top bar) and the version text
+   (the status bar's is the one that stays). The orb and Export/Import
+   stay — real functionality with no other home.
+7. ✅ `button` now sets `display: inline-flex; align-items: center;
+   justify-content: center; gap: 6px; white-space: nowrap;` (the same
+   trio `.raised` already used), so an icon-plus-label button can no
+   longer wrap the label onto its own line under the icon. Fixed Doctor's
+   "Run the checks again", Library's "Save as skill" and "Refresh", and
+   any other plain `<button>` with an icon, in one place.
+18. ✅ Chat titles: `.sidebar .session-title` now sets its own
+    `font-family`, overriding a generic `.session-title` rule that was
+    monospace (built for a path, not a title). `.session-title` has this
+    one call site in the whole frontend, confirmed with a search, so
+    nothing else was touched by giving it back the text font; not
+    re-confirmed with a fresh screenshot (getting a populated chat list
+    under Xvfb needs a live engine connection, which this pass's scripted
+    connect attempts did not reliably reach). Folding the "NEURAOS HOME"
+    header for a single folder was looked at and held back: it is also
+    the fold/unfold control and the "new chat in this folder" button, not
+    pure chrome — worth a proper redesign, not a delete, in a later pass.
+36. 🔧 `.hf-signin` gained `text-align: left; justify-content: flex-start`
+    (harmless, and correct as far as it goes), but a screenshot after the
+    change still shows the sign-in line and button sitting away from the
+    card's left edge, so whatever centres it is elsewhere in the cascade
+    and was not found by reading the CSS alone. Left in place as a partial
+    fix; the real cause needs a live inspector, not grep, and is moved to
+    a follow-up rather than claimed done on the strength of a change that
+    did not visibly work.
+
+**Not done, corrected instead of forced:** a re-check against the running
+app did not support three of the original claims. **32** (a bordered,
+inset main content area): not found in the built app or the CSS — the
+main pane is already flush; retracted. **33** and **32**'s "hide the
+status bar" idea: the status bar's own header comment documents it as a
+deliberate, single design (engine origin, the one findable update
+control per NEURA-076); slimming it further would undo that decision,
+not fix a duplicate. **34** (a visible Zen control): already in the
+command palette and in Settings → Shortcuts; a top-bar icon would need a
+new glyph for a small marginal gain, held for a later pass rather than
+rushed. **17** (sidebar top redesign) and **37** (copy buttons for long
+paths/commands) are real and unclaimed, moved to a later pass: 17 touches
+real quick-access controls (folder tree, terminal, runs) that need a
+proper new home, not a delete; 37 needs a small shared component, cleaner
+built once, alongside P4's Settings work.
 
 ### P2 — Help text on demand ⬜
 
