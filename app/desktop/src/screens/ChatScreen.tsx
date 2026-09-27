@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, lazy, Suspense, type ComponentType } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo, lazy, Suspense, type ComponentType } from 'react';
 import { api, imageUrlFrom, streamChat, streamLocalChat, type StreamFrame } from '../api';
 import { byokStream, gitStatus, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile, notifyWithActions, onNotificationAction } from '../bridge';
 import { renderMarkdown } from '../markdown';
@@ -350,6 +350,30 @@ const EMPTY_PROMPTS = [
   'Write a bash script that renames photos by their date',
   'Compare three local models I could run on this GPU',
 ];
+
+/**
+ * A message's own text, rendered once and kept: the markdown parse (plus, for
+ * a research reply, citation linking) used to run again on every render of
+ * the whole thread -- every streamed token re-parsed every earlier message,
+ * not just the one growing (docs/UI_UPGRADE_PLAN.md, phase P5). The
+ * streaming append (`send`'s `append`) replaces only the last message's
+ * object and keeps every other message's reference exactly as it was, so
+ * `memo`'s default shallow comparison already tells this apart correctly: an
+ * unfinished message's object changes every token, a finished one's does
+ * not, and this component is skipped entirely -- parse included -- for the
+ * ones that did not change.
+ */
+const MessageBody = memo(function MessageBody({ msg }: { msg: Msg }) {
+  const html = useMemo(() => {
+    if (msg.role !== 'assistant' || !msg.content) return null;
+    return msg.sources?.length
+      ? research.superscriptCitations(renderMarkdown(research.linkCitations(msg.content, msg.sources)))
+      : renderMarkdown(msg.content);
+  }, [msg.role, msg.content, msg.sources]);
+  if (msg.role === 'assistant') return html ? <div className="message-content" dangerouslySetInnerHTML={{ __html: html }} /> : null;
+  if (msg.shell) return <pre className="message-content shell-output">{msg.shell}</pre>;
+  return <div className="message-content">{msg.content}</div>;
+});
 
 /** A chat picture through the native save dialog; cancelling is not an error. */
 function savePictureNow(url: string): void {
@@ -2404,13 +2428,19 @@ _${done.notes.join(' · ')}_` : said,
                 <Icon name="refresh" size={12} />
               </button>
             )}
-            <div className="message-role">
-              {msg.shell ? 'You · command' : msg.role === 'user'
-                ? 'You'
-                : msg.agent
-                  ? `${msg.agent} · agent${msg.model ? ` · ${msg.model}` : ''}`
-                  : (msg.providerLabel && msg.model ? `${msg.providerLabel} · ${msg.model}` : (msg.model || 'Assistant'))}
-            </div>
+            {/* "You" on every one of your own messages said nothing a
+                right-aligned bubble does not already say; dropped, except
+                for a shell command, which is worth marking as one. Which
+                model or agent answered is real information and stays. */}
+            {(msg.role !== 'user' || msg.shell) && (
+              <div className="message-role">
+                {msg.shell
+                  ? 'You · command'
+                  : msg.agent
+                    ? `${msg.agent} · agent${msg.model ? ` · ${msg.model}` : ''}`
+                    : (msg.providerLabel && msg.model ? `${msg.providerLabel} · ${msg.model}` : (msg.model || 'Assistant'))}
+              </div>
+            )}
             {msg.images && msg.images.length > 0 && (
               <div className="message-images">
                 {msg.images.map((url, j) => {
@@ -2448,19 +2478,7 @@ _${done.notes.join(' · ')}_` : said,
                 })}
               </div>
             )}
-            {msg.role === 'assistant'
-              ? (msg.content
-                ? <div
-                    className="message-content"
-                    // A research reply's [n] become superscript links to its sources.
-                    dangerouslySetInnerHTML={{ __html: msg.sources?.length
-                      ? research.superscriptCitations(renderMarkdown(research.linkCitations(msg.content, msg.sources)))
-                      : renderMarkdown(msg.content) }}
-                  />
-                : null)
-              : msg.shell
-                ? <pre className="message-content shell-output">{msg.shell}</pre>
-                : <div className="message-content">{msg.content}</div>}
+            <MessageBody msg={msg} />
             {msg.role === 'assistant' && msg.tools && msg.tools.length > 0 && (
               <StepsFold events={msg.tools} expandAll={cardsOpen} onDecide={sending && i === active.messages.length - 1 ? decide : undefined} />
             )}

@@ -178,19 +178,43 @@ moved to their own future pass rather than forced into this one.
     bare link is a bigger rewrite of already-reasonable behaviour, not a
     quick win, and is dropped from this item rather than forced.
 
-### P5 — Chat: message anatomy and performance ⬜
+### P5 — Chat: message anatomy and performance 🔧 (started)
 
-11. Drop the "You" header line; right-align the user's own messages; show
-    the model name only when it changes.
-16. Fix long-thread performance: every streamed token re-renders and
-    re-parses every message (`ChatScreen.tsx`); memoise message rows.
-12. Fold a finished turn into "Thinking / Commands / Edits" chips (Zed's
-    pattern); code blocks over ~15 lines collapse to one row.
-13. A pinned approval bar ("1 action waiting") when an Allow card has
+16. ✅ Fixed the real performance bug: every streamed token re-rendered
+    **and re-parsed** every earlier message's markdown, not just the one
+    growing. `send()`'s streaming `append()` (read directly, not
+    guessed) replaces only the last message's object —
+    `s.messages.slice()` then `msgs[msgs.length - 1] = { ...last, ... }`
+    — and keeps every other message's reference exactly as it was. A new
+    `MessageBody` leaf component, `memo`'d on the whole `msg` object with
+    its own `useMemo` around the `renderMarkdown`/citation-linking call,
+    is therefore skipped entirely — parse included — for every message
+    except the one actually changing. Pinned in
+    `desktop-chat-anatomy.test.js`.
+11. ✅ Dropped the "You" header line from a plain user message (kept for
+    a shell command, which is worth marking as one) and gave user
+    messages their own lane: `max-width: min(560px, 88%); margin-left:
+    auto`. The bubble shape (`16px 16px 6px 16px`, one sharp corner) was
+    already drawn for a right-aligned message; nothing had actually
+    narrowed or moved it there before this, so it rendered as a
+    full-width card with a pointless corner. Confirmed with a real
+    render: `index.css` loaded into headless Chromium (`/opt/pw-browsers`,
+    already on this machine, no new dependency) against a small fixture
+    of the actual message markup — before/after screenshots, not
+    guessed from the CSS text. "Show the model name only when it
+    changes" is not done: a real feature (tracking the previous
+    message's model across renders), not a wording change, left open.
+12. ⬜ Fold a finished turn into "Thinking / Commands / Edits" chips
+    (Zed's pattern); code blocks over ~15 lines collapse to one row.
+13. ⬜ A pinned approval bar ("1 action waiting") when an Allow card has
     scrolled out of view.
-14. Search within a chat (Ctrl+F) that opens folded steps containing a
+14. ⬜ Search within a chat (Ctrl+F) that opens folded steps containing a
     match.
-15. A Comfortable / Compact message-density switch.
+15. ⬜ A Comfortable / Compact message-density switch.
+
+Items 12–15 are each a real feature (new state, new interaction), not a
+CSS or memoisation fix, and are left for their own pass rather than
+rushed alongside 11/16.
 
 ### P6 — Code space ⬜
 

@@ -6445,7 +6445,14 @@ input, textarea, select { border-radius: 8px; }
   border-radius: 14px;
 }
 
-/* Your message: a bordered card with the rewind at its corner. */
+/* Your message: a bordered card with the rewind at its corner, narrower
+   than the thread and pushed to the right -- the bubble shape above
+   (16px 16px 6px 16px, one sharp corner) was already drawn for a
+   right-aligned message, but nothing had narrowed or moved it there, so it
+   rendered as a full-width card no different in shape from the assistant's.
+   The "You" label is gone for the same reason: alignment says whose
+   message it is now, so a bare chat message no longer needs the word. */
+.message.user { max-width: min(560px, 88%); margin-left: auto; margin-right: 0; }
 .message.user .message-content { border-radius: 12px; }
 .message-rewind {
   position: absolute;
