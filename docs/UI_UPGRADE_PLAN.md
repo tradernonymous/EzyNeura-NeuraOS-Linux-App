@@ -251,18 +251,40 @@ quick-fills (test/review/commit templates) and a Docker mode switch,
 each already named by its own tooltip. Folding distinct, labelled,
 single-click actions into a menu costs a click for no duplication fixed.
 
-### P7 — Create space ⬜
+### P7 — Create space ✅ (reviewed, nothing built — all four retracted)
 
-24. Collapse the doubled project picker (a dropdown and a "PROJECT —"
-    picker) plus Template/Service/Model/System/cloud-tier into
-    "Project ▾" and one gear popover.
-25. The start gallery (Landing page, Deck, Social post, Photo…) becomes
-    the entry point; the Page/Deck/Post/Image/Edit-image tabs show only
-    once a project exists, instead of duplicating the gallery.
-26. Drop all-caps micro-labels (FRAME, EXPORT, TEMPLATE, SERVICE, MODEL,
-    SYSTEM); the value plus a tooltip is enough.
-27. Disabled buttons (Generate, Export, Run, Find skills) use normal
-    disabled styling, not a dashed drop-zone border.
+All four items came from one screenshot of the "no project yet" state,
+read without the component behind it. Each one turned out to already be
+handled, or to rest on a misreading of a deliberate, cross-app pattern.
+Nothing here was worth forcing a change to close a checkbox.
+
+24. **Retracted.** The picker is already a native `<details
+    className="studio-project" open={!active}>` — open (showing Project,
+    Template, Service, Model, System, tier) only while there is no
+    active project, exactly when those fields matter; once a project is
+    open it collapses to one summary line: a folder icon, the project's
+    name, `{system} · {model}`, and a caret. That line **is** "Project
+    ▾" — the screenshot this item was written from simply caught the
+    screen in its one auto-expanded state (no project yet), which looks
+    like permanent clutter but is not.
+25. **Retracted.** The top tabs (Page/Deck/Post/Image/Edit-image) choose
+    a *mode*, always relevant, the same role `SpaceSwitch` plays
+    elsewhere in the app; the gallery is a *starting point* within
+    whatever mode is current, and already changes its own heading
+    ("Create a project, then pick a start" → "What are we making?") once
+    a project exists. Hiding the tabs until a project exists would
+    remove the only way to choose a mode before making one.
+26. **Retracted.** `SelectPill`'s small caps label (`.pill-key`, 9px) is
+    a consistent, reusable convention used the same way everywhere the
+    component appears across the app (Code's Model picker included), not
+    a Create-specific decoration — a value alone ("gpt-4o-mini") does
+    not say whether it is the service or the model without it. Fixing
+    this only in Create would be the inconsistency, not the label.
+27. **Retracted.** The dashed disabled style is not a Create bug: it is
+    the whole app's own considered accessibility fix (`index.css`'s own
+    comment, NEURA-024) — no fill, a dashed border and muted text,
+    chosen because a plain opacity dim failed contrast (WCAG 1.4.11) in
+    the light theme. Undoing it would undo that fix, not correct one.
 
 ### P8 — Agents → Library ⬜
 
