@@ -1021,6 +1021,17 @@ button {
   cursor: pointer;
   transition: all 0.12s;
   font-family: var(--font);
+  /* An icon plus a label (Doctor's "Run the checks again", Library's "Save
+     as skill") used to wrap onto two lines the moment the button was
+     narrower than its content -- the icon on its own row, the label
+     centred under it. .raised already sets this same trio for exactly
+     this reason; the base rule gets it too so every plain <button> is
+     immune, not only the ones that opted into .raised. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 button:hover:not(:disabled) {
@@ -4737,7 +4748,11 @@ body.quick-body { background: var(--bg-1); }
 .compare-table td.is-hit { color: var(--accent-mid); }
 .compare-table tbody tr:last-child th, .compare-table tbody tr:last-child td { border-bottom: none; }
 .quick-continue { align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
-.hf-signin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+/* Sign-in copy and buttons used to read as centred in a wide card (Settings,
+   Library): text-align: left here overrides whatever the card inherits, so
+   the sentence and its buttons sit against the left edge like every other
+   line of Settings prose around them. */
+.hf-signin { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; font-size: 13px; text-align: left; }
 .hf-token-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 .hf-token-form input { flex: 1 1 220px; min-width: 0; }
 /* The Doctor (Settings → System): one row per dependency, each with its fix. */
@@ -6333,7 +6348,10 @@ input, textarea, select { border-radius: 8px; }
 }
 .sidebar .thread-open:hover { background: var(--hover); color: var(--text-1); }
 .sidebar .thread-item.active .thread-open { background: var(--accent-dim); color: var(--text-1); box-shadow: inset 2px 0 0 var(--accent); }
-.sidebar .session-title { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+/* The generic .session-title (this file, further up) is monospace -- built
+   for a path or an id, not a chat's own title -- so the sidebar's copy
+   overrides it back to the text font here. */
+.sidebar .session-title { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; font-family: var(--font); }
 .thread-when { font-size: 10.5px; color: var(--text-3); flex-shrink: 0; }
 .thread-dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; flex-shrink: 0; }
 .thread-dot-running { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }

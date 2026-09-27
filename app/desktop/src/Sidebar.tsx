@@ -18,8 +18,6 @@ import type { ChatSession } from './screens/ChatScreen';
 const threadsLib: typeof import('./threads.js') = (globalThis as any).FreeAI4UThreads;
 const shell: typeof import('./shell.js') = (globalThis as any).FreeAI4UShell;
 const chats: typeof import('./chats.js') = (globalThis as any).FreeAI4UChats;
-import { APP_VERSION } from './version';
-import { isLinux } from './platform';
 // Paused background recipe runs waiting for an answer (NEURA-036): a badge on
 // Agents, whose Recipes tab holds the approval cards.
 import './recipes.js';
@@ -145,20 +143,15 @@ interface SidebarProps {
   /** The chat on screen, so its row reads as current. */
   activeChat: string;
   onNavigate: (id: ViewId) => void;
-  onOpenPalette: () => void;
   onTogglePanel: (key: PanelId) => void;
   panels: Partial<PanelKeyMap>;
   /** "+ New chat": App opens the folder picker. `project` starts one in a known folder. */
   onNewChat: (project?: string) => void;
-  onHide: () => void;
   /** The home folder (`~/NeuraOS`); '' in a browser build. */
   home: string;
   onExport: () => void;
   onImport: (file: File) => void;
   importMsg: string;
-  /** The theme toggle sits here on Linux, where there is no in-app titlebar. */
-  theme?: 'light' | 'dark';
-  onToggleTheme?: () => void;
 }
 
 const FILTERS: Array<{ id: import('./shell.js').SidebarFilter; label: string }> = [
@@ -181,7 +174,7 @@ function relative(at: number): string {
 // The name is the product's, not the engine's: this is NeuraOS, and the engine
 // it talks to is still the FreeAI4U server. The localStorage keys keep their
 // freeai4u-* spelling, so an existing install updates in place.
-export default function Sidebar({ active, activeChat, onNavigate, onOpenPalette, onTogglePanel, panels, onNewChat, onHide, home, onExport, onImport, importMsg, theme, onToggleTheme }: SidebarProps) {
+export default function Sidebar({ active, activeChat, onNavigate, onTogglePanel, panels, onNewChat, home, onExport, onImport, importMsg }: SidebarProps) {
   const approvals = usePendingApprovals();
   const busy = useBusyChats();
   const listening = useListening();
@@ -263,7 +256,6 @@ export default function Sidebar({ active, activeChat, onNavigate, onOpenPalette,
             words on hover (the Freebuff row, the Claude Code sidebar). */}
         <div className="sidebar-tools" role="toolbar" aria-label="Chat tools">
           <button type="button" className={`raised icon-btn ${searching ? 'active' : ''}`} aria-pressed={searching} onClick={() => { setSearching((v) => !v); if (searching) setQuery(''); }} title="Search chats"><Icon name="search" size={14} /></button>
-          <button type="button" className="raised icon-btn" onClick={onOpenPalette} title="Commands — Ctrl+K"><Icon name="compass" size={14} /></button>
           <button type="button" className={`raised icon-btn ${panels.folder ? 'active' : ''}`} aria-pressed={!!panels.folder} onClick={() => onTogglePanel('folder')} title="Folder tree"><Icon name="folder" size={14} /></button>
           <button type="button" className={`raised icon-btn ${panels.terminal ? 'active' : ''}`} aria-pressed={!!panels.terminal} onClick={() => onTogglePanel('terminal')} title="Terminal — Ctrl+`"><Icon name="terminal" size={14} /></button>
           <button type="button" className={`raised icon-btn ${active === 'activity' ? 'active' : ''}`} onClick={() => onNavigate('activity')} title={approvals ? `Runs — ${approvals} waiting for you` : 'Runs'}>
@@ -353,21 +345,17 @@ export default function Sidebar({ active, activeChat, onNavigate, onOpenPalette,
         >
           <span className="orb-core" />
         </button>
+        {/* Theme, Settings and Hide-sidebar are already one click away in the
+            top bar (TopNav.tsx); a second copy of each here was the same
+            three buttons twice. Export and Import stay: they exist nowhere
+            else. */}
         <div className="sidebar-foot-actions">
           <button type="button" className="raised icon-btn" onClick={onExport} title="Export chats to a file"><Icon name="download" size={13} /></button>
           <label className="raised icon-btn" title="Import chats from a file">
             <Icon name="copy" size={13} />
             <input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); }} />
           </label>
-          {isLinux() && onToggleTheme && (
-            <button type="button" className="raised icon-btn" onClick={onToggleTheme} aria-label="Toggle theme" title={`${theme === 'dark' ? 'Light' : 'Dark'} theme`}>
-              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />
-            </button>
-          )}
-          <button type="button" className={`raised icon-btn ${active === 'settings' ? 'active' : ''}`} onClick={() => onNavigate('settings')} title="Settings — Ctrl+,"><Icon name="settings" size={13} /></button>
-          <button type="button" className="raised icon-btn" onClick={onHide} title="Hide the sidebar — Ctrl+B" aria-label="Hide the sidebar"><Icon name="close" size={13} /></button>
         </div>
-        <span className="sidebar-version" title="NeuraOS for Linux">v{APP_VERSION}</span>
       </div>
       {importMsg && <div className="sidebar-hint">{importMsg}</div>}
     </aside>
