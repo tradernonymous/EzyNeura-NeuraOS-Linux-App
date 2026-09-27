@@ -2952,6 +2952,17 @@ button.linkish {
   color: var(--text-2);
 }
 
+/* Providers not yet configured: one fold instead of a row of yellow "no key
+   set" warnings, which used to read as N problems rather than N providers
+   nobody has asked to set up (docs/UI_UPGRADE_PLAN.md, phase P3). */
+.provider-more summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 6px 0;
+}
+.provider-more[open] summary { color: var(--text-2); }
+
 .engine-shell-body {
   display: flex;
   gap: 8px;

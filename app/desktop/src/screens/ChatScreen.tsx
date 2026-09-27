@@ -2300,12 +2300,15 @@ _${done.notes.join(' · ')}_` : said,
   };
 
   if (!active) {
+    // "Starting one now…" used to sit here promising an automatic chat that
+    // never came -- nothing calls startNew() on mount, only this button, the
+    // sidebar's own New chat, and the project picker do. The button is the
+    // real next step, so it says that instead.
     return (
       <div className="screen chat">
         <div className="empty-state">
           <div className="empty-icon"><Icon name="chat" size={28} /></div>
           <h2>No chats yet</h2>
-          <p>Starting one now…</p>
           <button className="primary" onClick={() => startNew()}>New chat</button>
         </div>
       </div>

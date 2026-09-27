@@ -31,6 +31,23 @@ interface Props {
   diagnosticsState?: string;
 }
 
+/** One row of the Providers list, ready or not. */
+function providerRow(p: any) {
+  return (
+    <div key={p.id} className="provider-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+      <span className="setting-label">
+        {p.configured ? '' : '○ '}{p.label || p.id}
+        {p.kind && p.kind !== 'chat' ? ` (${p.kind})` : ''}
+      </span>
+      <span className={`setting-value ${p.configured ? 'ok' : 'warn'}`}>
+        {p.configured
+          ? ((p.freeTier && (p.freeTier.text || p.freeTier.limitText)) || 'ready')
+          : (p.note || 'no key set')}
+      </span>
+    </div>
+  );
+}
+
 export default function SettingsScreen({ onConnectionChanged, diagnosticsState }: Props) {
   const [providers, setProviders] = useState<any[]>([]);
   const [limits, setLimits] = useState<any>(null);
@@ -142,19 +159,20 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
             <h2>Providers</h2>
             <div className="settings-card">
               {providers.length === 0 && <div className="empty">No providers reported by the engine.</div>}
-              {providers.map((p: any) => (
-                <div key={p.id} className="provider-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span className="setting-label">
-                    {p.configured ? '' : '○ '}{p.label || p.id}
-                    {p.kind && p.kind !== 'chat' ? ` (${p.kind})` : ''}
-                  </span>
-                  <span className={`setting-value ${p.configured ? 'ok' : 'warn'}`}>
-                    {p.configured
-                      ? ((p.freeTier && (p.freeTier.text || p.freeTier.limitText)) || 'ready')
-                      : (p.note || 'no key set')}
-                  </span>
-                </div>
-              ))}
+              {/* Ready providers first, always shown -- these are the ones a free
+                  tier already answers with, so they are what "Providers" is
+                  mostly for. The rest used to be the same number of rows, each
+                  reading "no key set" in warning yellow, which looked like N
+                  problems rather than N providers nobody has asked to set up. */}
+              {providers.filter((p: any) => p.configured).map(providerRow)}
+              {providers.some((p: any) => !p.configured) && (
+                <details className="provider-more">
+                  <summary>
+                    {providers.filter((p: any) => !p.configured).length} more — add a key
+                  </summary>
+                  {providers.filter((p: any) => !p.configured).map(providerRow)}
+                </details>
+              )}
             </div>
           </section>
 
