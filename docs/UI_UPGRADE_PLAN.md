@@ -216,15 +216,40 @@ Items 12–15 are each a real feature (new state, new interaction), not a
 CSS or memoisation fix, and are left for their own pass rather than
 rushed alongside 11/16.
 
-### P6 — Code space ⬜
+### P6 — Code space ✅ (re-scoped, both real items closed)
 
-20. Collapse the triple "Open a folder" (toolbar, placeholder, centre
-    button) into the one centre button.
-22. Replace the dashed two-line "Run" block with a send icon in the input.
-21. The 7 preset chips (Build, Fix, Refactor…) appear on focus or as `/`
-    commands, not always on screen.
-23. The 5 unlabelled right-side icons fold into one "Panels" menu, shown
-    only once a folder is open.
+20. ✅ The toolbar's own "Open a folder" button is gone once there is no
+    folder — confirmed as a real, standing triple with the very first,
+    pre-any-change screenshot from this project (toolbar button,
+    the disabled textarea's "Open a folder first" placeholder, and the
+    centred empty state's own "Open a folder…" button, all three on
+    screen at once). The centred button — bigger, where the person is
+    already looking, next to the recent-folders list — is the one that
+    stays; the placeholder stays too (it explains a disabled control,
+    which is a different job than asking twice).
+22. ✅ Already fixed, no new code: the "Run"/"Stop" buttons are
+    `<button className="primary">`/`<button className="danger">`, and
+    P1's fix to the base `button {}` rule (`display: inline-flex`,
+    `white-space: nowrap`) already covers every plain button regardless
+    of which extra class it carries. Confirmed with the same headless-
+    Chromium fixture technique from P5: rendered the exact disabled
+    "Run" button (icon + label) against the real `index.css` — one line,
+    dashed only because it is genuinely disabled with no folder open,
+    which is correct.
+
+**Retracted, not built:** items 21 and 23 did not hold up against the
+actual components. **21** (the deck row on focus/as `/` commands only):
+`TaskDecks.tsx` is a hover-to-preview menu — resting on "Build" for a
+beat opens a card of that deck's specific tasks, the same pattern
+`TopNav.tsx` already uses deliberately. The `/` list is the fast path for
+someone who already knows what they want; the row is how someone finds
+out what is there in the first place. They are not the same feature
+wearing two costumes, and hiding the row would remove the only way to
+browse. **23** (5 icons into one "Panels" menu): only one of the five
+(Terminal) is actually a panel toggle; the other four are one-click
+quick-fills (test/review/commit templates) and a Docker mode switch,
+each already named by its own tooltip. Folding distinct, labelled,
+single-click actions into a menu costs a click for no duplication fixed.
 
 ### P7 — Create space ⬜
 
