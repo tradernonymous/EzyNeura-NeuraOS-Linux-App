@@ -4,6 +4,7 @@ import { api } from '../api';
 import { authWindowOpen, hasShell, mcpServerCommand, mcpStdioList, mcpStdioStop, onConnectFinished, type McpServerCommand } from '../bridge';
 import { startStdio, stdioId } from '../tool-run';
 import HfSignIn from './HfSignIn';
+import Hint from './Hint';
 import { examplePathPlaceholder } from '../platform';
 import '../tools.js';
 
@@ -459,11 +460,10 @@ function NeuraOsAsServer() {
   return (
     <>
       <h3 className="local-heading">Use NeuraOS from other agents</h3>
-      <p className="settings-hint">
-        Claude Code, Gemini CLI, Codex or any MCP client can ask the models running here (neuraos_chat), draw with the image
-        server (neuraos_image), list what this machine has (neuraos_status, neuraos_models) and open a folder in NeuraOS
-        (neuraos_open). Free and private: nothing leaves this PC.
-      </p>
+      <Hint summary="Claude Code, Gemini CLI, Codex or any MCP client can use this machine.">
+        Ask the models running here (neuraos_chat), draw with the image server (neuraos_image), list what this machine has
+        (neuraos_status, neuraos_models) and open a folder in NeuraOS (neuraos_open). Free and private: nothing leaves this PC.
+      </Hint>
       <div className="setting-row">
         <button type="button" onClick={() => copy(`claude mcp add neuraos -- ${line}`, 'The Claude Code command')}>Copy for Claude Code</button>
         <button type="button" onClick={() => copy(`gemini mcp add neuraos ${line}`, 'The Gemini CLI command')}>Copy for Gemini CLI</button>

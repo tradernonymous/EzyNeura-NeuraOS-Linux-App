@@ -76,14 +76,37 @@ real quick-access controls (folder tree, terminal, runs) that need a
 proper new home, not a delete; 37 needs a small shared component, cleaner
 built once, alongside P4's Settings work.
 
-### P2 — Help text on demand ⬜
+### P2 — Help text on demand 🔧 (started)
 
-4. A `<Hint>` component: one short line stays visible, the rest opens from
-   an ⓘ, tied to its control with `aria-describedby`. Migrate the 127
-   `settings-hint` paragraphs across 30 files, largest first (Connectors,
-   Desktop control, Run settings, Settings, Dictation, Local images). A
-   test caps visible hint length so the prose can't creep back. State
-   text ("No address saved", a failing check) stays visible as-is.
+4. ✅ `components/Hint.tsx`: a short `summary` stays visible, the rest is a
+   `More`/`Less` toggle away (`.linkish`, no new icon), tied to the
+   expanded text with `aria-controls`/`aria-expanded` and a `useId()`.
+   `test/desktop-hint.test.js` caps every literal `summary="…"` in the
+   frontend at `HINT_SUMMARY_MAX` (70 chars) and pins the migrated call
+   sites, so the doc and the code can't quietly drift apart. Confirmed
+   working end to end with a debug build under Xvfb: collapsed to one
+   line, click "More", the rest appears, button reads "Less".
+
+   **Migrated this phase** (7 call sites, the largest and plainest —
+   picked because their text has no embedded `{state}` that a mechanical
+   split could get wrong): the retry-policy paragraph
+   (`SettingsScreen.tsx`), Doctor's intro, the LoRA explainer
+   (`LocalImagesCard.tsx`, split so "No LoRAs yet." — a state, not an
+   explanation — stays outside the fold), Desktop control's two hints
+   (the five-tools list, and the MCP-tools one — its `mcpError` was
+   pulled out to its own always-visible line rather than migrated into
+   the collapsible text, since an error is state), the "Use NeuraOS from
+   other agents" blurb (`ConnectorsCard.tsx`), and Dictation's intro
+   (`DictationCard.tsx`, keeping its `builtInDictationHint()` call inside
+   the expandable part).
+
+   **Still open**: roughly 120 of the 127 `settings-hint` paragraphs.
+   Most of what is left either already reads as one short line (nothing
+   to fold), is state text that the plan's own rule keeps visible, or
+   mixes explanation with per-render dynamic values closely enough that
+   a safe split needs reading each call site on its own — real work, not
+   a mechanical pass, left for a follow-up rather than rushed to hit a
+   count.
 
 ### P3 — Empty chat and the composer ⬜
 

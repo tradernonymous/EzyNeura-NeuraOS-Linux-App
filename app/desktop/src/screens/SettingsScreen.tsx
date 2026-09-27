@@ -12,6 +12,7 @@ import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
 import StartupCard from '../components/StartupCard';
 import DesktopControlCard from '../components/DesktopControlCard';
+import Hint from '../components/Hint';
 import FileTree from '../components/FileTree';
 import Terminal from '../components/Terminal';
 import '../settings-groups.js';
@@ -175,11 +176,11 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
                   <span className="setting-value">{Math.round(limits.timeouts.chat / 1000)}s</span>
                 </div>
               )}
-              <p className="settings-hint">
+              <Hint summary="A rate-limited model is retried, then handed off.">
                 A rate-limited service is retried only as long as the turn is worth waiting for; after that the engine hands
                 the same question to the next model instead of leaving you with nothing. This is why a rate limit never ends a
                 turn here, and it is a setting rather than a warning: nothing is wrong with your chat.
-              </p>
+              </Hint>
             </div>
           </section>
 

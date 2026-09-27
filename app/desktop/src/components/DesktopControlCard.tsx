@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { desktopCapabilities, desktopMcpGet, desktopMcpSet, hasShell, type DesktopCapabilities } from '../bridge';
 import { desktopControlOn, setDesktopControl, askAboutScreen, readScreenHotkey } from '../desktopControl';
 import { isLinux } from '../platform';
+import Hint from './Hint';
 
 export default function DesktopControlCard() {
   const [on, setOn] = useState(desktopControlOn);
@@ -44,20 +45,19 @@ export default function DesktopControlCard() {
           <input type="checkbox" checked={on} onChange={(e) => { setDesktopControl(e.target.checked); setOn(e.target.checked); }} />
           Let a model in Chat see the screen and act on the desktop
         </label>
-        <p className="settings-hint">
-          Adds five tools: screen_capture, desktop_click, desktop_type, desktop_key and desktop_scroll. Each one shows an
-          Allow / Deny card first — a screenshot shows whatever is on screen, and a click lands in whichever app is in front.
-          Best with a vision model (llava, gemma3, qwen2.5-vl, GPT-4o…).
-        </p>
+        <Hint summary="Adds five tools, each behind an Allow / Deny card.">
+          screen_capture, desktop_click, desktop_type, desktop_key and desktop_scroll — a screenshot shows whatever is on
+          screen, and a click lands in whichever app is in front. Best with a vision model (llava, gemma3, qwen2.5-vl, GPT-4o…).
+        </Hint>
         <label className="toggle">
           <input type="checkbox" checked={mcpOn} onChange={(e) => toggleMcp(e.target.checked)} />
           Also let agents connected over MCP see the screen and act on the desktop
         </label>
-        <p className="settings-hint">
-          Adds neuraos_screenshot and neuraos_desktop to the MCP server (Settings → Connectors). Claude Code and the other
-          clients ask you before each call on their side; NeuraOS has no window open to ask from when it serves MCP.
-          {mcpError ? ` — ${mcpError}` : ''}
-        </p>
+        <Hint summary="Adds two MCP tools: neuraos_screenshot and neuraos_desktop.">
+          Settings → Connectors. Claude Code and the other clients ask you before each call on their side; NeuraOS has no
+          window open to ask from when it serves MCP.
+        </Hint>
+        {mcpError && <p className="settings-hint" role="alert">{mcpError}</p>}
         <div className="setting-row">
           <button type="button" onClick={askAboutScreen}>Ask about the screen now</button>
           <span className="settings-hint">or press {readScreenHotkey()} in any app (Settings → Shortcuts to change it).</span>
