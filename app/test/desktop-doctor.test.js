@@ -97,6 +97,25 @@ test('engine down and Node missing fail with the exact fix', () => {
   assert.match(rows.node.fix, /Node 24/);
 });
 
+test('the bundled engine not running is "not in use", not a failure, while a different engine answers', () => {
+  const usingRemote = byId(doctor.verdicts({
+    shell: true,
+    engine: { running: false },
+    remoteEngineHealthy: true,
+  }));
+  assert.equal(usingRemote.engine.state, 'skip');
+  assert.equal(usingRemote.engine.fix, '', 'nothing to fix -- a different engine is already doing the job');
+  assert.match(usingRemote.engine.note, /not in use/i);
+
+  // Not connected to anything either: still the real failure, exactly as before.
+  const stranded = byId(doctor.verdicts({
+    shell: true,
+    engine: { running: false },
+    remoteEngineHealthy: false,
+  }));
+  assert.equal(stranded.engine.state, 'fail');
+});
+
 test('a Node too old says the version it needs and where to get it', () => {
   const rows = byId(doctor.verdicts({ shell: true, node: { found: true, ok: false, major: 18, reason: 'Node 18 is too old' } }));
   assert.equal(rows.node.state, 'fail');
@@ -220,7 +239,7 @@ test('the screen wears it: card in Settings, Doctor in System, wide, styled', ()
   assert.match(card, /hasShell\(\)/, 'no shell, no probe');
 
   const settings = read('desktop', 'src', 'screens', 'SettingsScreen.tsx');
-  assert.match(settings, /<DoctorCard \/>/);
+  assert.match(settings, /<DoctorCard engineHealthy=\{engineHealthy\} \/>/, 'Settings passes its own connection down, for the "not in use" wording');
   assert.match(settings, /import DoctorCard from '\.\.\/components\/DoctorCard'/);
 
   const groups = require('../desktop/src/settings-groups.js');

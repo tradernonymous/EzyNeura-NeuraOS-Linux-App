@@ -29,6 +29,8 @@ interface Props {
   onConnectionChanged?: () => void;
   /** What the shell last concluded about the engine, in the diagnostics report. */
   diagnosticsState?: string;
+  /** The app's current connection is healthy -- Doctor's own "Bundled engine" row. */
+  engineHealthy?: boolean;
 }
 
 /** One row of the Providers list, ready or not. */
@@ -48,7 +50,7 @@ function providerRow(p: any) {
   );
 }
 
-export default function SettingsScreen({ onConnectionChanged, diagnosticsState }: Props) {
+export default function SettingsScreen({ onConnectionChanged, diagnosticsState, engineHealthy }: Props) {
   const [providers, setProviders] = useState<any[]>([]);
   const [limits, setLimits] = useState<any>(null);
   const [memory, setMemory] = useState<Array<any>>([]);
@@ -242,7 +244,7 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
 
           <DesktopControlCard />
 
-          <DoctorCard />
+          <DoctorCard engineHealthy={engineHealthy} />
 
           <section className="settings-section">
             <h2>Advanced</h2>

@@ -795,6 +795,7 @@ export default function App() {
                     <SettingsScreen
                       onConnectionChanged={checkAuth}
                       diagnosticsState={shell.reason + (signedIn ? ' · signed in' : ' · signed out')}
+                      engineHealthy={outcome?.kind === 'ok'}
                     />
                   )}
                 </Suspense>

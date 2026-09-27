@@ -145,13 +145,19 @@ stateful install flows (progress text, a busy state, their own dismiss)
 two different flows, not a CSS change. Both are real, worthwhile, and
 moved to their own future pass rather than forced into this one.
 
-### P4 — Settings screen ⬜
+### P4 — Settings screen 🔧 (started)
 
-9. Doctor: one row per check (dot, name, one line, Fix), passing checks
-   folded into "N passing"; "Bundled engine FAIL" reworded to "not in
-   use" while a remote engine is connected and healthy. (Its intro
-   sentence already collapsed behind a `Hint` in P2; this is the rows.)
-10. Settings layout: drop the "SETTINGS · v2.11.0" title row, shorten
+9. 🔧 Doctor, half built. ✅ "Bundled engine FAIL" now reads "not in use"
+   (state `skip`, no fix prescribed) whenever the app's current
+   connection is healthy on a different engine — `App.tsx` already
+   computes `outcome.kind`, threaded through `SettingsScreen` to
+   `DoctorCard` to a new `remoteEngineHealthy` fact in `doctor.js`,
+   read through a ref so a flip mid-session cannot trigger the whole
+   probe suite to re-run. Pinned in `desktop-doctor.test.js`: `skip` and
+   no fix when a remote engine is healthy, still `fail` when nothing is.
+   ⬜ Still open: one row per check folded into "N passing" — the row
+   markup itself, a separate, larger change from the wording fix.
+10. ⬜ Settings layout: drop the "SETTINGS · v2.11.0" title row, shorten
     menu subtitles to one line, let cards flow instead of stretching to
     the tallest card in their row, replace the full shortcuts grid with
     a link to the existing Ctrl+/ cheat sheet.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   engineFindNode,
   engineStatus,
@@ -31,10 +31,22 @@ type Row = import('../doctor.js').DoctorRow;
  * prints the rows. Nothing here starts, stops or installs anything: a doctor
  * that prescribes without asking is a different, worse feature.
  */
-export default function DoctorCard() {
+interface Props {
+  /** The app's current connection, whatever engine it names -- so "Bundled
+   * engine" can read "not in use" instead of "fail" when a different engine
+   * is already doing the job. */
+  engineHealthy?: boolean;
+}
+
+export default function DoctorCard({ engineHealthy }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [ranAt, setRanAt] = useState(0);
+  // A ref, not a dependency: engineHealthy can flip on every reconnect
+  // attempt, and re-running the whole probe suite (a real shell round-trip)
+  // on each flip would be wasteful. run() just reads whatever is current.
+  const engineHealthyRef = useRef(engineHealthy);
+  engineHealthyRef.current = engineHealthy;
 
   const run = useCallback(async () => {
     setBusy(true);
@@ -43,6 +55,7 @@ export default function DoctorCard() {
       platform: isLinux() ? 'linux' : 'windows',
       hfSignedIn: hfAuth.signedIn(),
       byokKeys: byokLib.list().length,
+      remoteEngineHealthy: engineHealthyRef.current,
     };
     const [node, engine, model, image, probe] = await Promise.all([
       hasShell() ? engineFindNode().catch(() => null) : Promise.resolve(null),
