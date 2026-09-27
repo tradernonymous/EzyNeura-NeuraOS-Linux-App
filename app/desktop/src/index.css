@@ -3875,14 +3875,6 @@ button.linkish {
 
 .hf-link:hover { color: var(--text-1); }
 
-.hf-signin {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-
 .hf-device-code {
   display: flex;
   flex-direction: column;
@@ -4765,11 +4757,14 @@ body.quick-body { background: var(--bg-1); }
 .compare-table td.is-hit { color: var(--accent-mid); }
 .compare-table tbody tr:last-child th, .compare-table tbody tr:last-child td { border-bottom: none; }
 .quick-continue { align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
-/* Sign-in copy and buttons used to read as centred in a wide card (Settings,
-   Library): text-align: left here overrides whatever the card inherits, so
-   the sentence and its buttons sit against the left edge like every other
-   line of Settings prose around them. */
-.hf-signin { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; font-size: 13px; text-align: left; }
+/* Item 30 / a P1 fix that didn't hold: a second .hf-signin rule used to live
+   near the top of this file with flex-direction: column and no align-items,
+   so this rule's align-items: center -- meant only to centre a button
+   vertically against its line of text in a row -- silently centred each
+   child horizontally instead, in a column that rule alone put it in. That is
+   what kept reading as "centred" no matter what text-align said here. One
+   rule now, with flex-direction spelled out so it cannot happen again. */
+.hf-signin { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; font-size: 13px; color: var(--text-2); text-align: left; }
 .hf-token-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 .hf-token-form input { flex: 1 1 220px; min-width: 0; }
 /* The Doctor (Settings → System): one row per dependency, each with its fix. */
@@ -6445,7 +6440,14 @@ input, textarea, select { border-radius: 8px; }
   border-radius: 14px;
 }
 
-/* Your message: a bordered card with the rewind at its corner. */
+/* Your message: a bordered card with the rewind at its corner, narrower
+   than the thread and pushed to the right -- the bubble shape above
+   (16px 16px 6px 16px, one sharp corner) was already drawn for a
+   right-aligned message, but nothing had narrowed or moved it there, so it
+   rendered as a full-width card no different in shape from the assistant's.
+   The "You" label is gone for the same reason: alignment says whose
+   message it is now, so a bare chat message no longer needs the word. */
+.message.user { max-width: min(560px, 88%); margin-left: auto; margin-right: 0; }
 .message.user .message-content { border-radius: 12px; }
 .message-rewind {
   position: absolute;
@@ -6816,6 +6818,7 @@ input, textarea, select { border-radius: 8px; }
 
 .space-switch { padding: 6px 16px; }
 .space-badge { position: static; margin-left: 6px; }
+.space-switch-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
 .ar-card { position: relative; flex-direction: row; align-items: center; padding: 0; border-radius: 10px; background: var(--riser); box-shadow: inset 0 1px 0 var(--chrome-top), var(--shadow-1); }
 .ar-card .ar-item-open { flex: 1; min-width: 0; padding: 8px 10px; }
@@ -6888,7 +6891,13 @@ input, textarea, select { border-radius: 8px; }
 /* B5: the description's own "Do not use when…", on the card. */
 .skill-neg { font-size: 11px; color: #f5b642; }
 /* B9: installed manuals — the section, its rows, and the rendered page. */
-.library-installed { margin-top: 14px; }
+/* Item 30: this used to have no horizontal margin, so its search field and
+   rows ran flush to the screen's edges while the HF card above it (.hf-section)
+   sits 16px in on both sides -- the two looked like they belonged to different
+   layouts. Same 16px now on both. */
+.library-installed { margin: 14px 16px 16px; }
+.library-empty { display: flex; flex-direction: column; }
+.library-empty-lede { margin: 16px 16px 0; }
 .library-installed .installed-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .library-installed .installed-row:last-child { border-bottom: 0; }
 .skill-manual { background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }

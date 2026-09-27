@@ -1,11 +1,19 @@
 // The switch at the top of a space (the Create strip's shape, reused): its
 // pages as pills, so Agents reads Library · Agents · Recipes · Runs · Evals
 // without a second strip of tabs under the top bar's menu.
+import type { ReactNode } from 'react';
 import { tabsOf, type NavId, type ViewId } from '../Sidebar';
 
-interface Props { destination: NavId; active: ViewId; onNavigate: (view: ViewId) => void; badge?: Partial<Record<ViewId, number>>; }
+interface Props {
+  destination: NavId;
+  active: ViewId;
+  onNavigate: (view: ViewId) => void;
+  badge?: Partial<Record<ViewId, number>>;
+  /** The open tab's own controls (Library's Refresh), right-aligned in this same bar. */
+  actions?: ReactNode;
+}
 
-export default function SpaceSwitch({ destination, active, onNavigate, badge }: Props) {
+export default function SpaceSwitch({ destination, active, onNavigate, badge, actions }: Props) {
   const tabs = tabsOf(destination);
   if (tabs.length < 2) return null;
   return (
@@ -16,6 +24,7 @@ export default function SpaceSwitch({ destination, active, onNavigate, badge }: 
           {badge && badge[t.id] ? <span className="sidebar-badge space-badge">{badge[t.id]}</span> : null}
         </button>
       ))}
+      {actions && <div className="space-switch-actions">{actions}</div>}
     </div>
   );
 }

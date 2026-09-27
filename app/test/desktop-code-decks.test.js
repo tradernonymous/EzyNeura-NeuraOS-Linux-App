@@ -85,3 +85,17 @@ test('the Code screen wears the toolbar, the decks and the / menu', () => {
   const css = read('desktop', 'src', 'index.css');
   for (const sel of ['.code-toolbar', '.task-decks', '.task-deck-card', '.code-slash', '.task-row', '.code-empty']) assert.ok(css.includes(sel + ' {'), `index.css has ${sel}`);
 });
+
+// P6 (docs/UI_UPGRADE_PLAN.md): "Open a folder" used to appear three times
+// on one empty screen -- the toolbar, the disabled textarea's placeholder,
+// and the centred empty state's own button. The toolbar's copy is gone; the
+// other two stay (the placeholder explains a disabled control, the centred
+// button is the actual, prominent next step, with recent folders beside it).
+test('the toolbar drops its own "Open a folder" once a folder is open, not before', () => {
+  const code = read('desktop', 'src', 'screens', 'CodeScreen.tsx');
+  assert.match(code, /\{localRoot && \(\s*<button type="button" className="raised code-project-chip"/, 'the project chip is the only toolbar button, shown only with a folder open');
+  assert.ok(!/\) : \(\s*<button className="raised" onClick=\{openAnother\}>\s*<Icon name="folder" size=\{13\} \/> Open a folder\s*<\/button>\s*\)\}/.test(code), 'no toolbar fallback button asks the same question the empty state already does');
+  // The empty state's own copy is untouched: still the centred, prominent ask.
+  assert.match(code, /<h2>\{localRoot \? 'What should change\?' : 'Open a project'\}<\/h2>/);
+  assert.match(code, /Open a folder…/);
+});

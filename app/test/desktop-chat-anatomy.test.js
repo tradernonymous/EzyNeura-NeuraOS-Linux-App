@@ -101,3 +101,29 @@ test('the screen wears the anatomy: fold, stop card, chips, rewind, goal, output
   }
   assert.match(css, /\.send-btn \{ width: 34px; height: 34px; border-radius: 50%; \}/, 'the send button is round');
 });
+
+// P5 (docs/UI_UPGRADE_PLAN.md): every streamed token used to re-render AND
+// re-parse every earlier message's markdown, not just the one growing.
+// send()'s append() replaces only the last message's object and keeps every
+// other message's reference untouched (confirmed by reading it below), so a
+// memoised leaf component keyed on that same `msg` object correctly skips
+// the parse for every message except the one actually changing.
+test('a message body is memoised, and only the streaming append can defeat it', () => {
+  const chat = read('desktop', 'src', 'screens', 'ChatScreen.tsx');
+  assert.match(chat, /const MessageBody = memo\(function MessageBody/);
+  assert.match(chat, /useMemo\(\(\) => \{[\s\S]{0,300}renderMarkdown/, 'the parse itself is memoised, not only the element');
+  assert.match(chat, /<MessageBody msg=\{msg\} \/>/);
+  // The one place a message's own reference is allowed to change: appending
+  // a streamed piece replaces only the last message, .slice()s the rest.
+  assert.match(chat, /const msgs = s\.messages\.slice\(\);/);
+  assert.match(chat, /msgs\[msgs\.length - 1\] = \{ \.\.\.last, content: last\.content \+ piece \};/);
+});
+
+test('"You" is gone from a plain message; the model or agent label is not', () => {
+  const chat = read('desktop', 'src', 'screens', 'ChatScreen.tsx');
+  assert.match(chat, /\{\(msg\.role !== 'user' \|\| msg\.shell\) && \(/, 'the role line only renders for an assistant reply or a shell command');
+  assert.ok(!/: msg\.role === 'user'\s*\n\s*\?\s*'You'/.test(chat), 'a plain user message no longer renders a "You" label');
+  assert.match(chat, /'You · command'/, 'a shell command still says whose it was');
+  const css = read('desktop', 'src', 'index.css');
+  assert.match(css, /\.message\.user \{ max-width: min\(560px, 88%\); margin-left: auto; margin-right: 0; \}/, 'a user message is narrower and pushed to the right, matching its own bubble shape');
+});

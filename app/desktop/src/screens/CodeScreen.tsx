@@ -432,16 +432,17 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
           The Docker choice is a pressed button with its image in a title; the
           long explanation lives in Settings → Advanced. */}
       <div className="code-toolbar">
-        {localRoot ? (
+        {/* No folder open: the empty state below already has its own
+            "Open a folder…" button, right where the person is looking, plus
+            recent folders -- a second copy up here (and the disabled
+            textarea's "Open a folder first" placeholder) was the same ask
+            three times on one screen. */}
+        {localRoot && (
           <button type="button" className="raised code-project-chip" onClick={openAnother} title={`${localRoot}${branch ? ` · ${branch}` : ''}${changed ? ` · ${changed} changed file${changed === 1 ? '' : 's'}` : ''} — click to open another folder`}>
             <Icon name="folder" size={13} />
             <span className="code-project-name">{localRoot.split(/[/\\]/).pop()}</span>
             {branch && <span className="code-project-branch">{branch}</span>}
             {changed > 0 && <span className="code-project-changed" title={`${changed} uncommitted file${changed === 1 ? '' : 's'}`}>{changed}</span>}
-          </button>
-        ) : (
-          <button className="raised" onClick={openAnother}>
-            <Icon name="folder" size={13} /> Open a folder
           </button>
         )}
         <SelectPill

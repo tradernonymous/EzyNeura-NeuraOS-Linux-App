@@ -52,7 +52,7 @@ test('relative times read short, and Done is capped', () => {
 
 test('the screens wear it: the switch, the cards, the board', () => {
   const app = read('desktop', 'src', 'App.tsx');
-  assert.match(app, /<SpaceSwitch destination="agents" active=\{view\} onNavigate=\{setView\} badge=\{\{ activity: approvals \}\} \/>/);
+  assert.match(app, /<SpaceSwitch\s+destination="agents"\s+active=\{view\}\s+onNavigate=\{setView\}\s+badge=\{\{ activity: approvals \}\}\s+actions=\{view === 'library' \?/);
   const activity = read('desktop', 'src', 'screens', 'ActivityScreen.tsx');
   assert.match(activity, /<h1>Runs<\/h1>/);
   assert.match(activity, /runsLib\.board\(\{/);

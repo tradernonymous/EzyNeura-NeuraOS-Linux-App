@@ -90,6 +90,12 @@ type PanelKey = 'folder' | 'terminal';
 // keeping their own idea of "the" folder.
 const LOCAL_ROOT_KEY = 'freeai4u.localRoot';
 
+// Library's own Refresh, dispatched from the tab bar (SpaceSwitch's actions
+// slot) since the screen itself no longer carries a header row to hold it.
+// A literal string on both ends, same as 'freeai4u:cheat-sheet' -- Library is
+// lazy-loaded and importing a name from it here would pull its chunk eager.
+const LIBRARY_REFRESH_EVENT = 'freeai4u:library-refresh';
+
 function readLocalRoot(): string {
   try {
     return localStorage.getItem(LOCAL_ROOT_KEY) || '';
@@ -760,7 +766,23 @@ export default function App() {
               {/* Agents is one space with a switch: Library · Agents · Recipes ·
                   Runs · Evals (Create carries its own switch inside). */}
               {!showConnect && destinationOf(view) === 'agents' && (
-                <SpaceSwitch destination="agents" active={view} onNavigate={setView} badge={{ activity: approvals }} />
+                <SpaceSwitch
+                  destination="agents"
+                  active={view}
+                  onNavigate={setView}
+                  badge={{ activity: approvals }}
+                  actions={view === 'library' ? (
+                    <button
+                      type="button"
+                      className="raised icon-btn"
+                      onClick={() => window.dispatchEvent(new Event(LIBRARY_REFRESH_EVENT))}
+                      title="Re-read the engine's skills and this machine's chats"
+                      aria-label="Refresh"
+                    >
+                      <Icon name="refresh" size={13} />
+                    </button>
+                  ) : undefined}
+                />
               )}
               {showConnect ? (
                 <ConnectScreen

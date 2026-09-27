@@ -178,52 +178,175 @@ moved to their own future pass rather than forced into this one.
     bare link is a bigger rewrite of already-reasonable behaviour, not a
     quick win, and is dropped from this item rather than forced.
 
-### P5 — Chat: message anatomy and performance ⬜
+### P5 — Chat: message anatomy and performance 🔧 (started)
 
-11. Drop the "You" header line; right-align the user's own messages; show
-    the model name only when it changes.
-16. Fix long-thread performance: every streamed token re-renders and
-    re-parses every message (`ChatScreen.tsx`); memoise message rows.
-12. Fold a finished turn into "Thinking / Commands / Edits" chips (Zed's
-    pattern); code blocks over ~15 lines collapse to one row.
-13. A pinned approval bar ("1 action waiting") when an Allow card has
+16. ✅ Fixed the real performance bug: every streamed token re-rendered
+    **and re-parsed** every earlier message's markdown, not just the one
+    growing. `send()`'s streaming `append()` (read directly, not
+    guessed) replaces only the last message's object —
+    `s.messages.slice()` then `msgs[msgs.length - 1] = { ...last, ... }`
+    — and keeps every other message's reference exactly as it was. A new
+    `MessageBody` leaf component, `memo`'d on the whole `msg` object with
+    its own `useMemo` around the `renderMarkdown`/citation-linking call,
+    is therefore skipped entirely — parse included — for every message
+    except the one actually changing. Pinned in
+    `desktop-chat-anatomy.test.js`.
+11. ✅ Dropped the "You" header line from a plain user message (kept for
+    a shell command, which is worth marking as one) and gave user
+    messages their own lane: `max-width: min(560px, 88%); margin-left:
+    auto`. The bubble shape (`16px 16px 6px 16px`, one sharp corner) was
+    already drawn for a right-aligned message; nothing had actually
+    narrowed or moved it there before this, so it rendered as a
+    full-width card with a pointless corner. Confirmed with a real
+    render: `index.css` loaded into headless Chromium (`/opt/pw-browsers`,
+    already on this machine, no new dependency) against a small fixture
+    of the actual message markup — before/after screenshots, not
+    guessed from the CSS text. "Show the model name only when it
+    changes" is not done: a real feature (tracking the previous
+    message's model across renders), not a wording change, left open.
+12. ⬜ Fold a finished turn into "Thinking / Commands / Edits" chips
+    (Zed's pattern); code blocks over ~15 lines collapse to one row.
+13. ⬜ A pinned approval bar ("1 action waiting") when an Allow card has
     scrolled out of view.
-14. Search within a chat (Ctrl+F) that opens folded steps containing a
+14. ⬜ Search within a chat (Ctrl+F) that opens folded steps containing a
     match.
-15. A Comfortable / Compact message-density switch.
+15. ⬜ A Comfortable / Compact message-density switch.
 
-### P6 — Code space ⬜
+Items 12–15 are each a real feature (new state, new interaction), not a
+CSS or memoisation fix, and are left for their own pass rather than
+rushed alongside 11/16.
 
-20. Collapse the triple "Open a folder" (toolbar, placeholder, centre
-    button) into the one centre button.
-22. Replace the dashed two-line "Run" block with a send icon in the input.
-21. The 7 preset chips (Build, Fix, Refactor…) appear on focus or as `/`
-    commands, not always on screen.
-23. The 5 unlabelled right-side icons fold into one "Panels" menu, shown
-    only once a folder is open.
+### P6 — Code space ✅ (re-scoped, both real items closed)
 
-### P7 — Create space ⬜
+20. ✅ The toolbar's own "Open a folder" button is gone once there is no
+    folder — confirmed as a real, standing triple with the very first,
+    pre-any-change screenshot from this project (toolbar button,
+    the disabled textarea's "Open a folder first" placeholder, and the
+    centred empty state's own "Open a folder…" button, all three on
+    screen at once). The centred button — bigger, where the person is
+    already looking, next to the recent-folders list — is the one that
+    stays; the placeholder stays too (it explains a disabled control,
+    which is a different job than asking twice).
+22. ✅ Already fixed, no new code: the "Run"/"Stop" buttons are
+    `<button className="primary">`/`<button className="danger">`, and
+    P1's fix to the base `button {}` rule (`display: inline-flex`,
+    `white-space: nowrap`) already covers every plain button regardless
+    of which extra class it carries. Confirmed with the same headless-
+    Chromium fixture technique from P5: rendered the exact disabled
+    "Run" button (icon + label) against the real `index.css` — one line,
+    dashed only because it is genuinely disabled with no folder open,
+    which is correct.
 
-24. Collapse the doubled project picker (a dropdown and a "PROJECT —"
-    picker) plus Template/Service/Model/System/cloud-tier into
-    "Project ▾" and one gear popover.
-25. The start gallery (Landing page, Deck, Social post, Photo…) becomes
-    the entry point; the Page/Deck/Post/Image/Edit-image tabs show only
-    once a project exists, instead of duplicating the gallery.
-26. Drop all-caps micro-labels (FRAME, EXPORT, TEMPLATE, SERVICE, MODEL,
-    SYSTEM); the value plus a tooltip is enough.
-27. Disabled buttons (Generate, Export, Run, Find skills) use normal
-    disabled styling, not a dashed drop-zone border.
+**Retracted, not built:** items 21 and 23 did not hold up against the
+actual components. **21** (the deck row on focus/as `/` commands only):
+`TaskDecks.tsx` is a hover-to-preview menu — resting on "Build" for a
+beat opens a card of that deck's specific tasks, the same pattern
+`TopNav.tsx` already uses deliberately. The `/` list is the fast path for
+someone who already knows what they want; the row is how someone finds
+out what is there in the first place. They are not the same feature
+wearing two costumes, and hiding the row would remove the only way to
+browse. **23** (5 icons into one "Panels" menu): only one of the five
+(Terminal) is actually a panel toggle; the other four are one-click
+quick-fills (test/review/commit templates) and a Docker mode switch,
+each already named by its own tooltip. Folding distinct, labelled,
+single-click actions into a menu costs a click for no duplication fixed.
 
-### P8 — Agents → Library ⬜
+### P7 — Create space ✅ (reviewed, nothing built — all four retracted)
 
-28. One empty state with the two real actions (sign in to Hugging Face,
-    install from GitHub) instead of 5 empty sections shown at once.
-29. One name for "Installed manuals" / "Skills".
-30. Fix the stray checkmark glyph, the sections sitting flush against the
-    panel edge, and the Hugging Face card's mixed left/centre alignment.
-31. Drop the "LIBRARY" heading row and the tall Refresh button; Refresh
-    becomes an icon in the tab bar.
+All four items came from one screenshot of the "no project yet" state,
+read without the component behind it. Each one turned out to already be
+handled, or to rest on a misreading of a deliberate, cross-app pattern.
+Nothing here was worth forcing a change to close a checkbox.
+
+24. **Retracted.** The picker is already a native `<details
+    className="studio-project" open={!active}>` — open (showing Project,
+    Template, Service, Model, System, tier) only while there is no
+    active project, exactly when those fields matter; once a project is
+    open it collapses to one summary line: a folder icon, the project's
+    name, `{system} · {model}`, and a caret. That line **is** "Project
+    ▾" — the screenshot this item was written from simply caught the
+    screen in its one auto-expanded state (no project yet), which looks
+    like permanent clutter but is not.
+25. **Retracted.** The top tabs (Page/Deck/Post/Image/Edit-image) choose
+    a *mode*, always relevant, the same role `SpaceSwitch` plays
+    elsewhere in the app; the gallery is a *starting point* within
+    whatever mode is current, and already changes its own heading
+    ("Create a project, then pick a start" → "What are we making?") once
+    a project exists. Hiding the tabs until a project exists would
+    remove the only way to choose a mode before making one.
+26. **Retracted.** `SelectPill`'s small caps label (`.pill-key`, 9px) is
+    a consistent, reusable convention used the same way everywhere the
+    component appears across the app (Code's Model picker included), not
+    a Create-specific decoration — a value alone ("gpt-4o-mini") does
+    not say whether it is the service or the model without it. Fixing
+    this only in Create would be the inconsistency, not the label.
+27. **Retracted.** The dashed disabled style is not a Create bug: it is
+    the whole app's own considered accessibility fix (`index.css`'s own
+    comment, NEURA-024) — no fill, a dashed border and muted text,
+    chosen because a plain opacity dim failed contrast (WCAG 1.4.11) in
+    the light theme. Undoing it would undo that fix, not correct one.
+
+### P8 — Agents → Library ✅
+
+28. **Built.** A `nothingYet` check (no HF sign-in, no HF/GitHub catalogue
+    loaded, nothing installed, no engine skill, no saved chat — a genuine
+    first launch) replaces the HF card, the installed-skills section and the
+    whole three-column layout with one block holding just the two real
+    actions: sign in to Hugging Face, or paste a GitHub repo. Both actions
+    are the existing `<HfSignIn>` component and the GitHub install field,
+    each defined once (`hfSignInBlock`, `ghInstallField`) and reused by both
+    the empty state and the normal layout — not duplicated. The moment either
+    one produces anything (a catalogue entry, a sign-in), `nothingYet` goes
+    false on its own and the full screen appears. Verified with a headless
+    Chromium render of both states against the real `index.css`.
+31. **Built, folded into the same change.** The screen's own `<h1>Library</h1>`
+    header row is gone — the tab bar above it (`SpaceSwitch`, driven by
+    `tabsOf('agents')`) already reads "Library" as one of its pills, which a
+    render confirmed; the heading was a duplicate, same reasoning as the
+    version line dropped from Settings in P4. `SpaceSwitch` gained an
+    `actions` slot (right-aligned via `.space-switch-actions { margin-left:
+    auto }`) and App.tsx fills it with a small `raised icon-btn` Refresh,
+    shown only while Library is the open tab. Library and App.tsx are wired
+    by one literal event name (`'freeai4u:library-refresh'`) rather than a
+    prop, because Library is lazy-loaded (`lazy(() => import(...))`) and an
+    App.tsx import of a named export from it would pull its whole chunk into
+    the eager bundle — the same reasoning already used for
+    `'freeai4u:cheat-sheet'` elsewhere in this file.
+29. **Built.** "Installed manuals" is now "Installed skills", matching the
+    "Skills" catalogue column below it — both are the same underlying idea
+    (a skill), one installed and one browsable. The per-row "Manual" button
+    (opens the SKILL.md as a page) is a different, still-correct label and
+    was left alone.
+30. **Built (two of three), one retracted as already fixed.**
+    - The stray checkmark `<Icon name="check" />` next to "Installed
+      manuals" is gone with the rename above — every sibling `col-title` in
+      this screen is plain text with a count, and this one was the only
+      exception.
+    - `.library-installed` had no horizontal margin while `.hf-section`
+      above it sets `margin: 0 16px 16px` — so its search field and rows ran
+      flush to the screen's edges while the HF card sat 16px in on both
+      sides. Now `margin: 14px 16px 16px`, same 16px both cards share.
+      Confirmed with a headless-Chromium render.
+    - The Hugging Face card's "mixed left/centre alignment": this is the
+      exact issue P1 tried and, per this same doc, failed to fix — a
+      screenshot afterward still showed it centred. Reading `.hf-signin` this
+      time (not just grepping for it) found *two* rules for the same class:
+      one near the top of the file (`display: flex; flex-direction: column`)
+      and P1's own fix further down (`align-items: center; justify-content:
+      flex-start; text-align: left`, with a comment explaining the intent).
+      CSS cascades property-by-property at equal specificity, and P1's rule
+      never touched `flex-direction` — so the earlier rule's `column` won
+      silently, and `align-items: center` in a *column* flex centres each
+      child horizontally by its own width instead of centring a button
+      against its line of text vertically in a *row*, which is what the rule
+      was actually written for. Different-width children (a sentence, two
+      buttons) landing at different horizontal offsets is exactly "mixed
+      left/centre." Fixed by deleting the stray earlier rule and folding its
+      one needed property (`color`) into the surviving one, with
+      `flex-direction: row` now spelled out so the same silent conflict
+      cannot recur. Confirmed left-aligned with a headless-Chromium render —
+      the first real visual confirmation this issue has had, rather than a
+      second guess.
 
 ## Verification, every phase
 
