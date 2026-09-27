@@ -286,15 +286,67 @@ Nothing here was worth forcing a change to close a checkbox.
     chosen because a plain opacity dim failed contrast (WCAG 1.4.11) in
     the light theme. Undoing it would undo that fix, not correct one.
 
-### P8 — Agents → Library ⬜
+### P8 — Agents → Library ✅
 
-28. One empty state with the two real actions (sign in to Hugging Face,
-    install from GitHub) instead of 5 empty sections shown at once.
-29. One name for "Installed manuals" / "Skills".
-30. Fix the stray checkmark glyph, the sections sitting flush against the
-    panel edge, and the Hugging Face card's mixed left/centre alignment.
-31. Drop the "LIBRARY" heading row and the tall Refresh button; Refresh
-    becomes an icon in the tab bar.
+28. **Built.** A `nothingYet` check (no HF sign-in, no HF/GitHub catalogue
+    loaded, nothing installed, no engine skill, no saved chat — a genuine
+    first launch) replaces the HF card, the installed-skills section and the
+    whole three-column layout with one block holding just the two real
+    actions: sign in to Hugging Face, or paste a GitHub repo. Both actions
+    are the existing `<HfSignIn>` component and the GitHub install field,
+    each defined once (`hfSignInBlock`, `ghInstallField`) and reused by both
+    the empty state and the normal layout — not duplicated. The moment either
+    one produces anything (a catalogue entry, a sign-in), `nothingYet` goes
+    false on its own and the full screen appears. Verified with a headless
+    Chromium render of both states against the real `index.css`.
+31. **Built, folded into the same change.** The screen's own `<h1>Library</h1>`
+    header row is gone — the tab bar above it (`SpaceSwitch`, driven by
+    `tabsOf('agents')`) already reads "Library" as one of its pills, which a
+    render confirmed; the heading was a duplicate, same reasoning as the
+    version line dropped from Settings in P4. `SpaceSwitch` gained an
+    `actions` slot (right-aligned via `.space-switch-actions { margin-left:
+    auto }`) and App.tsx fills it with a small `raised icon-btn` Refresh,
+    shown only while Library is the open tab. Library and App.tsx are wired
+    by one literal event name (`'freeai4u:library-refresh'`) rather than a
+    prop, because Library is lazy-loaded (`lazy(() => import(...))`) and an
+    App.tsx import of a named export from it would pull its whole chunk into
+    the eager bundle — the same reasoning already used for
+    `'freeai4u:cheat-sheet'` elsewhere in this file.
+29. **Built.** "Installed manuals" is now "Installed skills", matching the
+    "Skills" catalogue column below it — both are the same underlying idea
+    (a skill), one installed and one browsable. The per-row "Manual" button
+    (opens the SKILL.md as a page) is a different, still-correct label and
+    was left alone.
+30. **Built (two of three), one retracted as already fixed.**
+    - The stray checkmark `<Icon name="check" />` next to "Installed
+      manuals" is gone with the rename above — every sibling `col-title` in
+      this screen is plain text with a count, and this one was the only
+      exception.
+    - `.library-installed` had no horizontal margin while `.hf-section`
+      above it sets `margin: 0 16px 16px` — so its search field and rows ran
+      flush to the screen's edges while the HF card sat 16px in on both
+      sides. Now `margin: 14px 16px 16px`, same 16px both cards share.
+      Confirmed with a headless-Chromium render.
+    - The Hugging Face card's "mixed left/centre alignment": this is the
+      exact issue P1 tried and, per this same doc, failed to fix — a
+      screenshot afterward still showed it centred. Reading `.hf-signin` this
+      time (not just grepping for it) found *two* rules for the same class:
+      one near the top of the file (`display: flex; flex-direction: column`)
+      and P1's own fix further down (`align-items: center; justify-content:
+      flex-start; text-align: left`, with a comment explaining the intent).
+      CSS cascades property-by-property at equal specificity, and P1's rule
+      never touched `flex-direction` — so the earlier rule's `column` won
+      silently, and `align-items: center` in a *column* flex centres each
+      child horizontally by its own width instead of centring a button
+      against its line of text vertically in a *row*, which is what the rule
+      was actually written for. Different-width children (a sentence, two
+      buttons) landing at different horizontal offsets is exactly "mixed
+      left/centre." Fixed by deleting the stray earlier rule and folding its
+      one needed property (`color`) into the surviving one, with
+      `flex-direction: row` now spelled out so the same silent conflict
+      cannot recur. Confirmed left-aligned with a headless-Chromium render —
+      the first real visual confirmation this issue has had, rather than a
+      second guess.
 
 ## Verification, every phase
 

@@ -319,6 +319,17 @@ export default function LibraryScreen() {
 
   useEffect(() => { load(); }, []);
 
+  // The tab bar's Refresh icon (App.tsx's SpaceSwitch actions slot) dispatches
+  // this literal event -- same cross-tree pattern as 'freeai4u:cheat-sheet' --
+  // because Library is lazy-loaded and App.tsx cannot import a name from it
+  // without pulling its chunk into the eager bundle. The screen dropped its
+  // own header row (item 31), which is what used to hold this button.
+  useEffect(() => {
+    const onRefresh = () => load();
+    window.addEventListener('freeai4u:library-refresh', onRefresh);
+    return () => window.removeEventListener('freeai4u:library-refresh', onRefresh);
+  }, []);
+
   const show = (s: Skill) => {
     setOpen(s);
     setContent('Loading…');
@@ -329,17 +340,63 @@ export default function LibraryScreen() {
 
   const openChat = (id: string) => window.dispatchEvent(new CustomEvent(OPEN_CHAT_EVENT, { detail: id }));
 
+  // Item 31: the "LIBRARY" heading row is gone -- the tab bar above this
+  // screen (SpaceSwitch, App.tsx) already reads "Library", and Refresh moved
+  // to that same bar as an icon (the listener a few lines up).
+
+  // Item 28: on a first launch -- no HF sign-in, no catalogue loaded yet, no
+  // installed skill, no engine skill, no saved chat -- the screen used to show
+  // five separate "nothing here" placeholders at once (HF, Installed manuals,
+  // Skills, Skills on this engine, Chats). The two sections that are ever
+  // actionable on their own (HF sign-in, GitHub install) still render in that
+  // state; the other three, which only ever say "empty" until one of those two
+  // is used, collapse into the one paragraph below instead of repeating it
+  // three times in three boxes.
+  const hfSignInBlock = (
+    <>
+      <p>Sign in to browse and download GGUF models (including gated repos).</p>
+      <HfSignIn onSignedIn={(who) => { setHfSignedIn(true); setHfUser(who); }} />
+    </>
+  );
+  const ghInstallField = (
+    <div className="gh-install">
+      <input
+        value={ghInput}
+        onChange={(e) => setGhInput(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void findGitHub(); }}
+        placeholder="Install from GitHub — a URL or owner/repo with SKILL.md files"
+        aria-label="A GitHub repository from which to install skills"
+        disabled={ghBusy}
+      />
+      <button onClick={() => void findGitHub()} disabled={ghBusy || !ghInput.trim()}>
+        {ghBusy ? 'Reading…' : 'Find skills'}
+      </button>
+    </div>
+  );
+  const nothingYet = !hfSignedIn && !hfCatalogLoading && !loading
+    && hfCatalog.length === 0 && ghCatalog.length === 0
+    && Object.keys(installed).length === 0 && skills.length === 0 && chats.length === 0;
+
   return (
     <div className="screen library">
-      <header className="screen-header">
-        <h1>Library</h1>
-        <div className="header-actions">
-          <button onClick={load} disabled={loading} title="Re-read the engine's skills and this machine's chats">
-            <Icon name="refresh" size={13} /> Refresh
-          </button>
+      {nothingYet ? (
+        <div className="library-empty">
+          <p className="settings-hint library-empty-lede">
+            Nothing set up yet — sign in to Hugging Face to browse models, or install skills from a GitHub repository.
+          </p>
+          <section className="hf-section">
+            <h3 className="col-title"><Icon name="image" size={14} /> Hugging Face</h3>
+            <div>{hfSignInBlock}</div>
+          </section>
+          <section className="hf-section">
+            <h3 className="col-title">Install skills from GitHub</h3>
+            {ghInstallField}
+            {ghError && <div className="stream-error">{ghError}</div>}
+            {ghFound && <div className="skill-src">{ghFound}</div>}
+          </section>
         </div>
-      </header>
-
+      ) : (
+      <>
       {/* --- HuggingFace section --- */}
       <section className="hf-section">
         <h3 className="col-title">
@@ -351,10 +408,7 @@ export default function LibraryScreen() {
           )}
         </h3>
         {!hfSignedIn ? (
-          <div>
-            <p>Sign in to browse and download GGUF models (including gated repos).</p>
-            <HfSignIn onSignedIn={(who) => { setHfSignedIn(true); setHfUser(who); }} />
-          </div>
+          <div>{hfSignInBlock}</div>
         ) : (
           <div className="hf-browser">
             <div className="hf-search-bar">
@@ -412,7 +466,7 @@ export default function LibraryScreen() {
           this disk. The records are the Library's own (hf-skills.js); the
           text comes from the open folder when a manual is opened. */}
       <section className="library-installed">
-        <h3 className="col-title"><Icon name="check" size={14} /> Installed manuals ({Object.keys(installed).length})</h3>
+        <h3 className="col-title">Installed skills ({Object.keys(installed).length})</h3>
         {(() => {
           const rows = Object.entries(installed)
             .filter(([, r]: [string, any]) => r && r.name)
@@ -463,19 +517,7 @@ export default function LibraryScreen() {
       <div className="library-layout">
         <section className="library-col">
           <h3 className="col-title">Skills ({hfCatalog.length + ghCatalog.length})</h3>
-          <div className="gh-install">
-            <input
-              value={ghInput}
-              onChange={(e) => setGhInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void findGitHub(); }}
-              placeholder="Install from GitHub — a URL or owner/repo with SKILL.md files"
-              aria-label="A GitHub repository from which to install skills"
-              disabled={ghBusy}
-            />
-            <button onClick={() => void findGitHub()} disabled={ghBusy || !ghInput.trim()}>
-              {ghBusy ? 'Reading…' : 'Find skills'}
-            </button>
-          </div>
+          {ghInstallField}
           {ghError && <div className="stream-error">{ghError}</div>}
           {ghFound && <div className="skill-src">{ghFound}</div>}
           {(() => {
@@ -676,6 +718,8 @@ export default function LibraryScreen() {
           )}
         </section>
       </div>
+      </>
+      )}
     </div>
   );
 }
