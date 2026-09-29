@@ -1194,3 +1194,15 @@ with `set`) and picks the folder. Offered under the Model row for every
 lone checkpoint, since a baked-in VAE cannot be told from a missing one
 without loading the file; the line says when it matters. Not verified on
 the PC yet.
+
+## Local images: a checkpoint + VAE set starts with -m (2026-09-30)
+
+The PC paired an SD 1.5 checkpoint with the ft-mse VAE (the new one-click
+pairing worked) and sd-server stopped at "get sd version from file failed:
+''". A set always started its diffusion part with `--diffusion-model`,
+which prefixes every tensor with `model.diffusion_model.` -- right for a
+bare UNet/DiT file, wrong for a whole checkpoint that already carries it.
+`is_full_checkpoint` reads the safetensors header (never the weights); a
+checkpoint set now starts exactly like the single file that already worked
+on the PC (`-m`), plus `--vae` for the paired VAE. Split sets (FLUX.2,
+Qwen-Image, Z-Image) are unchanged. Not verified on the PC yet.
