@@ -195,3 +195,29 @@ test('LoRAs: kept per machine, sent by name with a clamped strength, never as pr
   assert.match(rs, /pub fn sd_loras/);
   assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_import_loras,/);
 });
+
+// 2026-09-29: free services only, and none whose pictures came back
+// low-quality. The engine is upstream and untouched; the rows are dropped on
+// the way to the picker. This PC, once set up, is the default: the best
+// pictures this app can get for free, and the only free route that edits.
+test('the picker hides NVIDIA, OpenAI, Gemini and Pollinations, whatever the engine reports', () => {
+  const rows = images.providerChoices({ providers: [
+    { id: 'pollinations', label: 'Pollinations (Free)', ready: true },
+    { id: 'cloudflare', label: 'Cloudflare Workers AI', ready: true },
+    { id: 'nvidia', label: 'NVIDIA', ready: true },
+    { id: 'openai', label: 'OpenAI', ready: false },
+    { id: 'gemini', label: 'Gemini', ready: true },
+    { id: 'openrouter', label: 'OpenRouter', ready: false },
+  ] });
+  assert.deepEqual(rows.filter((r) => r.kind === 'server').map((r) => r.id), ['cloudflare', 'openrouter']);
+  assert.ok(rows.some((r) => r.kind === 'browser'), 'Puter still rides along');
+});
+
+test('This PC is the default once it is set up; a ready server otherwise', () => {
+  const server = { id: 'cloudflare', kind: 'server', ready: true };
+  const ready = images.localRow({ found: true, binary: '/x/sd-server', model: '/m/flux.gguf' });
+  const half = images.localRow({ found: true, binary: '/x/sd-server', model: '' });
+  assert.equal(images.chosen('', [ready, server]).id, 'local');
+  assert.equal(images.chosen('', [half, server]).id, 'cloudflare');
+  assert.equal(images.chosen('cloudflare', [ready, server]).id, 'cloudflare', 'an explicit pick still wins');
+});
