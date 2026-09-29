@@ -470,6 +470,52 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
   const chosenPath = facts?.model || '';
   const deletable = !!chosenPath && !!facts?.models_dir && chosenPath.startsWith(facts.models_dir + '/');
 
+  // A lone SD 1.5 / SDXL checkpoint may have been published without its VAE
+  // (sd-server then stops at the first missing VAE tensor). The shell names
+  // the VAE it was made for; one click moves the checkpoint into a folder of
+  // its own, downloads the VAE beside it and picks the pair as a set -- the
+  // same thing "Add files as a set" does, without the file picker. Offered
+  // for every such checkpoint, since a baked-in VAE cannot be told from a
+  // missing one without loading the file: the line says when it matters.
+  type VaeChoice = { repo: string; file: string; label: string; set: string };
+  const [vae, setVae] = useState<VaeChoice | null>(null);
+  const [vaeProgress, setVaeProgress] = useState('');
+  useEffect(() => {
+    let live = true;
+    if (!chosenPath) { setVae(null); return undefined; }
+    call<VaeChoice | null>('sd_vae_for', { path: chosenPath })
+      .then((v) => { if (live) setVae(v); })
+      .catch(() => { if (live) setVae(null); });
+    return () => { live = false; };
+  }, [chosenPath]);
+  const pairVae = () => guard('model', async () => {
+    if (!vae || !chosenPath) return;
+    const moved = await call<{ folder: string; dir: string; path: string }>('sd_set_from_model', { path: chosenPath });
+    const stop = await onLocalDownload((p) => {
+      if (p.file !== vae.file) return;
+      setVaeProgress(p.total > 0 ? `Downloading ${vae.file}: ${Math.round((100 * p.received) / p.total)}%` : `Downloading ${vae.file}…`);
+    }, 'image');
+    try {
+      setVaeProgress(`Downloading ${vae.file}…`);
+      const got = await localModelDownload({ repo: vae.repo, file: vae.file, kind: 'image', set: moved.folder });
+      if (got.cancelled) {
+        await call('sd_use_model', { path: moved.path });
+        pushToast('info', 'Download cancelled; the checkpoint stays chosen on its own.');
+        return;
+      }
+      await call('sd_use_model', { path: moved.dir });
+      pushToast('ok', `${vae.file} is beside the checkpoint in sd-models/${moved.folder}. Local images will draw with the set.`);
+    } catch (e) {
+      // The checkpoint already moved: keep it chosen where it now is.
+      await call('sd_use_model', { path: moved.path }).catch(() => undefined);
+      throw e;
+    } finally {
+      stop();
+      setVaeProgress('');
+      await onRefresh();
+    }
+  });
+
   const chooseModel = (path: string) => guard('model', async () => {
     if (!path) return;
     await call('sd_use_model', { path });
@@ -600,6 +646,19 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
             Add files as a set…
           </button>
         </div>
+        {vae && (
+          <p className="settings-hint">
+            {vaeProgress || (
+              <>
+                No VAE beside this checkpoint. If drawing stops with “published without its VAE”,{' '}
+                <button type="button" className="linkish" onClick={pairVae} disabled={!!busy || drawing}>
+                  get {vae.label} and pair it
+                </button>{' '}
+                ({vae.file} from {vae.repo}, into sd-models/{vae.set}).
+              </>
+            )}
+          </p>
+        )}
         <LoraSection disabled={!!busy || drawing} />
         <p className="settings-hint">
           Put weights (.safetensors, .ckpt or .gguf) in{' '}

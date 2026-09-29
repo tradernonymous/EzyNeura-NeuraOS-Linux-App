@@ -765,8 +765,12 @@ pub fn sd_pick_model(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// `flux-2-klein-4b`. Only what a folder name can safely be.
 pub fn set_folder_name(files: &[(PathBuf, u64)]) -> Option<String> {
     let parts = set_roles(files)?;
-    let stem = parts
-        .diffusion
+    folder_name_for(&parts.diffusion)
+}
+
+/// The folder name a diffusion file's set takes (see set_folder_name).
+pub fn folder_name_for(diffusion: &Path) -> Option<String> {
+    let stem = diffusion
         .file_stem()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
@@ -845,6 +849,75 @@ pub fn sd_import_set(app: tauri::AppHandle) -> Result<Option<serde_json::Value>,
     std::fs::write(&file, dir.display().to_string())
         .map_err(|e| format!("Could not save the path: {}", e))?;
     Ok(Some(serde_json::json!({ "path": dir.display().to_string(), "folder": folder, "moved": moved })))
+}
+
+/// The VAE a lone checkpoint was published without, and where to get it.
+/// Only for the two families that ship checkpoints that way: SDXL (named for
+/// it -- sdxl, xl, pony, illustrious, noob -- or over 5 GB) takes
+/// stabilityai's sdxl_vae; anything smaller is SD 1.x/2.x and takes the
+/// ft-mse VAE. FLUX.2, Qwen-Image and Z-Image come as sets with their own
+/// autoencoder from the download button, so they get nothing here, nor does
+/// a folder (already a set) or a file that is not a diffusion model.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+pub struct VaeChoice {
+    pub repo: String,
+    pub file: String,
+    pub label: String,
+    /// The folder under sd-models the checkpoint and the VAE will share.
+    pub set: String,
+}
+
+pub fn vae_for(model: &Path, bytes: u64) -> Option<VaeChoice> {
+    if model.is_dir() {
+        return None;
+    }
+    let name = model_name_of(model);
+    if !is_model_name(&name) || role_of(&name) != "diffusion" || family_of(model).is_some() {
+        return None;
+    }
+    let set = folder_name_for(model)?;
+    let xl_name = ["sdxl", "xl", "pony", "illustrious", "noob"].iter().any(|k| name.contains(k));
+    let xl = xl_name || bytes >= 5 * 1024 * 1024 * 1024;
+    let (repo, file, label) = if xl {
+        ("stabilityai/sdxl-vae", "sdxl_vae.safetensors", "the SDXL VAE")
+    } else {
+        ("stabilityai/sd-vae-ft-mse-original", "vae-ft-mse-840000-ema-pruned.safetensors", "the SD 1.5 VAE")
+    };
+    Some(VaeChoice { repo: repo.to_string(), file: file.to_string(), label: label.to_string(), set })
+}
+
+/// The VAE the chosen weights could be paired with, or nothing.
+#[tauri::command(async)]
+pub fn sd_vae_for(path: String) -> Option<VaeChoice> {
+    let model = PathBuf::from(&path);
+    let bytes = std::fs::metadata(&model).map(|m| m.len()).unwrap_or(0);
+    vae_for(&model, bytes)
+}
+
+/// Move a lone checkpoint into its own folder under sd-models, ready for the
+/// VAE download to land beside it (local_model_download with `set`). The
+/// folder is not chosen as the model here: it is not a set until the VAE is
+/// in it, and sd_use_model refuses a folder that is not one. The caller
+/// chooses it once the download is done, or falls back to the moved file.
+#[tauri::command(async)]
+pub fn sd_set_from_model(app: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
+    let from = PathBuf::from(&path);
+    if !from.is_file() {
+        return Err(format!("No file at {}", path));
+    }
+    let bytes = std::fs::metadata(&from).map(|m| m.len()).unwrap_or(0);
+    let choice = vae_for(&from, bytes).ok_or_else(|| "That model has no VAE this app knows to fetch.".to_string())?;
+    let dir = models_dir(&app)?.join(&choice.set);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {}", dir.display(), e))?;
+    let name = from.file_name().ok_or_else(|| format!("{} has no name", from.display()))?;
+    let to = dir.join(name);
+    if to != from {
+        if to.exists() {
+            return Err(format!("{} is already in {}.", name.to_string_lossy(), dir.display()));
+        }
+        move_file(&from, &to)?;
+    }
+    Ok(serde_json::json!({ "folder": choice.set, "dir": dir.display().to_string(), "path": to.display().to_string() }))
 }
 
 /// A port this app will bind sd-server to. Never a privileged one, never 0:
@@ -1789,6 +1862,24 @@ mod tests {
         assert_eq!(explain_tail("  just info\n"), "just info");
         // An assert is an error too (the FP4 crash).
         assert!(explain_tail("x\n/src/ggml_block.hpp:173: GGML_ASSERT(scale_nelements == 1) failed\n").starts_with("/src/ggml_block.hpp:173: GGML_ASSERT"));
+    }
+
+    #[test]
+    fn a_lone_checkpoint_names_the_vae_it_was_published_without() {
+        let gb = 1024 * 1024 * 1024;
+        let xl = vae_for(Path::new("/m/juggernautXL_v9.safetensors"), 6 * gb).expect("sdxl");
+        assert_eq!((xl.repo.as_str(), xl.file.as_str()), ("stabilityai/sdxl-vae", "sdxl_vae.safetensors"));
+        assert_eq!(xl.set, "juggernautXL_v9");
+        // Named for nothing, but too big to be SD 1.5.
+        let big = vae_for(Path::new("/m/dreamshaper_8.safetensors"), 7 * gb).expect("by size");
+        assert_eq!(big.file, "sdxl_vae.safetensors");
+        let small = vae_for(Path::new("/m/dreamshaper_8.safetensors"), 2 * gb).expect("sd15");
+        assert_eq!(small.repo, "stabilityai/sd-vae-ft-mse-original");
+        assert_eq!(small.set, "dreamshaper_8");
+        // The families that come as sets, a VAE, and a non-model: nothing.
+        assert!(vae_for(Path::new("/m/flux-2-klein-4b-Q4_K_M.gguf"), 3 * gb).is_none());
+        assert!(vae_for(Path::new("/m/sdxl_vae.safetensors"), 335 * 1024 * 1024).is_none());
+        assert!(vae_for(Path::new("/m/readme.txt"), 10).is_none());
     }
 
     #[test]
