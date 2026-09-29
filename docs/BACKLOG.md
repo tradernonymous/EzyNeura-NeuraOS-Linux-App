@@ -1179,3 +1179,18 @@ the only free route that edits. An explicit pick still wins. What stays
 hosted: Cloudflare Workers AI (free, FLUX.1 schnell, draw only),
 OpenRouter and Nara (a key each), Puter (a sign-in). Pinned in
 `desktop-images.test.js`.
+
+## Local images: pair the VAE a lone checkpoint lacks (2026-09-29)
+
+The PC's next stop: an SDXL-class checkpoint that stopped sd-server at
+"VAE tensor ... not in model metadata" -- published without its VAE. The
+app's message already named the fix (download sdxl_vae, "Add files as a
+set"); now it does it. `sd.rs` `vae_for` names the VAE by family (SDXL by
+name or over 5 GB: stabilityai/sdxl-vae; anything smaller: the ft-mse SD
+1.5 VAE; nothing for FLUX.2 / Qwen-Image / Z-Image, which come as sets),
+`sd_set_from_model` moves the checkpoint into its own folder under
+sd-models, and the card downloads the VAE beside it (`local_model_download`
+with `set`) and picks the folder. Offered under the Model row for every
+lone checkpoint, since a baked-in VAE cannot be told from a missing one
+without loading the file; the line says when it matters. Not verified on
+the PC yet.

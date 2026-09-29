@@ -221,3 +221,20 @@ test('This PC is the default once it is set up; a ready server otherwise', () =>
   assert.equal(images.chosen('', [half, server]).id, 'cloudflare');
   assert.equal(images.chosen('cloudflare', [ready, server]).id, 'cloudflare', 'an explicit pick still wins');
 });
+
+// A lone SD 1.5 / SDXL checkpoint published without its VAE: the shell names
+// the VAE (sd_vae_for), moves the checkpoint into its own folder
+// (sd_set_from_model), the card downloads the VAE beside it with `set` and
+// picks the folder -- "Add files as a set" without the file picker.
+test('the card offers to fetch and pair the VAE a lone checkpoint lacks', () => {
+  const card = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'src', 'components', 'LocalImagesCard.tsx'), 'utf8');
+  assert.match(card, /call<VaeChoice \| null>\('sd_vae_for', \{ path: chosenPath \}\)/);
+  assert.match(card, /call<\{ folder: string; dir: string; path: string \}>\('sd_set_from_model', \{ path: chosenPath \}\)/);
+  assert.match(card, /localModelDownload\(\{ repo: vae\.repo, file: vae\.file, kind: 'image', set: moved\.folder \}\)/);
+  assert.match(card, /await call\('sd_use_model', \{ path: moved\.dir \}\)/, 'the folder is the model once the VAE is in it');
+  assert.match(card, /get \{vae\.label\} and pair it/);
+  const rs = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'src-tauri', 'src', 'sd.rs'), 'utf8');
+  assert.match(rs, /pub fn vae_for\(model: &Path, bytes: u64\) -> Option<VaeChoice>/);
+  assert.match(rs, /"stabilityai\/sdxl-vae", "sdxl_vae\.safetensors"/);
+  assert.match(rs, /"stabilityai\/sd-vae-ft-mse-original", "vae-ft-mse-840000-ema-pruned\.safetensors"/);
+});

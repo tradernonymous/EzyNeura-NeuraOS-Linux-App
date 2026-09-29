@@ -420,6 +420,8 @@ fn main() {
             sd::sd_delete_lora,
             sd::sd_pick_model,
             sd::sd_import_set,
+            sd::sd_vae_for,
+            sd::sd_set_from_model,
             sd::sd_start,
             sd::sd_status,
             sd::sd_stop,
