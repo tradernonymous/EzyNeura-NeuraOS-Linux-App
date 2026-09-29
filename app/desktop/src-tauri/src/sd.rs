@@ -378,6 +378,9 @@ fn role_of(name: &str) -> &'static str {
     }
 }
 
+/// The biggest a VAE file gets (the SDXL VAE is 335 MB, FLUX's 336 MB).
+const VAE_MAX_BYTES: u64 = 1024 * 1024 * 1024;
+
 /// Sort a folder's weight files into a set. The diffusion model is the
 /// largest file no other role claimed; a folder with no diffusion model, or
 /// with nothing beside it, is not a set -- a lone checkpoint still starts
@@ -393,7 +396,16 @@ pub fn set_roles(files: &[(PathBuf, u64)]) -> Option<SetParts> {
         if !is_model_name(&name) || is_fp4(&name) {
             continue;
         }
-        match role_of(&name) {
+        // A VAE is a few hundred MB. A file named for one above a gigabyte
+        // is a checkpoint that says its VAE is baked in
+        // (`sd_xl_base_1.0_0.9vae`, `..._vae_baked`), and it is the diffusion
+        // model of its set -- classed as the VAE it left the set with no
+        // model and the picker refusing the pair.
+        let role = match role_of(&name) {
+            "vae" if *bytes > VAE_MAX_BYTES => "diffusion",
+            other => other,
+        };
+        match role {
             "vae" => {
                 if parts.vae.is_none() {
                     parts.vae = Some(path.clone());
@@ -872,7 +884,14 @@ pub fn vae_for(model: &Path, bytes: u64) -> Option<VaeChoice> {
         return None;
     }
     let name = model_name_of(model);
-    if !is_model_name(&name) || role_of(&name) != "diffusion" || family_of(model).is_some() {
+    // The same size rule as set_roles: a "vae"-named file over a gigabyte is
+    // a checkpoint with its VAE baked in -- and, published that way, one
+    // that still turns out to lack it on load happens, so it is offered too.
+    let role = match role_of(&name) {
+        "vae" if bytes > VAE_MAX_BYTES => "diffusion",
+        other => other,
+    };
+    if !is_model_name(&name) || role != "diffusion" || family_of(model).is_some() {
         return None;
     }
     let set = folder_name_for(model)?;
@@ -1865,6 +1884,22 @@ mod tests {
     }
 
     #[test]
+    fn a_checkpoint_named_for_its_baked_vae_is_still_the_diffusion_model() {
+        let gb = 1024 * 1024 * 1024;
+        let files = vec![
+            (PathBuf::from("s/sd_xl_base_1.0_0.9vae.safetensors"), 7 * gb),
+            (PathBuf::from("s/sdxl_vae.safetensors"), 335 * 1024 * 1024),
+        ];
+        let parts = set_roles(&files).expect("a set: the big file is the model, the small one the VAE");
+        assert_eq!(parts.diffusion, PathBuf::from("s/sd_xl_base_1.0_0.9vae.safetensors"));
+        assert_eq!(parts.vae, Some(PathBuf::from("s/sdxl_vae.safetensors")));
+        assert_eq!(set_folder_name(&files).as_deref(), Some("sd_xl_base_1.0_0.9vae"));
+        // Still no set from two VAEs, or from a checkpoint alone.
+        assert!(set_roles(&[(PathBuf::from("s/sdxl_vae.safetensors"), 335 * 1024 * 1024)]).is_none());
+        assert!(set_roles(&[(PathBuf::from("s/juggernautXL_v9.safetensors"), 6 * gb)]).is_none());
+    }
+
+    #[test]
     fn a_lone_checkpoint_names_the_vae_it_was_published_without() {
         let gb = 1024 * 1024 * 1024;
         let xl = vae_for(Path::new("/m/juggernautXL_v9.safetensors"), 6 * gb).expect("sdxl");
@@ -1879,6 +1914,8 @@ mod tests {
         // The families that come as sets, a VAE, and a non-model: nothing.
         assert!(vae_for(Path::new("/m/flux-2-klein-4b-Q4_K_M.gguf"), 3 * gb).is_none());
         assert!(vae_for(Path::new("/m/sdxl_vae.safetensors"), 335 * 1024 * 1024).is_none());
+        // Named for a baked VAE but checkpoint-sized: still a checkpoint.
+        assert_eq!(vae_for(Path::new("/m/sd_xl_base_1.0_0.9vae.safetensors"), 7 * gb).map(|v| v.set), Some("sd_xl_base_1.0_0.9vae".to_string()));
         assert!(vae_for(Path::new("/m/readme.txt"), 10).is_none());
     }
 
