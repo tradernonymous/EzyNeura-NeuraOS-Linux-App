@@ -1169,7 +1169,72 @@ pub fn small_card_args(vram_mb: Option<u64>) -> Vec<String> {
     }
 }
 
+/// Is this a whole checkpoint -- UNet, text encoder and VAE slots in one
+/// file, as an SD 1.x / SDXL `.safetensors` or any `.ckpt` is -- rather than
+/// the bare diffusion model a split set carries? The tensor names say so: a
+/// checkpoint's are prefixed `model.diffusion_model.`, a bare UNet/DiT file's
+/// are not. Read from the safetensors header (8 bytes of length, then JSON),
+/// never the weights. A GGUF or an unreadable file is not one.
+pub fn is_full_checkpoint(path: &Path) -> bool {
+    use std::io::Read;
+    let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if name.ends_with(".ckpt") {
+        return true;
+    }
+    if !(name.ends_with(".safetensors") || name.ends_with(".sft")) {
+        return false;
+    }
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut len = [0u8; 8];
+    if file.read_exact(&mut len).is_err() {
+        return false;
+    }
+    let len = u64::from_le_bytes(len);
+    // A header is a table of names and offsets: kilobytes to a few MB.
+    if len == 0 || len > 64 * 1024 * 1024 {
+        return false;
+    }
+    let mut header = vec![0u8; len as usize];
+    if file.read_exact(&mut header).is_err() {
+        return false;
+    }
+    header_is_checkpoint(&String::from_utf8_lossy(&header))
+}
+
+fn header_is_checkpoint(header: &str) -> bool {
+    header.contains("\"model.diffusion_model.")
+}
+
 pub fn args_for_set(parts: &SetParts, port: u16, threads: Option<u32>) -> Vec<String> {
+    args_for_set_as(parts, port, threads, is_full_checkpoint(&parts.diffusion))
+}
+
+/// `checkpoint`: the diffusion part is a whole checkpoint (a lone SD 1.5 or
+/// SDXL file paired with the VAE it was published without). It goes in with
+/// `-m`, exactly as a single file does -- `--diffusion-model` prefixes every
+/// tensor name with `model.diffusion_model.`, which a checkpoint already
+/// carries, and sd-server then stopped at "get sd version from file failed:
+/// ''" -- and the parts beside it still ride under their own flags, so the
+/// paired VAE replaces the missing one.
+pub fn args_for_set_as(parts: &SetParts, port: u16, threads: Option<u32>, checkpoint: bool) -> Vec<String> {
+    if checkpoint {
+        let mut args = args_for(&parts.diffusion, port, threads);
+        for (flag, part) in [
+            ("--vae", &parts.vae),
+            ("--llm", &parts.llm),
+            ("--llm_vision", &parts.llm_vision),
+            ("--clip_l", &parts.clip_l),
+            ("--t5xxl", &parts.t5xxl),
+        ] {
+            if let Some(path) = part {
+                args.push(flag.to_string());
+                args.push(path.display().to_string());
+            }
+        }
+        return args;
+    }
     let mut args = vec!["--diffusion-model".to_string(), parts.diffusion.display().to_string()];
     for (flag, part) in [
         ("--vae", &parts.vae),
@@ -2067,7 +2132,57 @@ mod tests {
         assert!(joined.contains("--offload-to-cpu"));
         assert!(joined.contains("--vae-tiling"), "the decode that ran out of GPU memory");
         assert!(joined.contains("--listen-ip 127.0.0.1"));
-        assert!(!args.iter().any(|a| a == "-m"), "a set is never started with -m");
+        assert!(!args.iter().any(|a| a == "-m"), "a split set's diffusion part never goes in with -m");
+    }
+
+    #[test]
+    fn a_checkpoint_paired_with_its_vae_starts_like_a_single_file_plus_the_vae() {
+        // The PC: 746602.NSFW_master.safetensors (SD 1.5) + the ft-mse VAE.
+        // Under --diffusion-model sd-server stopped at "get sd version from
+        // file failed: ''".
+        let parts = SetParts {
+            diffusion: PathBuf::from("s/746602.NSFW_master.safetensors"),
+            vae: Some(PathBuf::from("s/vae-ft-mse-840000-ema-pruned.safetensors")),
+            llm: None,
+            llm_vision: None,
+            clip_l: None,
+            t5xxl: None,
+        };
+        let args = args_for_set_as(&parts, 18431, None, true);
+        let joined = args.join(" ");
+        assert!(joined.starts_with("-m s/746602.NSFW_master.safetensors"), "{}", joined);
+        assert!(joined.contains("--vae s/vae-ft-mse-840000-ema-pruned.safetensors"));
+        assert!(!joined.contains("--diffusion-model"));
+        assert!(joined.contains("--listen-ip 127.0.0.1"));
+        assert!(joined.contains("--vae-tiling"));
+
+        // What decides it: the tensor names in the header.
+        assert!(header_is_checkpoint(r#"{"cond_stage_model.transformer.x":{},"model.diffusion_model.input_blocks.0.0.weight":{}}"#));
+        assert!(header_is_checkpoint(r#"{"conditioner.embedders.0.x":{},"model.diffusion_model.out.2.bias":{}}"#), "SDXL");
+        assert!(!header_is_checkpoint(r#"{"double_blocks.0.img_attn.qkv.weight":{}}"#), "a bare FLUX DiT");
+        assert!(!header_is_checkpoint(r#"{"input_blocks.0.0.weight":{}}"#), "a bare UNet");
+        assert!(is_full_checkpoint(Path::new("x/old.ckpt")));
+        assert!(!is_full_checkpoint(Path::new("x/flux-2-klein-4b-Q4_K_M.gguf")));
+        assert!(!is_full_checkpoint(Path::new("x/missing.safetensors")), "unreadable is not one");
+    }
+
+    #[test]
+    fn a_checkpoint_is_read_from_a_real_safetensors_header() {
+        let dir = std::env::temp_dir().join(format!("neuraos-ckpt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, header: &str| {
+            let path = dir.join(name);
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend_from_slice(header.as_bytes());
+            bytes.extend_from_slice(&[0u8; 16]);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        };
+        let ckpt = write("sd15.safetensors", r#"{"model.diffusion_model.out.0.weight":{"dtype":"F16","shape":[4],"data_offsets":[0,8]}}"#);
+        let dit = write("dit.safetensors", r#"{"double_blocks.0.x":{"dtype":"F16","shape":[4],"data_offsets":[0,8]}}"#);
+        assert!(is_full_checkpoint(&ckpt));
+        assert!(!is_full_checkpoint(&dit));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
