@@ -46,6 +46,11 @@
   // sd-server (stable-diffusion.cpp). No account, no network -- and no
   // pretending: the row is ready only when the binary AND a model are chosen.
   var LOCAL_ID = 'local';
+  // Services the picker never offers, whatever the engine reports (a decision
+  // for this app, 2026-09-29: free services only, and none whose pictures
+  // came back low-quality). The engine is upstream and untouched; the rows
+  // are dropped here, on the way to the screen.
+  var HIDDEN_SERVICES = ['nvidia', 'openai', 'gemini', 'pollinations'];
   // sd.cpp draws in multiples of 64, so a preset that is not one is snapped
   // here rather than refused by the server after the user pressed Draw.
   var LOCAL_STEP_PX = 64;
@@ -80,7 +85,9 @@
    */
   function providerChoices(report) {
     var body = report || {};
-    var rows = Array.isArray(body.providers) ? body.providers : [];
+    var rows = (Array.isArray(body.providers) ? body.providers : []).filter(function (row) {
+      return HIDDEN_SERVICES.indexOf(String((row || {}).id || '')) < 0;
+    });
     var out = rows.map(function (row) {
       var r = row || {};
       return {
@@ -125,9 +132,9 @@
   /**
    * The same list with "This PC" on the front, when the shell reported an
    * sd-server at all. It goes first because it is the one service that needs
-   * no account and no network; it is never auto-selected (see `chosen`),
-   * because generation here costs minutes of the user's own CPU and that is
-   * not a thing to start for somebody without being asked.
+   * no account and no network, and once both its halves are in place it is
+   * also the default (see `chosen`): the pictures it draws are the best this
+   * app can get for free, and edits work only here without a paid key.
    */
   function withLocal(choices, facts) {
     var list = Array.isArray(choices) ? choices.slice() : [];
@@ -314,12 +321,15 @@
     return 'Try again, or pick a service above instead.';
   }
 
-  /** The row to draw with: what was chosen, else the first ready one, else the browser. */
+  /** The row to draw with: what was chosen, else This PC when it is set up, else the first ready one, else the browser. */
   function chosen(choiceId, choices) {
     var list = Array.isArray(choices) ? choices : [];
     var wanted = String(choiceId || '');
     for (var i = 0; i < list.length; i += 1) {
       if (list[i].id === wanted) return list[i];
+    }
+    for (var l = 0; l < list.length; l += 1) {
+      if (list[l].kind === 'local' && list[l].ready) return list[l];
     }
     for (var j = 0; j < list.length; j += 1) {
       if (list[j].kind === 'server' && list[j].ready) return list[j];

@@ -1165,3 +1165,17 @@ a static review of the P1–P8 diff, then one PR with every confirmed bug:
 
 Pinned in `app/test/desktop-ui-pass-fixes.test.js`. Not verified here, as
 before: real Mint hardware, a real GPU draw.
+
+## Image services: free only, This PC first (2026-09-29)
+
+Decided with the owner after a look at what the engine registers: the
+picker (Create → Image, and /image in Chat) no longer offers NVIDIA,
+OpenAI, Gemini or Pollinations — the paid ones, and the free ones whose
+pictures came back low-quality. Nothing new is added. The engine is
+upstream and untouched; `images.js` drops the rows on the way to the
+screen (`HIDDEN_SERVICES`). This PC (sd-server) is the default once both
+its halves are set up: the best pictures this app can get for free, and
+the only free route that edits. An explicit pick still wins. What stays
+hosted: Cloudflare Workers AI (free, FLUX.1 schnell, draw only),
+OpenRouter and Nara (a key each), Puter (a sign-in). Pinned in
+`desktop-images.test.js`.
