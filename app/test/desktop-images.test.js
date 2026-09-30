@@ -238,3 +238,36 @@ test('the card offers to fetch and pair the VAE a lone checkpoint lacks', () => 
   assert.match(rs, /"stabilityai\/sdxl-vae", "sdxl_vae\.safetensors"/);
   assert.match(rs, /"stabilityai\/sd-vae-ft-mse-original", "vae-ft-mse-840000-ema-pruned\.safetensors"/);
 });
+
+// The PC's screen: a LoRA repo's files listed as image models to download
+// (then picked, then failing to start), and each row's note wrapped one word
+// per line in the Create column.
+test('a LoRA repo is offered as LoRAs, into the LoRA folder, never as a model', () => {
+  const hf = require('../desktop/src/hf-models.js');
+  const card = {
+    id: 'someone/portrait-illustration',
+    tags: ['diffusers', 'lora', 'text-to-image', 'base_model:adapter:black-forest-labs/FLUX.1-dev'],
+    siblings: [
+      { rfilename: 'portrait-illustration.safetensors', size: 172 * 1024 * 1024 },
+      { rfilename: 'README.md', size: 2000 },
+      { rfilename: 'sample.png', size: 90000 },
+    ],
+  };
+  assert.deepEqual(hf.loraBase(card), { base: 'black-forest-labs/FLUX.1-dev' });
+  const offer = hf.imageOffer(card);
+  assert.equal(offer.rows.length, 1);
+  assert.equal(offer.rows[0].lora, true);
+  assert.match(offer.rows[0].note, /LoRA for black-forest-labs\/FLUX\.1-dev/);
+  assert.equal(hf.loraBase({ id: 'x/sdxl', tags: ['text-to-image', 'diffusers'] }), null, 'a model repo is not one');
+
+  const card_ = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'src', 'components', 'LocalImagesCard.tsx'), 'utf8');
+  assert.match(card_, /const kindOf = \(row: HubOfferRow\) => \(row\.lora \? 'lora' as const : kind\)/);
+  assert.match(card_, /kind: kindOf\(row\),/);
+  assert.match(card_, /row\.lora \? 'Download as LoRA' : 'Download'/);
+  assert.match(card_, /if \(row\.lora\) \{[\s\S]{0,300}setLoraTick/, 'a LoRA download never becomes the model');
+  const bridge = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'src', 'bridge.ts'), 'utf8');
+  assert.match(bridge, /export type DownloadKind = 'text' \| 'image' \| 'voice' \| 'lora';/);
+  const css = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'src', 'index.css'), 'utf8');
+  assert.match(css, /\.local-row \{[^}]*flex-wrap: wrap;/, 'the size and button drop under the note instead of squeezing it');
+  assert.match(css, /\.local-row-main \{[^}]*flex: 1 1 200px;/);
+});

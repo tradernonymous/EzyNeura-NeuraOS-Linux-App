@@ -325,9 +325,46 @@
    * Returns { rows: [{ key, label, note, files: [{name,size}], size, set }],
    *           diffusers, message }.
    */
+  /**
+   * A LoRA repo: Hugging Face tags one "lora", and one pointing at its base
+   * as base_model:adapter:<repo>. Its .safetensors steers a model; it never
+   * draws on its own, and offered as a model it was downloaded into
+   * sd-models, picked, and failed to start (the PC's FLUX.1 LoRA).
+   */
+  function loraBase(card) {
+    var tags = Array.isArray(card && card.tags) ? card.tags.map(function (t) { return String(t); }) : [];
+    var adapter = tags.filter(function (t) { return t.indexOf('base_model:adapter:') === 0; })[0];
+    var isLora = tags.some(function (t) { return t.toLowerCase() === 'lora'; }) || !!adapter;
+    if (!isLora) return null;
+    return { base: adapter ? adapter.slice('base_model:adapter:'.length) : '' };
+  }
+
   function imageOffer(card) {
     var repo = String((card && card.id) || 'This repo');
     var all = repoFiles(card);
+    var lora = loraBase(card);
+    if (lora) {
+      // Offered as what it is: each .safetensors goes to the LoRA folder.
+      var loraRows = all
+        .filter(function (f) { return /\.safetensors$/i.test(f.name) && !kindRefusal('image', f.name); })
+        .map(function (f) {
+          return {
+            key: f.name,
+            label: baseOf(f.name),
+            note: 'LoRA' + (lora.base ? ' for ' + lora.base : '') + ': goes to LoRAs below, then tick it',
+            files: [f],
+            size: f.size,
+            set: '',
+            lora: true,
+          };
+        });
+      loraRows.sort(function (a, b) { return a.size - b.size; });
+      return {
+        rows: loraRows,
+        diffusers: false,
+        message: loraRows.length ? '' : repo + ' is a LoRA repo with no .safetensors file to add.',
+      };
+    }
     // FP4 (NVFP4, "fp4_flux2") weights carry per-block scales that
     // stable-diffusion.cpp does not read: sd-server aborts on load
     // (GGML_ASSERT scale_nelements), so they are not offered at all.
@@ -459,6 +496,7 @@
     kindRefusal: kindRefusal,
     repoFiles: repoFiles,
     imageOffer: imageOffer,
+    loraBase: loraBase,
     voiceOffer: voiceOffer,
     fitNote: fitNote,
     pastedFile: pastedFile,

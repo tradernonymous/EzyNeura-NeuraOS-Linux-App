@@ -3330,8 +3330,13 @@ button.linkish {
 
 .local-row {
   display: flex;
+  /* Wrap, and give the text a floor (.local-row-main below): in the Create
+     column the size and the button kept their whole width and squeezed the
+     note to one word per line ("Run / settings / to / see ..."). Now they
+     drop under the text when the row cannot hold all three. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -3717,6 +3722,7 @@ button.linkish {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 200px;
   min-width: 0;
 }
 
