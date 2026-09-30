@@ -894,7 +894,7 @@ fn is_addon_name(name: &str) -> bool {
 }
 
 pub fn vae_for(model: &Path, bytes: u64) -> Option<VaeChoice> {
-    if model.is_dir() {
+    if model.is_dir() || is_lora_file(model) {
         return None;
     }
     let name = model_name_of(model);
@@ -1190,31 +1190,77 @@ pub fn small_card_args(vram_mb: Option<u64>) -> Vec<String> {
 /// are not. Read from the safetensors header (8 bytes of length, then JSON),
 /// never the weights. A GGUF or an unreadable file is not one.
 pub fn is_full_checkpoint(path: &Path) -> bool {
-    use std::io::Read;
     let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
     if name.ends_with(".ckpt") {
         return true;
     }
+    safetensors_header(path).is_some_and(|h| header_is_checkpoint(&h))
+}
+
+/// The JSON table at the front of a `.safetensors` file (8 bytes of length,
+/// then the names, shapes and offsets), or nothing for any other file or one
+/// that cannot be read. Never the weights.
+fn safetensors_header(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
     if !(name.ends_with(".safetensors") || name.ends_with(".sft")) {
-        return false;
+        return None;
     }
-    let Ok(mut file) = std::fs::File::open(path) else {
-        return false;
-    };
+    let mut file = std::fs::File::open(path).ok()?;
     let mut len = [0u8; 8];
-    if file.read_exact(&mut len).is_err() {
-        return false;
-    }
+    file.read_exact(&mut len).ok()?;
     let len = u64::from_le_bytes(len);
     // A header is a table of names and offsets: kilobytes to a few MB.
     if len == 0 || len > 64 * 1024 * 1024 {
-        return false;
+        return None;
     }
     let mut header = vec![0u8; len as usize];
-    if file.read_exact(&mut header).is_err() {
-        return false;
+    file.read_exact(&mut header).ok()?;
+    Some(String::from_utf8_lossy(&header).into_owned())
+}
+
+/// A LoRA, whatever its name: every weight comes as a low-rank pair --
+/// `lora_A`/`lora_B` (diffusers, PEFT) or `lora_down`/`lora_up` (kohya).
+/// The PC's "746602.NSFW_master" was one (164 MB, FLUX.1 blocks, its own
+/// metadata saying sd_1.5), picked as a model, offered a VAE, and stopped
+/// at "get sd version from file failed".
+pub fn is_lora_file(path: &Path) -> bool {
+    safetensors_header(path).is_some_and(|h| header_is_lora(&h))
+}
+
+fn header_is_lora(header: &str) -> bool {
+    [".lora_A.", ".lora_B.", ".lora_down.", ".lora_up.", "\"lora_unet_", "\"lora_te"]
+        .iter()
+        .any(|k| header.contains(k))
+}
+
+/// What a LoRA's own layer names say it was made for, in words.
+fn lora_base_of(header: &str) -> &'static str {
+    if header.contains("single_transformer_blocks") || header.contains("double_blocks") || header.contains("single_blocks") {
+        "FLUX.1"
+    } else if header.contains("conditioner") || header.contains("input_blocks_4_1_transformer_blocks_1") || header.contains("lora_te2") {
+        "SDXL"
+    } else {
+        "SD 1.5 or SDXL"
     }
-    header_is_checkpoint(&String::from_utf8_lossy(&header))
+}
+
+/// The start refused, in plain words, when the chosen weights are a LoRA:
+/// sd-server would only stop at "get sd version from file failed" after a
+/// load. The LoRA section is where such a file goes.
+pub fn lora_as_model_error(model: &Path) -> Option<String> {
+    let file = if model.is_dir() { set_in(model).map(|p| p.diffusion)? } else { model.to_path_buf() };
+    let header = safetensors_header(&file)?;
+    if !header_is_lora(&header) {
+        return None;
+    }
+    let name = file.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    Some(format!(
+        "{} is a LoRA made for {}, not a model: it only steers a base model and cannot draw on its own. Add it under LoRAs (\"Add LoRA files…\"), tick it, and pick a {} base model here.",
+        name,
+        lora_base_of(&header),
+        lora_base_of(&header)
+    ))
 }
 
 fn header_is_checkpoint(header: &str) -> bool {
@@ -1300,6 +1346,9 @@ pub async fn sd_start(
     let model = remembered_model(&app).ok_or_else(|| {
         "No model chosen: pick a .safetensors, .ckpt or .gguf under Images, \"On this PC\".".to_string()
     })?;
+    if let Some(why) = lora_as_model_error(&model) {
+        return Err(why);
+    }
     let port = valid_port(port)?;
     // One server at a time, and the old one goes first: two of these would
     // fight over the port and over the machine's memory.
@@ -2183,6 +2232,43 @@ mod tests {
         assert!(is_full_checkpoint(Path::new("x/old.ckpt")));
         assert!(!is_full_checkpoint(Path::new("x/flux-2-klein-4b-Q4_K_M.gguf")));
         assert!(!is_full_checkpoint(Path::new("x/missing.safetensors")), "unreadable is not one");
+    }
+
+    #[test]
+    fn a_lora_is_never_a_model_whatever_its_name_says() {
+        let dir = std::env::temp_dir().join(format!("neuraos-lora-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, header: &str| {
+            let path = dir.join(name);
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend_from_slice(header.as_bytes());
+            bytes.extend_from_slice(&[0u8; 16]);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        };
+        // The PC's file: a FLUX.1 LoRA named like a checkpoint, metadata sd_1.5.
+        let pc = write(
+            "746602.NSFW_master.safetensors",
+            r#"{"__metadata__":{"ss_base_model_version":"sd_1.5"},"transformer.single_transformer_blocks.0.attn.to_k.lora_A.weight":{"dtype":"F16","shape":[4],"data_offsets":[0,8]},"transformer.transformer_blocks.0.attn.to_k.lora_B.weight":{"dtype":"F16","shape":[4],"data_offsets":[8,16]}}"#,
+        );
+        assert!(is_lora_file(&pc));
+        assert!(vae_for(&pc, 164 * 1024 * 1024).is_none(), "never offered a VAE");
+        let said = lora_as_model_error(&pc).expect("refused before sd-server starts");
+        assert!(said.contains("is a LoRA made for FLUX.1"), "{}", said);
+        assert!(said.contains("Add LoRA files"));
+        // A kohya SDXL LoRA, and a real checkpoint that is not one.
+        let kohya = write("style.safetensors", r#"{"lora_unet_down_blocks_0.lora_down.weight":{},"lora_te2_text_model.lora_up.weight":{}}"#);
+        assert!(lora_as_model_error(&kohya).unwrap().contains("made for SDXL"));
+        let ckpt = write("real.safetensors", r#"{"model.diffusion_model.out.0.weight":{"dtype":"F16","shape":[4],"data_offsets":[0,8]}}"#);
+        assert!(!is_lora_file(&ckpt));
+        assert!(lora_as_model_error(&ckpt).is_none());
+        // Inside a set folder, the diffusion part is what is read.
+        let set = dir.join("set");
+        std::fs::create_dir_all(&set).unwrap();
+        std::fs::rename(&pc, set.join("746602.NSFW_master.safetensors")).unwrap();
+        std::fs::write(set.join("vae-ft-mse-840000-ema-pruned.safetensors"), [0u8; 32]).unwrap();
+        assert!(lora_as_model_error(&set).is_some(), "the PC's folder with the VAE beside it");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
