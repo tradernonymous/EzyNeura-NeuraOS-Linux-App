@@ -565,7 +565,8 @@ export interface LocalDownloadProgress {
 }
 
 /** What a download feeds: llama-server (the default), sd-server or whisper.cpp. */
-export type DownloadKind = 'text' | 'image' | 'voice';
+/** `lora` lands in the LoRA folder and reports on the Images card's bar. */
+export type DownloadKind = 'text' | 'image' | 'voice' | 'lora';
 
 export async function localModelDownload(args: {
   repo: string;
@@ -636,7 +637,7 @@ async function subscribe<T>(event: string, handler: (payload: T) => void): Promi
 // Each kind reports on its own event (models.rs Kind::event), so two cards on
 // one screen never draw each other's bar.
 export function onLocalDownload(handler: (progress: LocalDownloadProgress) => void, kind: DownloadKind = 'text'): Promise<() => void> {
-  const event = kind === 'image' ? 'image-download' : kind === 'voice' ? 'voice-download' : 'local-download';
+  const event = kind === 'image' || kind === 'lora' ? 'image-download' : kind === 'voice' ? 'voice-download' : 'local-download';
   return subscribe<LocalDownloadProgress>(event, handler);
 }
 

@@ -63,6 +63,8 @@ export interface HubOfferRow {
   size: number;
   /** The folder a component set shares under sd-models; '' for one file. */
   set: string;
+  /** A LoRA: downloaded into the LoRA folder, never picked as a model. */
+  lora?: boolean;
 }
 
 export interface HubOffer {

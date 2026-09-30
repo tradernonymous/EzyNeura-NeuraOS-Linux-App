@@ -773,6 +773,10 @@ pub enum Kind {
     Text,
     Image,
     Voice,
+    /// A LoRA for sd-server: into <app data>/sd-loras, the folder the shell
+    /// hands sd-server as --lora-model-dir, never into sd-models where it
+    /// would be listed (and picked) as a model.
+    Lora,
 }
 
 impl Kind {
@@ -782,6 +786,7 @@ impl Kind {
             "" | "text" => Ok(Kind::Text),
             "image" => Ok(Kind::Image),
             "voice" => Ok(Kind::Voice),
+            "lora" => Ok(Kind::Lora),
             other => Err(format!("{} is not a kind of model this app downloads", other)),
         }
     }
@@ -795,6 +800,7 @@ impl Kind {
             Kind::Text => &["gguf"],
             Kind::Image => &["safetensors", "gguf"],
             Kind::Voice => &["bin"],
+            Kind::Lora => &["safetensors"],
         }
     }
 
@@ -825,6 +831,7 @@ impl Kind {
         if !self.extensions().iter().any(|ext| lower.ends_with(&format!(".{}", ext))) {
             return Err(match self {
                 Kind::Image => format!("{} is not a .safetensors or .gguf file, the formats sd-server loads", file),
+                Kind::Lora => format!("{} is not a .safetensors file, the format sd-server loads a LoRA from", file),
                 _ => format!("{} is not a ggml .bin file, the format whisper.cpp loads", file),
             });
         }
@@ -837,7 +844,8 @@ impl Kind {
     pub fn event(self) -> &'static str {
         match self {
             Kind::Text => "local-download",
-            Kind::Image => "image-download",
+            // The Images card's bar: a LoRA is fetched from the same box.
+            Kind::Image | Kind::Lora => "image-download",
             Kind::Voice => "voice-download",
         }
     }
@@ -847,6 +855,7 @@ impl Kind {
             Kind::Text => models_dir(app),
             Kind::Image => crate::sd::models_dir(app),
             Kind::Voice => crate::whisper::models_dir(app),
+            Kind::Lora => crate::sd::loras_dir(app),
         }
     }
 }
@@ -1393,6 +1402,12 @@ mod tests {
         assert_eq!(Kind::parse(None).unwrap(), Kind::Text);
         assert_eq!(Kind::parse(Some("  ")).unwrap(), Kind::Text);
         assert_eq!(Kind::parse(Some("Image")).unwrap(), Kind::Image);
+        assert_eq!(Kind::parse(Some("lora")).unwrap(), Kind::Lora);
+        assert_eq!(Kind::Lora.event(), Kind::Image.event(), "one progress bar in the Images card");
+        assert!(Kind::Lora.check_file("portrait-illustration.safetensors").is_ok());
+        assert!(Kind::Lora.check_file("x.gguf").is_err());
+        assert!(Kind::Lora.check_file("x.ckpt").unwrap_err().contains("pickled"));
+        assert!(set_folder(Kind::Lora, Some("a")).is_err(), "a LoRA is one file, never a set");
         assert_eq!(Kind::parse(Some("voice")).unwrap(), Kind::Voice);
         assert!(Kind::parse(Some("video")).is_err());
         assert_eq!(

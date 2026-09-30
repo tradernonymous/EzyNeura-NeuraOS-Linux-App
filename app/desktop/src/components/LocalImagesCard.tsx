@@ -15,7 +15,7 @@ type LoraPick = import('../image-run.js').LoraPick;
  * --lora-model-dir; ticked ones travel with every job on this PC, each at
  * its strength. A LoRA only works with the base model it was trained for.
  */
-function LoraSection({ disabled }: { disabled: boolean }) {
+function LoraSection({ disabled, refresh = 0 }: { disabled: boolean; refresh?: number }) {
   const [loras, setLoras] = useState<{ name: string; bytes: number }[]>([]);
   const [dir, setDir] = useState('');
   const [picks, setPicks] = useState<LoraPick[]>(() => imageRun.readLoras());
@@ -23,7 +23,8 @@ function LoraSection({ disabled }: { disabled: boolean }) {
   const load = () => call<{ dir: string; loras: { name: string; bytes: number }[] }>('sd_loras')
     .then((r) => { setLoras(r.loras); setDir(r.dir); })
     .catch(() => setLoras([]));
-  useEffect(() => { void load(); }, []);
+  // `refresh` changes when a LoRA arrives from the Hugging Face box below.
+  useEffect(() => { void load(); }, [refresh]);
   const save = (next: LoraPick[]) => setPicks(imageRun.writeLoras(next));
   const pickOf = (name: string) => picks.find((p) => p.name === name);
   const toggle = (name: string) => {
@@ -255,10 +256,13 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
       .finally(() => setLooking(false));
   };
 
+  /** A LoRA row goes to the LoRA folder; every other row to this card's own. */
+  const kindOf = (row: HubOfferRow) => (row.lora ? 'lora' as const : kind);
+
   /** Take back what this run fetched. Files that were already here stay. */
-  const discard = async (fetched: string[], set: string) => {
+  const discard = async (fetched: string[], set: string, rowKind: 'image' | 'voice' | 'lora' = kind) => {
     for (const name of fetched) {
-      await localModelDelete(name, { kind, ...(set ? { set } : {}) }).catch(() => { /* best effort */ });
+      await localModelDelete(name, { kind: rowKind, ...(set ? { set } : {}) }).catch(() => { /* best effort */ });
     }
   };
 
@@ -276,7 +280,7 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
         const file = row.files[i];
         // A cancel between two files: the shell had nothing in flight.
         if (stopRef.current) {
-          await discard(fetched, row.set);
+          await discard(fetched, row.set, kindOf(row));
           setProgress((p) => (p ? { ...p, cancelled: true } : p));
           return;
         }
@@ -286,12 +290,12 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
         const result = await localModelDownload({
           repo,
           file: file.name,
-          kind,
+          kind: kindOf(row),
           ...(row.set ? { set: row.set } : {}),
           ...(token ? { token } : {}),
         });
         if (result.cancelled) {
-          await discard(fetched, row.set);
+          await discard(fetched, row.set, kindOf(row));
           pushToast('info', 'Download cancelled. Its partial files were removed.');
           return;
         }
@@ -366,17 +370,17 @@ export function HubDownloader({ kind, placeholder, suggestions, onDownloaded, di
                       {row.files.length > 1 && <span className="chip">{row.files.length} files</span>}
                       {row.set && <span className="chip">set: lands in its own folder</span>}
                     </span>
-                    <span className="local-row-note">{row.note} · {fit.text}</span>
+                    <span className="local-row-note">{row.lora ? row.note : `${row.note} · ${fit.text}`}</span>
                   </div>
-                  <span className="local-row-size" title="The download, and what running it needs">
-                    {row.size ? sizeOf(row.size) : 'size unknown'} · needs ~{fit.neededGb.toFixed(1)} GB
+                  <span className="local-row-size" title={row.lora ? 'The download' : 'The download, and what running it needs'}>
+                    {row.size ? sizeOf(row.size) : 'size unknown'}{row.lora ? '' : ` · needs ~${fit.neededGb.toFixed(1)} GB`}
                   </span>
                   <button
                     onClick={() => download(offer.repo, row)}
                     disabled={downloading || !!disabled}
-                    title={row.files.length > 1 ? `Download all ${row.files.length} files as one set` : 'Download to this PC'}
+                    title={row.lora ? 'Download into the LoRA folder' : row.files.length > 1 ? `Download all ${row.files.length} files as one set` : 'Download to this PC'}
                   >
-                    {active === row.key ? 'Downloading…' : 'Download'}
+                    {active === row.key ? 'Downloading…' : row.lora ? 'Download as LoRA' : 'Download'}
                   </button>
                 </div>
               );
@@ -526,7 +530,14 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
   // model straight away. A set lands in a folder of its own, and that folder
   // is the model: sd_use_model remembers it and Start passes each part to
   // sd-server under its own flag (--diffusion-model, --vae, --llm).
+  const [loraTick, setLoraTick] = useState(0);
   const downloaded = async (path: string, row: import('../hf-models.js').HubOfferRow) => {
+    // A LoRA is never the model: it is in the LoRA folder, listed below.
+    if (row.lora) {
+      pushToast('ok', `${row.label} is in LoRAs below. Tick it, pick the base model it was made for, then Stop and Start.`);
+      setLoraTick((n) => n + 1);
+      return;
+    }
     if (row.set) {
       const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
       const folder = cut > 0 ? path.slice(0, cut) : path;
@@ -659,7 +670,7 @@ export default function LocalImagesCard({ facts, status, onRefresh, onStart, onS
             )}
           </p>
         )}
-        <LoraSection disabled={!!busy || drawing} />
+        <LoraSection disabled={!!busy || drawing} refresh={loraTick} />
         <p className="settings-hint">
           Put weights (.safetensors, .ckpt or .gguf) in{' '}
           <span className="mono">{facts?.models_dir || '<app data>/sd-models'}</span> or beside sd-server, or pick any file.
