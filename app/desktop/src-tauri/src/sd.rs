@@ -879,6 +879,20 @@ pub struct VaeChoice {
     pub set: String,
 }
 
+/// An add-on a ComfyUI workflow puts on a model -- ControlNet, LoRA, PuLID,
+/// IP-Adapter, InstantID, T2I-Adapter -- named for what it is. It never draws
+/// on its own, so it is never offered a VAE: the PC's pulid_flux_v0.9.1 was,
+/// got moved into a folder beside an SD 1.5 VAE, and still failed to load.
+fn is_addon_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    [
+        "controlnet", "control_net", "control-net", "lora", "pulid", "ip-adapter", "ip_adapter", "ipadapter",
+        "instantid", "t2i-adapter", "t2i_adapter",
+    ]
+    .iter()
+    .any(|k| lower.contains(k))
+}
+
 pub fn vae_for(model: &Path, bytes: u64) -> Option<VaeChoice> {
     if model.is_dir() {
         return None;
@@ -891,7 +905,7 @@ pub fn vae_for(model: &Path, bytes: u64) -> Option<VaeChoice> {
         "vae" if bytes > VAE_MAX_BYTES => "diffusion",
         other => other,
     };
-    if !is_model_name(&name) || role != "diffusion" || family_of(model).is_some() {
+    if !is_model_name(&name) || role != "diffusion" || family_of(model).is_some() || is_addon_name(&name) {
         return None;
     }
     let set = folder_name_for(model)?;
@@ -1982,6 +1996,11 @@ mod tests {
         // Named for a baked VAE but checkpoint-sized: still a checkpoint.
         assert_eq!(vae_for(Path::new("/m/sd_xl_base_1.0_0.9vae.safetensors"), 7 * gb).map(|v| v.set), Some("sd_xl_base_1.0_0.9vae".to_string()));
         assert!(vae_for(Path::new("/m/readme.txt"), 10).is_none());
+        // Add-ons never draw on their own, so they are never offered a VAE.
+        assert!(vae_for(Path::new("/m/pulid_flux_v0.9.1.safetensors"), gb).is_none(), "the PC's PuLID file");
+        assert!(vae_for(Path::new("/m/TTPLANET_Controlnet_Tile_realistic_v2_rank256.safetensors"), gb).is_none());
+        assert!(vae_for(Path::new("/m/ip-adapter-plus_sdxl_vit-h.safetensors"), gb).is_none());
+        assert!(vae_for(Path::new("/m/add_detail_lora.safetensors"), 150 * 1024 * 1024).is_none());
     }
 
     #[test]
