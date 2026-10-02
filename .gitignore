@@ -221,10 +221,16 @@ __marimo__/
 node_modules/
 app/desktop/src-tauri/target/
 app/desktop/src-tauri/gen/
+# llama.cpp builds unpacked at the repo root while testing local models
+# (84MB of .so files, tagged llama-b<build>). Nothing in the tree refers to
+# them; they are re-downloadable, so they never belong in a commit.
+llama-b*/
+ggml-rpc-server
+llama-server
+llama-cli
 # app/desktop/src-tauri/Cargo.lock IS committed. It used not to be, on the
 # argument that upstream does not commit it either -- but that is right for a
 # library and wrong for a shipped binary: without the lock, a transitive bump
 # silently changes the .deb and AppImage people install, and a build is not
 # reproducible from the source tree alone. CI now builds with --locked, so the
-# lockfile and the manifest cannot drift apart. Upstream parity would want a
-# PR there too.
+# lockfile and the manifest cannot drift apart.
