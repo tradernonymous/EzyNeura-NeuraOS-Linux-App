@@ -51,6 +51,35 @@ function stripComments(source) {
 
 // ---- landmarks ------------------------------------------------------------
 
+test('no text is set below a 10px floor', () => {
+  // The two that were 9px: .pill-key (a keyboard-shortcut hint, meant to be
+  // read and remembered) and .tree-toggle (a disclosure glyph sized to fit a
+  // 14px box rather than for legibility). Below 10px, text stops being
+  // reliably readable and starts depending on the font's own metrics.
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const tiny = [...bare.matchAll(/([^{}]+)\{([^{}]*font-size:\s*([\d.]+)px[^{}]*)\}/g)]
+    .filter(([, , , size]) => Number(size) < 10)
+    .map(([, selector, , size]) => `${selector.trim().split('\n').pop().trim()} -> ${size}px`);
+  assert.deepEqual(tiny, [], 'text below 10px: ' + tiny.join(', '));
+});
+
+test('long values wrap instead of being chopped mid-word', () => {
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  // word-break: break-word was the older spelling of overflow-wrap: anywhere,
+  // and word-break: break-all additionally breaks *within* words even when the
+  // break is avoidable -- which mangles prose and identifiers. anywhere breaks
+  // only when the word would otherwise overflow.
+  assert.doesNotMatch(bare, /word-break:\s*break-all/, 'break-all chops words that did not need it');
+  assert.doesNotMatch(bare, /word-break:\s*break-word/, 'break-word is the deprecated spelling');
+  // The rules that need to wrap long values still say so.
+  for (const selector of ['.run-model-name', '.consent-cmd']) {
+    const at = bare.indexOf(selector);
+    assert.ok(at >= 0, `${selector} should still exist`);
+    const rule = bare.slice(at, bare.indexOf('}', at));
+    assert.match(rule, /overflow-wrap:\s*anywhere/, `${selector} must wrap long values`);
+  }
+});
+
 test('a skip link reaches the main landmark, and only the main landmark', () => {
   assert.match(APP, /<a className="skip-link" href="#main-content">/, 'App needs a skip link');
   // The href must resolve to a real id, or the link moves focus nowhere --

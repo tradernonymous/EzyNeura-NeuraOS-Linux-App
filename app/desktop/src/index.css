@@ -278,7 +278,7 @@
   padding: 12px;
   margin-bottom: 12px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .boot-failure p {
   font-size: 13px;
@@ -318,7 +318,7 @@
   max-height: 340px;
   overflow: auto;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 :root {
@@ -948,7 +948,10 @@ html, body, #root {
 }
 
 .pill-key {
-  font-size: 9px;
+  /* Was 9px, which is below the readable floor for a label people are meant
+     to identify shortcuts from. 10px keeps the tracked uppercase look while
+     clearing it. */
+  font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -1186,7 +1189,7 @@ button.primary:hover:not(:disabled) {
   font-size: 14px;
   line-height: 1.55;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .message.user .message-content {
@@ -1923,7 +1926,10 @@ button.primary:hover:not(:disabled) {
 .tree-toggle {
   width: 14px;
   text-align: center;
-  font-size: 9px;
+  /* 9px was a glyph sized to fit a 14px box. At 10px the arrow still fits
+     (line-height is unset here, and the box is fixed), and it stops depending
+     on a font's metrics rendering 9px text at a legible weight. */
+  font-size: 10px;
   color: var(--text-3);
   flex-shrink: 0;
 }
@@ -1989,7 +1995,7 @@ button.primary:hover:not(:disabled) {
 
 .terminal-output {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   color: var(--text-2);
   margin: 0;
 }
@@ -2451,7 +2457,7 @@ button.danger {
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   overflow-y: auto;
 }
 
@@ -2572,7 +2578,7 @@ button.linkish {
   font-size: 11px;
   color: var(--text-3);
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .slop-finding {
@@ -2622,7 +2628,7 @@ button.linkish {
 .extract-actions { margin-left: auto; display: flex; gap: 8px; }
 .extract-preview {
   max-height: 320px; overflow: auto; background: var(--bg-0); padding: 10px 12px;
-  border-radius: 8px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+  border-radius: 8px; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere;
   margin: 10px 0 0;
 }
 .gen-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
@@ -3237,7 +3243,7 @@ button.linkish {
   font-size: 11px;
   line-height: 1.5;
   color: var(--text-3);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .failure-note,
@@ -4330,7 +4336,7 @@ button.linkish {
   margin-bottom: 4px;
 }
 .run-model-name {
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .run-meter {
   display: flex;
@@ -4438,7 +4444,7 @@ button.linkish {
   font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .tool-card-ask {
   display: flex;
@@ -4920,7 +4926,7 @@ details.thinking > summary { cursor: pointer; color: var(--text-3); font-size: 1
   line-height: 1.4;
   color: var(--err);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* ---- MCP Apps ---- */
@@ -5038,7 +5044,7 @@ details.thinking > summary { cursor: pointer; color: var(--text-3); font-size: 1
 .consent-dialog h3 { margin: 0; font-size: 15px; }
 .consent-dialog p { margin: 0; font-size: 13px; color: var(--text-2); }
 .consent-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.consent-cmd { display: block; color: var(--text-3); word-break: break-all; }
+.consent-cmd { display: block; color: var(--text-3); overflow-wrap: anywhere; }
 .consent-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 /* ---- Evals history ---- */
 .evals-schedule { display: flex; flex-direction: column; gap: 8px; }
@@ -5826,7 +5832,7 @@ button:hover,
   padding: 12px;
   margin-bottom: 16px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .crash-actions {
@@ -5955,7 +5961,7 @@ button:hover,
 .acp-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .acp-args { flex: 1; min-width: 200px; }
 .acp-log { flex: 1; min-height: 200px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; }
-.acp-block { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.acp-block { font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .acp-user { align-self: flex-end; max-width: 760px; background: var(--accent-dim); border-radius: 10px; padding: 8px 12px; }
 .acp-agent { max-width: 760px; }
 .acp-thought, .acp-stderr { color: var(--text-3); }
@@ -6588,7 +6594,9 @@ input, textarea, select { border-radius: 8px; }
   padding: 1px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  /* 9.5px -> 10px. This is a step number people read to follow progress, so
+     it is text, not a glyph; the padding keeps the same visual weight. */
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   background: var(--bg-3);
@@ -6600,7 +6608,7 @@ input, textarea, select { border-radius: 8px; }
 .steps-body .tool-cards { margin-top: 0; }
 .steps-body .tool-card { border-radius: 6px; }
 .steps-body .tool-card-head { font-family: var(--font-mono); font-size: 11.5px; }
-.steps-body .tool-card-status { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.steps-body .tool-card-status { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* A stopped turn: says so, offers Retry. */
 .stopped-card { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 12px; border: 1px dashed var(--edge); border-radius: 10px; font-size: 12px; color: var(--text-3); }
