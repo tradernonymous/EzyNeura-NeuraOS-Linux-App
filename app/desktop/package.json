@@ -1,7 +1,7 @@
 {
   "name": "neuraos-desktop",
   "version": "2.11.0",
-  "description": "NeuraOS Desktop — native Windows app on the NeuraOS engine",
+  "description": "NeuraOS Desktop — chat, images, local models and approval-gated builds, in one window.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && node --max-old-space-size=4096 node_modules/vite/bin/vite.js build",

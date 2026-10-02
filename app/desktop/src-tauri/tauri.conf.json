@@ -53,12 +53,7 @@
         "resizable": true,
         "fullscreen": false,
         "minWidth": 800,
-        "minHeight": 600,
-        "windowEffects": {
-          "effects": [
-            "mica"
-          ]
-        }
+        "minHeight": 600
       }
     ],
     "security": {
