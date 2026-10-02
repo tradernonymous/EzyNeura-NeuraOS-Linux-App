@@ -310,6 +310,13 @@
   --bg-2: #13131c;
   --bg-3: #1b1b26;
   --border: #252533;
+  /* The edge of something you can operate, as opposed to --border, which
+     divides one thing from another. WCAG 1.4.11 asks for 3:1 on the boundary of
+     a control when that boundary is what identifies it: without a visible edge
+     there is nothing saying "this is a field". --border is 1.13:1 against
+     --bg-3, so it works as a divider and fails as a control edge.
+     3.45:1 worst case here, 3.74:1 against the --bg-2 a field is filled with. */
+  --border-control: #6f6f7e;
   --text-1: #ededf5;
   --text-2: #a7aabd;
   --text-3: #80849a;
@@ -398,6 +405,10 @@
   --bg-2: #e5e5ee;
   --bg-3: #d9d9e5;
   --border: #c3c3d3;
+  /* The dark theme's pick is #6f6f7e and this is the same neutral stepped for
+     the light ramp: 3.43:1 worst case, 3.83:1 against the --bg-2 a field is
+     filled with. Both themes clear 1.4.11 by a margin, not exactly. */
+  --border-control: #717181;
   --text-1: #15151d;
   --text-2: #3c3d4d;
   /* >= 5.5:1 on --bg-0..--bg-2 at the 11-13px sizes it is used at. */
@@ -1019,7 +1030,9 @@ html, body, #root {
 input, textarea, select {
   background: var(--bg-2);
   color: var(--text-1);
-  border: 1px solid var(--border);
+  /* --border-control, not --border: this edge is what tells you the element
+     is a field. The focus ring below still wins on focus, as it should. */
+  border: 1px solid var(--border-control);
   border-radius: 6px;
   padding: 7px 10px;
   font-size: 13px;
@@ -4746,7 +4759,7 @@ button.linkish {
 
 .studio-new { flex-wrap: wrap; }
 .studio-new input { flex: 1 1 100%; }
-.tweak input[type='color'] { width: 40px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; }
+.tweak input[type='color'] { width: 40px; height: 24px; padding: 0; border: 1px solid var(--border-control); border-radius: 4px; background: none; cursor: pointer; }
 .tweak input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }
 .tweak input[type='color']::-webkit-color-swatch { border: 0; border-radius: 2px; }
 .inspector-tabs button { padding: 9px 6px; font-size: 11.5px; }
@@ -6711,7 +6724,7 @@ input, textarea, select { border-radius: 8px; }
 .task-deck-head span { margin-left: 6px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-3); }
 .task-save-btn { margin-left: auto; color: var(--text-3); }
 .task-save { margin-left: auto; display: flex; gap: 4px; }
-.task-save input { width: 160px; padding: 5px 8px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
+.task-save input { width: 160px; padding: 5px 8px; border: 1px solid var(--border-control); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
 
 .code-empty { max-width: 520px; margin: 40px auto; text-align: center; }
 .code-empty h2 { margin: 0 0 8px; font-size: 18px; }
@@ -6910,7 +6923,7 @@ input, textarea, select { border-radius: 8px; }
 .chat-output-diff-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 11.5px; }
 .chat-output-diff .diff-view { max-height: 50vh; font-size: 11px; }
 .project-clone { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px 2px; }
-.project-clone input { flex: 1; min-width: 200px; padding: 7px 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12.5px; font-family: var(--font-mono); }
+.project-clone input { flex: 1; min-width: 200px; padding: 7px 10px; border: 1px solid var(--border-control); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12.5px; font-family: var(--font-mono); }
 .project-clone-error { flex-basis: 100%; font-size: 12px; color: var(--err); }
 
 /* ---- The next three: FLUX.2 steps, commit from Changes, recent projects -- */
@@ -6937,7 +6950,7 @@ input, textarea, select { border-radius: 8px; }
 .change-row input[type="checkbox"] { margin: 0 2px 0 4px; }
 .change-row button { flex: 1; }
 .chat-output-commit { display: flex; gap: 6px; margin-top: 8px; }
-.chat-output-commit input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
+.chat-output-commit input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-control); border-radius: 8px; background: var(--bg-2); color: var(--text-1); font: inherit; font-size: 12px; }
 
 /* ---- Install from GitHub (B1): a URL in, the repo's bundles out ------- */
 .gh-install { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

@@ -303,3 +303,57 @@ test('mermaid stays behind a dynamic import', () => {
     assert.ok(!/^import[^;]*from 'mermaid'/m.test(fs.readFileSync(file, 'utf8')), `${path.relative(ROOT, file)} imports mermaid statically`);
   }
 });
+
+// ---- control boundaries (WCAG 1.4.11) -------------------------------------
+//
+// --border is read in 182 rules and does two different jobs: it divides one
+// thing from another, and it is the visible edge of a text field. 1.4.11 asks
+// for 3:1 on the second, when that edge is what identifies the control. It
+// measured 1.13:1 (dark) and 1.24:1 (light) against --bg-3, so every input in
+// the app relied on its fill alone to say "this is editable".
+//
+// --border was deliberately NOT darkened to fix this: it would put a 3:1 line
+// between every card and every panel, which is a divider's job at nowhere near
+// that weight. So there are two tokens, and these tests exist to stop the
+// distinction being quietly collapsed back into one.
+
+for (const [name, body] of [
+  ['dark', DARK],
+  ['light', CSS.slice(CSS.indexOf('[data-theme="light"]'), CSS.indexOf('\n}', CSS.indexOf('[data-theme="light"]')))],
+]) {
+  test(`${name} theme: --border-control clears 3:1 against every surface`, () => {
+    const control = hexLuminance(tokenHex(body, 'border-control'));
+    const failures = [];
+    for (const s of ['bg-0', 'bg-1', 'bg-2', 'bg-3']) {
+      const r = ratio(control, hexLuminance(tokenHex(body, s)));
+      if (r < 3) failures.push(`--border-control on ${s}: ${r.toFixed(2)}:1`);
+    }
+    assert.deepEqual(failures, [], 'a control edge needs 3:1 per WCAG 1.4.11');
+  });
+
+  test(`${name} theme: --border-control is distinct from --border`, () => {
+    // If they converge, the two tokens have become one and the divider job
+    // starts paying the control's weight.
+    const r = ratio(hexLuminance(tokenHex(body, 'border')), hexLuminance(tokenHex(body, 'border-control')));
+    assert.ok(r >= 1.8, `--border and --border-control have collapsed together (${r.toFixed(2)}:1)`);
+  });
+}
+
+test('text fields use the control edge, not the divider edge', () => {
+  // The base rule covers every input, textarea and select. The three rules
+  // that re-declare their own border had drifted onto --edge, which is an
+  // alias of --border and so had the same 1.13:1 problem.
+  const base = block('input, textarea, select {');
+  assert.match(base, /border:\s*1px solid var\(--border-control\)/);
+  for (const selector of [
+    '.task-save input {',
+    '.project-clone input {',
+    '.chat-output-commit input {',
+    ".tweak input[type='color'] {",
+  ]) {
+    assert.match(block(selector), /border:\s*1px solid var\(--border-control\)/, `${selector} needs the control edge`);
+  }
+  // And the focus ring still overrides it, so a focused field does not gain a
+  // second competing edge.
+  assert.match(block('input:focus, textarea:focus, select:focus {'), /border-color:\s*var\(--accent-mid\)/);
+});
