@@ -1,0 +1,56 @@
+# On-demand Claude review and triage, dogfooded on this repository.
+#
+# This workflow NEVER runs on its own: it needs either a human adding the
+# `claude` label to a PR/issue, or a manual dispatch. That keeps a
+# compromised prompt (or a drive-by PR) from spending the maintainer's
+# Anthropic budget. It also needs the ANTHROPIC_API_KEY secret; forks and
+# secret-less runs exit in the first step with a green no-op, so the gate
+# never goes red for lack of a key.
+#
+# U41 (docs/UPGRADE_PLAN_03OCT.md). anthropics/claude-code-action is MIT.
+name: Claude triage (on demand)
+
+on:
+  pull_request_target:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'What Claude should do (triage, review checklist, draft release notes)'
+        required: false
+        default: 'Triage this thread: one paragraph on what is asked, and what is missing before it can be acted on.'
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    # Labeled PRs: only the `claude` label. Comments: only @claude mentions
+    # by someone with write access (the action itself enforces the author
+    # association; this guard keeps forks quiet even before that).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'claude') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
+       (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Skip without a key (green no-op)
+        if: ${{ secrets.ANTHROPIC_API_KEY == '' }}
+        run: echo "No ANTHROPIC_API_KEY secret: triage skipped by design."
+
+      # Pinned to a commit SHA like every other action in this repo.
+      # Check https://github.com/anthropics/claude-code-action/releases for
+      # the current v1 tag and update the SHA below when moving it.
+      - name: Claude triage
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1 (2026-10-03; re-pin on upgrade)
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ inputs.prompt || 'Review this thread against docs/UPGRADE_PLAN_03OCT.md and docs/BACKLOG.md: is it already covered, and by what? Answer in three bullets.' }}
