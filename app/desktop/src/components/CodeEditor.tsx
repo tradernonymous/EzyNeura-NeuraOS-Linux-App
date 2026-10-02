@@ -24,7 +24,7 @@ let loading: Promise<Monaco> | null = null;
 function loadMonaco(): Promise<Monaco> {
   if (!loading) {
     loading = Promise.all([
-      import('monaco-editor'),
+      import('monaco-editor/esm/vs/editor/editor.api'),
       import('monaco-editor/esm/vs/editor/editor.worker?worker'),
       import('monaco-editor/esm/vs/language/json/json.worker?worker'),
       import('monaco-editor/esm/vs/language/css/css.worker?worker'),
