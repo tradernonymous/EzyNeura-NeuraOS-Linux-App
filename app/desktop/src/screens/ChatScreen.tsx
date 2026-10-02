@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, lazy, Suspense, type ComponentType } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo, lazy, Suspense, type ComponentType } from 'react';
 import { api, imageUrlFrom, streamChat, streamLocalChat, type StreamFrame } from '../api';
 import { byokStream, gitStatus, hasShell, listLocalDir, localModelStatus, mcpStdioList, notifyUser, openUrl, readLocalFile, notifyWithActions, onNotificationAction } from '../bridge';
 import { renderMarkdown } from '../markdown';
@@ -12,8 +12,18 @@ import { DICTATION_EVENT, NAVIGATE_EVENT, ORB_EVENT } from '../Sidebar';
 import StepsFold from '../components/StepsFold';
 import ChatOutput from '../components/ChatOutput';
 import '../turn.js';
+import '../built-in-skills.js';
+import '../audit.js';
+// C7: one local line per model call and tool call (Activity reads it).
+import '../traces.js';
+import MintPackCard from '../components/MintPackCard';
+// E3: FLUX.2 on this PC, offered where the app begins.
+import Flux2OfferCard from '../components/Flux2OfferCard';
 
 const turnLib: typeof import('../turn.js') = (globalThis as any).FreeAI4UTurn;
+const builtIn: typeof import('../built-in-skills.js') = (globalThis as any).FreeAI4UBuiltInSkills;
+const auditLib: typeof import('../audit.js') = (globalThis as any).FreeAI4UAudit;
+const traceLib: typeof import('../traces.js') = (globalThis as any).FreeAI4UTraces;
 // UMD modules: loaded for their side effect, read off globalThis.
 import RadialMenu, { type RadialItem } from '../components/RadialMenu';
 import { pushToast } from '../components/Toasts';
@@ -35,6 +45,7 @@ import { isSavedProvider, streamSaved } from '../run-model';
 import '../saved-models.js';
 import '../byok.js';
 import '../chats.js';
+import '../persist.js';
 import '../failure.js';
 import '../fallback.js';
 import '../local-models.js';
@@ -50,6 +61,7 @@ import { call } from '../bridge';
 import { saveFile, savePictureUrl } from '../files/save';
 
 const chats: typeof import('../chats.js') = (globalThis as any).FreeAI4UChats;
+const persistLib: typeof import('../persist.js') = (globalThis as any).FreeAI4UPersist;
 // /image, /edit, /redo: the Images screen's rules (images.js) and its runner
 // (image-run.js) -- the same calls, so a picture drawn here is the one the
 // Images screen would have drawn.
@@ -205,6 +217,8 @@ export interface ChatSession {
   project?: string;
   /** A goal pinned above the composer, sent with every turn. */
   goal?: string;
+  /** B11: Concise mode — the built-in meta skill's line rides every turn of this chat. */
+  concise?: boolean;
 }
 
 // The chat store lives in ../chats.js -- key, cap, validation, merge, export.
@@ -239,6 +253,17 @@ function saveSessions(sessions: ChatSession[]) {
       ? `Storage is full: ${report.dropped} oldest chat(s) were dropped. Export your chats to keep them.`
       : 'Storage is full and this chat could not be saved. Export your chats, then delete some.');
   }
+}
+
+// Typing is one {draft} patch per keystroke, and saveSessions rewrites the
+// whole encrypted store each time -- so a keystroke must not mean a disk
+// write. A draft-only patch waits for the typing to pause; every other patch
+// is an event worth writing at once (writeNow, which drops the older queued
+// copy rather than letting it land after the newer one). flushSave() is the
+// promise that the words are on disk before the window can go away.
+const typingSaver = persistLib.createDebouncedWrite({ write: (next: ChatSession[]) => saveSessions(next), delay: 300 });
+export function flushSave() {
+  typingSaver.flush();
 }
 
 export function newSession(provider = '', model = '', project = ''): ChatSession {
@@ -326,6 +351,62 @@ const EMPTY_PROMPTS = [
   'Compare three local models I could run on this GPU',
 ];
 
+/**
+ * A message's own text, rendered once and kept: the markdown parse (plus, for
+ * a research reply, citation linking) used to run again on every render of
+ * the whole thread -- every streamed token re-parsed every earlier message,
+ * not just the one growing (docs/UI_UPGRADE_PLAN.md, phase P5). The
+ * streaming append (`send`'s `append`) replaces only the last message's
+ * object and keeps every other message's reference exactly as it was, so
+ * `memo`'s default shallow comparison already tells this apart correctly: an
+ * unfinished message's object changes every token, a finished one's does
+ * not, and this component is skipped entirely -- parse included -- for the
+ * ones that did not change.
+ */
+const MessageBody = memo(function MessageBody({ msg }: { msg: Msg }) {
+  const html = useMemo(() => {
+    if (msg.role !== 'assistant' || !msg.content) return null;
+    return msg.sources?.length
+      ? research.superscriptCitations(renderMarkdown(research.linkCitations(msg.content, msg.sources)))
+      : renderMarkdown(msg.content);
+  }, [msg.role, msg.content, msg.sources]);
+  if (msg.role === 'assistant') return html ? <div className="message-content" dangerouslySetInnerHTML={{ __html: html }} /> : null;
+  if (msg.shell) return <pre className="message-content shell-output">{msg.shell}</pre>;
+  return <div className="message-content">{msg.content}</div>;
+});
+
+/** A chat picture through the native save dialog; cancelling is not an error. */
+function savePictureNow(url: string): void {
+  savePictureUrl(url)
+    .then((said) => pushToast('ok', said))
+    .catch((e: unknown) => {
+      const text = (e as Error)?.message || String(e);
+      if (!/cancel/i.test(text)) pushToast('error', `Could not save: ${text}`);
+    });
+}
+
+// How much of a finished answer Orca reads out, in characters.
+//
+// A live region is read to the speech queue, and nothing in this app cancels
+// that queue -- so an unbounded announcement of a 3,000-token reply locks up
+// speech for minutes, and the person cannot interrupt it by sending the next
+// message. Four hundred characters is a summary, not the answer: it is there
+// so a screen-reader user learns the turn finished and roughly what it said,
+// and the transcript itself is one keystroke away in role="log".
+const ANNOUNCE_LIMIT = 400;
+
+/** The text a live region speaks: single-lined, trimmed, length-capped. */
+function announceText(text: string): string {
+  if (text.length <= ANNOUNCE_LIMIT) return text;
+  const cut = text.slice(0, ANNOUNCE_LIMIT);
+  const lastSpace = cut.lastIndexOf(' ');
+  // Trim back to a word boundary unless that would throw away most of the
+  // budget, which happens when a single "word" (a base64 blob, a minified
+  // line, a long URL) fills the whole allowance.
+  const body = lastSpace > ANNOUNCE_LIMIT * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${body}… (${text.length - body.length} more characters in the transcript)`;
+}
+
 export default function ChatScreen() {
   // Parsed once. The active id is taken from the list this component already
   // loaded; the old code read and parsed localStorage a second time here.
@@ -405,17 +486,28 @@ export default function ChatScreen() {
       window.removeEventListener(GITHUB_CHANGED_EVENT, readGithub);
     };
   }, []);
-  // An Allow / Deny card is a promise the turn is waiting on.
-  const approvals = useRef<Record<string, (allow: boolean) => void>>({});
-  const decide = (id: string, allow: boolean, always: boolean) => {
+  // An Allow / Deny card is a promise the turn is waiting on. C6: the
+  // answer may be "allow, with these arguments" — edited on the card.
+  type Approval = boolean | { args: Record<string, any> };
+  const approvals = useRef<Record<string, (decision: Approval, via?: string) => void>>({});
+  const decide = (id: string, allow: boolean, always: boolean, args?: Record<string, any>) => {
     const resolve = approvals.current[id];
     if (!resolve) return;
     delete approvals.current[id];
-    if (allow && always) {
-      const event = active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id);
-      if (event) toolsLib.setAlways(event.name);
+    const event = allow && always ? active?.messages[active.messages.length - 1]?.tools?.find((t) => t.id === id) : undefined;
+    let via = '';
+    if (allow && always && event) {
+      // C11: "always" on a command card means the folder's read-only preset
+      // (commands are never trusted wholesale -- only their read-only list).
+      if (event.name === 'run_command') {
+        approval.allowPreset(openFolder());
+        via = 'project';
+      } else {
+        toolsLib.setAlways(event.name);
+        via = 'always';
+      }
     }
-    resolve(allow);
+    resolve(allow && args ? { args } : allow, via);
   };
   const hfRow = hfInference.providerRow(hfToken);
   const choices = [
@@ -425,13 +517,6 @@ export default function ChatScreen() {
     ...providerRows,
   ];
   const [sending, setSending] = useState(false);
-
-  // What Orca says when an answer finishes. One string, replaced per turn.
-  const [announcement, setAnnouncement] = useState('');
-  // The reply most recently spoken, so a late re-render (an image resolving, a
-  // note landing) does not speak the same answer twice.
-  const announcedRef = useRef('');
-
   // The sidebar's spinner follows the chat that STARTED the reply, even if the
   // person switches to another chat while it streams.
   const busyChat = useRef<string | null>(null);
@@ -457,12 +542,18 @@ export default function ChatScreen() {
 
   const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
 
+  // What Orca says when an answer finishes. One string, replaced per turn.
+  const [announcement, setAnnouncement] = useState('');
+  // The reply most recently spoken, so a late re-render (an image resolving, a
+  // note landing) does not speak the same answer twice.
+  const announcedRef = useRef('');
+
   // Announce on the edge of a completed turn, not on every streamed token.
   //
   // Watching `sending` rather than the message list is what makes this cover
-  // all eight send paths in this file at once -- agent turn, rewind, edit,
-  // regen and the rest each end with setSending(false). An effect per path
-  // would be eight copies of this logic, and the eighth would rot.
+  // all eight send paths in this file -- agent turn, rewind, edit, regen and
+  // the rest each end with setSending(false). An effect per path would be
+  // eight copies of this logic, and the eighth would be the one that rots.
   useEffect(() => {
     if (sending) return;
     const last = active?.messages[active.messages.length - 1];
@@ -485,7 +576,9 @@ export default function ChatScreen() {
     const root = openFolder();
     if (!hasShell() || !root || !active) { setGitDirty(0); return; }
     let live = true;
-    gitStatus(root).then((g) => { if (live) setGitDirty(g.repo ? g.changes.length : 0); }).catch(() => { if (live) setGitDirty(0); });
+    // Unpushed commits count as "dirty" too, so the panel (and its Push
+    // button) stays reachable after a commit that left no uncommitted files.
+    gitStatus(root).then((g) => { if (live) setGitDirty(g.repo ? g.changes.length + g.ahead : 0); }).catch(() => { if (live) setGitDirty(0); });
     return () => { live = false; };
   }, [active?.id, active?.messages.length]);
   // The shell works in the chat's folder: the terminal, the folder tree and the
@@ -520,9 +613,21 @@ export default function ChatScreen() {
   const patchSession = useCallback((id: string, patch: Partial<ChatSession>) => {
     setSessions((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...patch, updatedAt: Date.now() } : s));
-      saveSessions(next);
+      if (persistLib.isTypingPatch(patch)) typingSaver.schedule(next);
+      else typingSaver.writeNow(next);
       return next;
     });
+  }, []);
+
+  // A scheduled save is owed before the window can go away, and on a reload
+  // there is no later turn to flush it from.
+  useEffect(() => {
+    const flush = () => typingSaver.flush();
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      typingSaver.flush();
+    };
   }, []);
 
   // ---- load engine catalogue ------------------------------------------------
@@ -740,13 +845,31 @@ export default function ChatScreen() {
   };
 
   // Stopping the turn is a Deny for whatever was waiting.
-  const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean>((resolve) => {
-    approvals.current[event.id] = resolve;
+  // An Allow / Deny card is a promise the turn is waiting on. C12: every
+  // answer — clicked, edited, "always", or stopped by the abort — is one
+  // append to the audit log before the turn carries on. The log lives in
+  // localStorage, which no tool of the model's can read or rewrite, and it
+  // records the decision and the card's summary, never the raw arguments.
+  const askApproval = (signal: AbortSignal) => (event: ToolEvent) => new Promise<boolean | { args: Record<string, any> }>((resolve) => {
+    const finish = (decision: boolean | { args: Record<string, any> }, via = '') => {
+      try {
+        auditLib.record({
+          tool: event.name,
+          summary: event.summary || event.name,
+          decision: typeof decision === 'object' ? 'edited' : decision ? (via || 'allowed') : (via || 'denied'),
+          project: openFolder(),
+        });
+      } catch {
+        /* an audit line that cannot be written must never eat the approval */
+      }
+      resolve(decision);
+    };
+    approvals.current[event.id] = finish;
     // Approve / Reject on the notification itself (Linux), so the answer
     // never needs the window in front; the plain notification elsewhere.
     notifyWithActions(event.id, 'NeuraOS needs your OK', event.summary || event.name, [['approve', 'Approve'], ['reject', 'Reject']])
       .then((r) => { if (!r.shown) notifyUser('NeuraOS needs your OK', event.summary || event.name); });
-    signal.addEventListener('abort', () => { delete approvals.current[event.id]; resolve(false); }, { once: true });
+    signal.addEventListener('abort', () => { delete approvals.current[event.id]; finish(false, 'stopped'); }, { once: true });
   });
 
   // ---- agents (roadmap 6.7) ---------------------------------------------------
@@ -792,6 +915,8 @@ export default function ChatScreen() {
       onText: (piece) => { last += piece; run.onText?.(piece); },
       onTool: (event) => { last = ''; upsert({ ...event, id: prefix + event.id, summary: `${agent.name}: ${event.summary}` }); },
       onNote: (note) => pushToast('info', `${agent.name}: ${note}`),
+      // C7: a sub-agent's calls are calls too, tagged with the agent.
+      onTrace: (event) => traceLib.append({ ...event, provider: target.provider, model: target.model, agent: agent.name }),
       signal: run.signal,
     });
     return agentsLib.formatResult(agent, last);
@@ -1434,12 +1559,17 @@ _${done.notes.join(' · ')}_` : said,
           content: 'Plan mode: reply with a short numbered plan (files, steps, risks) and change nothing. Read-only tools are available for looking around.',
         });
       }
+      // B11: the Concise pill's line, from the built-in meta skill, sits with
+      // Plan mode's — same system role, same "this chat is different" intent.
+      if (active.concise) {
+        turns.unshift({ role: 'system', content: builtIn.conciseLine() });
+      }
       // One request, to whichever provider the session is on. The turn calls
       // it again after every round of tool results.
       const streamOnce = streamer(active.provider, active.model);
       const upsertTool = upsertToolIn(sid);
       const root = openFolder();
-      await runTurn({
+      const turnOptions: TurnOptions = {
         messages: turns,
         tools: toolsOn
           // The composer's Search / Code / MCP chips decide which groups are
@@ -1464,9 +1594,73 @@ _${done.notes.join(' · ')}_` : said,
         imagesFor: takeToolImages,
         onText: append,
         onTool: upsertTool,
+        // C11: the folder's read-only preset decides whether a command asks
+        // at all; everything else keeps the gate it has always had.
+        asks: (name, nameArgs) => (name === 'run_command' && approval.presetAllows(root, name, nameArgs)
+          ? ''
+          : toolsLib.needsApproval(name)),
+        // C7: a local line per model round and tool call — timing, size and
+        // outcome, never arguments or text, and never sent anywhere.
+        onTrace: (event) => traceLib.append({ ...event, provider: asked.provider, model: asked.model }),
         onNote: (note) => pushToast('info', note),
         signal: controller.signal,
-      });
+      };
+      // C4: a failed step retries with backoff, before anything is switched.
+      // `touched` is the safety wire: a turn that already ran a tool is never
+      // re-sent automatically, because running it again would run the tool
+      // again. The wait itself is a step in the fold, so a pause is never a
+      // silence -- and Stop during the wait is still Stop.
+      let attempt = 0;
+      for (;;) {
+        let touched = false;
+        try {
+          await runTurn({ ...turnOptions, onTool: (event: ToolEvent) => { touched = true; upsertTool(event); } });
+          break;
+        } catch (err) {
+          const aborted = (err as Error).name === 'AbortError';
+          const told = failure.attribute({ ...asked, message: aborted ? '' : (err as Error).message });
+          if (aborted || touched || !fallback.retryable(told, attempt)) throw err;
+          const wait = fallback.backoff(attempt);
+          const label = fallback.waitLabel(wait);
+          attempt += 1;
+          const stepId = `retry-${attempt}-${Date.now().toString(36)}`;
+          const stepArgs = { kind: told.kind, attempt: attempt + 1, of: fallback.RETRIES + 1, wait: label };
+          upsertTool({
+            id: stepId,
+            name: 'retry',
+            args: stepArgs,
+            asks: '',
+            status: 'running',
+            summary: `${told.label} — waiting ${label}, then asking ${asked.model || 'the model'} again`,
+          });
+          // The half an answer the failed attempt left is not the retry's.
+          setSessions((prev) => prev.map((s) => {
+            if (s.id !== sid) return s;
+            const msgs = s.messages.slice();
+            const last = msgs[msgs.length - 1];
+            if (last && last.role === 'assistant' && !last.error) msgs[msgs.length - 1] = { ...last, content: '' };
+            return { ...s, messages: msgs };
+          }));
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, wait);
+            controller.signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+          });
+          if (controller.signal.aborted) {
+            const stopNow = new Error('Aborted');
+            stopNow.name = 'AbortError';
+            throw stopNow;
+          }
+          upsertTool({
+            id: stepId,
+            name: 'retry',
+            args: stepArgs,
+            asks: '',
+            status: 'done',
+            summary: `${told.label} — waited ${label}, asking ${asked.model || 'the model'} again`,
+            result: `Backoff retry ${attempt} of ${fallback.RETRIES}: waited ${label} after “${told.label}” and sent the turn again.`,
+          });
+        }
+      }
       // persist the finished transcript
       setSessions((prev) => { saveSessions(prev); return prev; });
       // A reply that took a while, finished while the window was elsewhere.
@@ -2180,36 +2374,16 @@ _${done.notes.join(' · ')}_` : said,
     }
   };
 
-
-// a11y: announcement helpers (below the component to avoid TS parsing bug)
-const savePictureNow = (url: string): void => {
-  savePictureUrl(url)
-    .then((said) => pushToast('ok', said))
-    .catch((e: unknown) => {
-      const text = (e as Error)?.message || String(e);
-      if (!/cancel/i.test(text)) pushToast('error', `Could not save: ${text}`);
-    });
-};
-
-const ANNOUNCE_LIMIT = 400;
-
-const announceText = (text: string): string => {
-  if (text.length <= ANNOUNCE_LIMIT) return text;
-  const cut = text.slice(0, ANNOUNCE_LIMIT);
-  const lastSpace = cut.lastIndexOf(' ');
-  const body = lastSpace > ANNOUNCE_LIMIT * 0.6 ? cut.slice(0, lastSpace) : cut;
-  return `${body}… (${text.length - body.length} more characters in the transcript)`;
-};
-
-
-
   if (!active) {
+    // "Starting one now…" used to sit here promising an automatic chat that
+    // never came -- nothing calls startNew() on mount, only this button, the
+    // sidebar's own New chat, and the project picker do. The button is the
+    // real next step, so it says that instead.
     return (
       <div className="screen chat">
         <div className="empty-state">
           <div className="empty-icon"><Icon name="chat" size={28} /></div>
           <h2>No chats yet</h2>
-          <p>Starting one now…</p>
           <button className="primary" onClick={() => startNew()}>New chat</button>
         </div>
       </div>
@@ -2298,6 +2472,10 @@ const announceText = (text: string): string => {
                 </button>
               ))}
             </div>
+            {/* B10: the pack is offered where the app begins — an empty chat. */}
+            <MintPackCard root={openFolder()} />
+            {/* E3: and so is local image generation, while it is not set up. */}
+            <Flux2OfferCard />
           </div>
         )}
         {active.messages.map((msg, i) => (
@@ -2321,13 +2499,19 @@ const announceText = (text: string): string => {
                 <Icon name="refresh" size={12} />
               </button>
             )}
-            <div className="message-role">
-              {msg.shell ? 'You · command' : msg.role === 'user'
-                ? 'You'
-                : msg.agent
-                  ? `${msg.agent} · agent${msg.model ? ` · ${msg.model}` : ''}`
-                  : (msg.providerLabel && msg.model ? `${msg.providerLabel} · ${msg.model}` : (msg.model || 'Assistant'))}
-            </div>
+            {/* "You" on every one of your own messages said nothing a
+                right-aligned bubble does not already say; dropped, except
+                for a shell command, which is worth marking as one. Which
+                model or agent answered is real information and stays. */}
+            {(msg.role !== 'user' || msg.shell) && (
+              <div className="message-role">
+                {msg.shell
+                  ? 'You · command'
+                  : msg.agent
+                    ? `${msg.agent} · agent${msg.model ? ` · ${msg.model}` : ''}`
+                    : (msg.providerLabel && msg.model ? `${msg.providerLabel} · ${msg.model}` : (msg.model || 'Assistant'))}
+              </div>
+            )}
             {msg.images && msg.images.length > 0 && (
               <div className="message-images">
                 {msg.images.map((url, j) => {
@@ -2358,26 +2542,14 @@ const announceText = (text: string): string => {
                       >
                         <button onClick={() => editPicture(url, i, j)} disabled={sending} title="Put /edit in the composer, aimed at this picture">Edit</button>
                         <button onClick={() => openInImages(url)} title="Change it in the Images screen">Open in Images</button>
-                        <button onClick={() => imageRun.savePicture(url)} title="Save it to a file">Save</button>
+                        <button onClick={() => savePictureNow(url)} title="Save it to a file">Save</button>
                       </span>
                     </span>
                   );
                 })}
               </div>
             )}
-            {msg.role === 'assistant'
-              ? (msg.content
-                ? <div
-                    className="message-content"
-                    // A research reply's [n] become superscript links to its sources.
-                    dangerouslySetInnerHTML={{ __html: msg.sources?.length
-                      ? research.superscriptCitations(renderMarkdown(research.linkCitations(msg.content, msg.sources)))
-                      : renderMarkdown(msg.content) }}
-                  />
-                : null)
-              : msg.shell
-                ? <pre className="message-content shell-output">{msg.shell}</pre>
-                : <div className="message-content">{msg.content}</div>}
+            <MessageBody msg={msg} />
             {msg.role === 'assistant' && msg.tools && msg.tools.length > 0 && (
               <StepsFold events={msg.tools} expandAll={cardsOpen} onDecide={sending && i === active.messages.length - 1 ? decide : undefined} />
             )}
@@ -2611,6 +2783,15 @@ const announceText = (text: string): string => {
             >
               Goal{active.goal ? ' · set' : ''}
             </button>
+            <button
+              type="button"
+              className={`composer-pill ${active.concise ? 'is-set' : ''}`}
+              onClick={() => patchSession(active.id, { concise: !active.concise })}
+              aria-pressed={!!active.concise}
+              title="Concise mode: short answers, result first — the built-in meta skill rides this chat's turns"
+            >
+              Concise{active.concise ? ' · on' : ''}
+            </button>
           </>
         )}
         above={(
@@ -2693,7 +2874,7 @@ const announceText = (text: string): string => {
           onTab={setOutputTab}
           onClose={() => setOutputOpen((o) => ({ ...o, [active.id]: false }))}
           onOpenFile={() => window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { view: 'local' } }))}
-          onSavePicture={(url) => imageRun.savePicture(url)}
+          onSavePicture={(url) => savePictureNow(url)}
         />
       )}
       {!(outputOpen[active.id] ?? turnLib.outputOf(active.messages).any) && (turnLib.outputOf(active.messages).any || gitDirty > 0) && (
