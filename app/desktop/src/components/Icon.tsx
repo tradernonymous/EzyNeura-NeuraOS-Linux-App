@@ -35,6 +35,7 @@ type IconName =
   | 'compass'
   | 'sun'
   | 'moon'
+  | 'brand'
   | 'alert'
   | 'shield'
   | 'activity'
@@ -69,6 +70,12 @@ const PATHS: Record<IconName, string> = {
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm3.6-12.6-2.1 5-5 2.1 2.1-5 5-2.1Z',
   sun: 'M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9ZM12 2.5v2m0 15v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M2.5 12h2m15 0h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
   moon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z',
+  // The mark: the orb from the sidebar's footer, drawn on the same 24x24 /
+  // 1.6px grid as every other glyph. Deliberately NOT the sun or the moon --
+  // an earlier titlebar used the sun as both the logo and the light-mode
+  // toggle, which made the brand indistinguishable from a control.
+  brand:
+    'M12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6ZM12 3.6h.01M19.2 16.4h.01M4.8 16.4h.01M12 8.8V5.6M14.7 13.7l2.5 1.4M9.3 13.7l-2.5 1.4',
   alert: 'M12 8.5v5m0 3h.01M10.3 4.4 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z',
   shield: 'M12 3 5 5.5v6c0 4.2 2.9 7.9 7 9.5 4.1-1.6 7-5.3 7-9.5v-6L12 3Z',
   activity: 'M3.5 12.5h4l2.5-6 4 12 2.5-6h4',
