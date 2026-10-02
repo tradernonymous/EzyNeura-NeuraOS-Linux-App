@@ -1142,7 +1142,9 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
         {error && <div className="stream-error"><span>{error}</span></div>}
       </aside>
 
-      <main className="studio-centre">
+      {/* A <section>, not a <main>: App.tsx owns the one main landmark for the
+          window, and <main> may not be nested inside it. */}
+      <section className="studio-centre" aria-label="Design canvas">
         <div className="design-toolbar">
           <SelectPill
             label="Frame"
@@ -1277,7 +1279,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             <button onClick={() => goSlide(1)} disabled={!deck.count || deck.index >= deck.count - 1} aria-label="Next slide"><Icon name="chevron-right" size={14} /></button>
           </div>
         )}
-      </main>
+      </section>
 
       <aside className={`studio-right ${!canvasHtml && !draft ? 'is-idle' : ''} ${inspectorFolded ? 'is-folded' : ''}`}>
         <div className="inspector-tabs" role="tablist" aria-label="Inspector">

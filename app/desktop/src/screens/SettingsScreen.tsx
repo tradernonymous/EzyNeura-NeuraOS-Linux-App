@@ -72,6 +72,7 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('general');
   const [titles, setTitles] = useState<string[]>([]);
+  // An HTMLElement, not an HTMLMainElement: the element is a <section> now.
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = mainRef.current;
@@ -142,7 +143,9 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
             Cheat sheet <kbd>Ctrl+/</kbd>
           </button>
         </aside>
-        <main className="settings-main" ref={mainRef}>
+        {/* A <section>, not a <main>: App.tsx owns the one main landmark for
+            the window, and <main> may not be nested inside it. */}
+        <section className="settings-main" ref={mainRef} aria-label="Settings groups">
           <section className="settings-section">
             <h2>Engine</h2>
             {/* A saved address is a setting; whether it answers is the card's
@@ -263,7 +266,7 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
           </section>
 
           <DiagnosticsCard state={diagnosticsState} />
-        </main>
+        </section>
       </div>
     </div>
   );

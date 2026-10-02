@@ -383,6 +383,27 @@ function savePictureNow(url: string): void {
       const text = (e as Error)?.message || String(e);
       if (!/cancel/i.test(text)) pushToast('error', `Could not save: ${text}`);
     });
+
+// How much of a finished answer Orca reads out, in characters.
+//
+// A live region is read to the speech queue, and nothing in this app cancels
+// that queue -- so an unbounded announcement of a 3,000-token reply locks up
+// speech for minutes, and the person cannot interrupt it by sending the next
+// message. Four hundred characters is a summary, not the answer: it is there
+// so a screen-reader user learns the turn finished and roughly what it said,
+// and the transcript itself is one keystroke away in role="log".
+const ANNOUNCE_LIMIT = 400;
+
+/** The text a live region speaks: single-lined, trimmed, length-capped. */
+function announceText(text: string): string {
+  if (text.length <= ANNOUNCE_LIMIT) return text;
+  const cut = text.slice(0, ANNOUNCE_LIMIT);
+  const lastSpace = cut.lastIndexOf(' ');
+  // Trim back to a word boundary unless that would throw away most of the
+  // budget, which happens when a single "word" (a base64 blob, a minified
+  // line, a long URL) fills the whole allowance.
+  const body = lastSpace > ANNOUNCE_LIMIT * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${body}… (${text.length - body.length} more characters in the transcript)`;
 }
 
 export default function ChatScreen() {
@@ -519,6 +540,35 @@ export default function ChatScreen() {
   const stickToBottom = useRef(true);
 
   const active = sessions.find((s) => s.id === activeId) || sessions[0] || null;
+
+  // What Orca says when an answer finishes. One string, replaced per turn.
+  const [announcement, setAnnouncement] = useState('');
+  // The reply most recently spoken, so a late re-render (an image resolving, a
+  // note landing) does not speak the same answer twice.
+  const announcedRef = useRef('');
+
+  // Announce on the edge of a completed turn, not on every streamed token.
+  //
+  // Watching `sending` rather than the message list is what makes this cover
+  // all eight send paths in this file -- agent turn, rewind, edit, regen and
+  // the rest each end with setSending(false). An effect per path would be
+  // eight copies of this logic, and the eighth would be the one that rots.
+  useEffect(() => {
+    if (sending) return;
+    const last = active?.messages[active.messages.length - 1];
+    if (!last || last.role !== 'assistant' || last.error) return;
+    const text = (last.content || '').replace(/\s+/g, ' ').trim();
+    if (!text || text === announcedRef.current) return;
+    announcedRef.current = text;
+    // Emptied first on purpose: a live region only speaks when its content
+    // changes, so without this a repeated reply would fall silent.
+    setAnnouncement('');
+    // A tick's delay lets the empty render commit before the new text lands,
+    // which is what makes the change observable to the live region.
+    const id = setTimeout(() => setAnnouncement(announceText(text)), 60);
+    return () => clearTimeout(id);
+  }, [sending, active]);
+
   // How many files the chat's folder has changed in git, so the panel can be
   // opened (and committed from) before any turn has touched a file.
   useEffect(() => {
@@ -2377,13 +2427,33 @@ _${done.notes.join(' · ')}_` : said,
       <RunSettings open={runOpen && isSavedProvider(active.provider)} onClose={() => setRunOpen(false)} provider={active.provider} model={active.model} />
 
       <div className="chat-main">
+      {/* The transcript is the app's reason to exist and it was completely
+          silent to a screen reader: the only aria-live regions in the build
+          were the toasts and the Design studio, so a streamed answer -- the
+          single most important thing that happens in the window -- announced
+          nothing at all.
+
+          Two regions, deliberately. role="log" on the scroller gives Orca a
+          navigable list of turns without re-announcing the history on load.
+          A polite live region carries only the *newest* assistant turn, and
+          it is emptied first (see announcement below) so each completed
+          answer is announced once rather than appended to a growing log. */}
       <div
         className="chat-messages"
         ref={listRef}
         onScroll={onScroll}
         onClick={onMessagesClick}
         onContextMenu={onMessagesContextMenu}
+        role="log"
+        aria-label="Conversation"
+        aria-live="off"
+        aria-relevant="additions"
       >
+        {/* Announced on turn completion only. Not on every streamed token --
+            that would flood the speech queue with partial words. */}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </div>
         {active.messages.length === 0 && (
           <div className="empty-state">
             <div className="empty-icon"><Icon name="chat" size={28} /></div>

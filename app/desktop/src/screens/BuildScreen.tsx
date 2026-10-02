@@ -347,7 +347,9 @@ export default function BuildScreen() {
           </div>
         </aside>
 
-        <main className="build-main">
+        {/* A <section>, not a <main>: App.tsx already owns the single main
+            landmark for the whole window, and <main> may not be nested. */}
+        <section className="build-main" aria-label="Build detail">
           {active ? (
             <div className="build-detail">
               <div className="build-header">
@@ -428,7 +430,7 @@ export default function BuildScreen() {
               <p>Write a plan on the left and start one. Approvals appear here the moment the build needs you.</p>
             </div>
           )}
-        </main>
+        </section>
       </div>
     </div>
   );
