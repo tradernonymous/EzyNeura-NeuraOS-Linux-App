@@ -11,6 +11,33 @@
    page when focused. Do not "simplify" this to `display: none` or
    `visibility: hidden` -- both remove it from the accessibility tree, which is
    the one thing this class exists to avoid. */
+/* Visible only once it has focus -- which is the only time it matters. It is
+   positioned rather than .sr-only because a screen-reader user still needs to
+   reach it; kept above the shell so it is not painted under the sidebar.
+   The :not(:focus-visible) rule keeps it out of the way without removing it
+   from the tab order, which display:none would do. */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-2);
+  transform: translateY(-200%);
+  transition: transform 120ms ease;
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--text-1);
+  outline-offset: 2px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

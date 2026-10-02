@@ -718,7 +718,13 @@ export default function App() {
             importMsg={importMsg}
           />
         )}
-        <main className="main">
+        {/* A keyboard user arriving on a screen with no visible focus lands on
+            the document, so their first Tab goes to the browser's chrome or
+            the sidebar's first control rather than to the thing they came to
+            read. A skip link is the one affordance that fixes it, and it costs
+            a single tab stop that is invisible until focused. */}
+        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <main className="main" id="main-content" tabIndex={-1}>
           {updateInfo && (
             <div className="update-banner">
               <span>Update available: v{updateInfo.version} (this build is v{APP_VERSION})</span>

@@ -29,6 +29,7 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
 const CSS = read('desktop', 'src', 'index.css');
 const APP = read('desktop', 'src', 'App.tsx');
+const MAIN = read('desktop', 'src', 'main.tsx');
 const CHAT = read('desktop', 'src', 'screens', 'ChatScreen.tsx');
 const PALETTE = read('desktop', 'src', 'components', 'CommandPalette.tsx');
 const TITLEBAR = read('desktop', 'src', 'TitleBar.tsx');
@@ -50,7 +51,64 @@ function stripComments(source) {
 
 // ---- landmarks ------------------------------------------------------------
 
-test('the window has exactly one main landmark, and App owns it', () => {
+test('a skip link reaches the main landmark, and only the main landmark', () => {
+  assert.match(APP, /<a className="skip-link" href="#main-content">/, 'App needs a skip link');
+  // The href must resolve to a real id, or the link moves focus nowhere --
+  // which looks like a working affordance and is not one.
+  assert.match(APP, /<main className="main" id="main-content"/, '#main-content must exist on the main');
+  // tabIndex={-1} makes the landmark focusable programmatically. Without it the
+  // browser moves the scroll but focus stays in the skip link, so the next Tab
+  // continues from the top of the document and the skip accomplished nothing.
+  assert.match(APP, /<main className="main" id="main-content" tabIndex=\{-1\}>/, 'the main landmark must be focusable');
+});
+
+test('every mounted root gets a skip link, not just the main window', () => {
+  // main.tsx mounts three roots: the app, the quick-ask window and the crash
+  // screen. A skip link added only to App leaves the quick-ask window without
+  // one, and that window is entirely a form.
+  assert.match(MAIN, /import App from '\.\/App'/, 'main.tsx mounts App');
+  assert.match(MAIN, /import QuickAsk from '\.\/screens\/QuickAsk'/, 'main.tsx mounts QuickAsk too');
+  const quick = read('desktop', 'src', 'screens', 'QuickAsk.tsx');
+  assert.match(quick, /<main\b/, 'QuickAsk needs a main landmark for a skip link to target');
+  assert.match(
+    quick,
+    /<a className="skip-link" href="#([\w-]+)">/,
+    'QuickAsk needs its own skip link',
+  );
+  // The target has to exist in the same document, or the link is decoration.
+  const target = quick.match(/<a className="skip-link" href="#([\w-]+)">/)[1];
+  assert.ok(
+    quick.includes(`id="${target}"`),
+    `QuickAsk's skip link points at #${target}, which does not exist`,
+  );
+  // And the target must be focusable, for the same reason App's main is.
+  const at = quick.indexOf(`id="${target}"`);
+  const tag = quick.slice(quick.lastIndexOf('<', at), quick.indexOf('>', at));
+  assert.match(tag, /tabIndex=\{-1\}/, `#${target} must be focusable, or the skip moves focus nowhere`);
+});
+
+test('the skip link is hidden until focused, without leaving the tab order', () => {
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const at = bare.indexOf('.skip-link {');
+  assert.ok(at >= 0, 'index.css must style .skip-link');
+  const rule = bare.slice(at, bare.indexOf('}', at));
+  assert.doesNotMatch(rule, /display:\s*none/, 'display:none would drop it from the tab order entirely');
+  assert.doesNotMatch(rule, /visibility:\s*hidden/, 'visibility:hidden would too');
+  assert.match(rule, /transform:\s*translateY\(-200%\)/, 'it should start off-screen, not absent');
+  // And it must come back when focused, or the affordance is a trap.
+  const focusAt = bare.indexOf('.skip-link:focus-visible');
+  assert.ok(focusAt > 0, '.skip-link needs a :focus-visible rule');
+  const focusRule = bare.slice(focusAt, bare.indexOf('}', focusAt));
+  assert.match(focusRule, /transform:\s*translateY\(0\)/, 'focusing must bring the link into view');
+  assert.match(focusRule, /outline:/, 'the link needs its own focus ring, since it is the first thing focused');
+});
+
+// main.tsx renders exactly one of App or QuickAsk -- they are alternative roots
+// for alternative windows, chosen by isQuickWindow(). So "one main per window"
+// means one main per root, and each root must hold its own.
+const ROOTS = ['App.tsx', path.join('screens', 'QuickAsk.tsx')];
+
+test('each window root holds exactly one main landmark', () => {
   const owners = [];
   for (const file of tsxFiles()) {
     const source = stripComments(fs.readFileSync(file, 'utf8'));
@@ -58,10 +116,25 @@ test('the window has exactly one main landmark, and App owns it', () => {
     if (opens.length) owners.push([path.relative(SRC, file), opens.length]);
   }
   assert.deepEqual(
-    owners,
-    [['App.tsx', 1]],
-    'expected App.tsx to be the only <main>; <main> may not be nested. Found: ' +
-      JSON.stringify(owners),
+    owners.map(([file]) => file).sort(),
+    [...ROOTS].sort(),
+    'the only <main> elements should be the two window roots. Found: ' + JSON.stringify(owners),
+  );
+  // A second <main> anywhere is a nesting bug; <main> may not be nested, and
+  // nested landmarks split the document for anyone navigating by them.
+  for (const [file, count] of owners) {
+    assert.equal(count, 1, `${file} has ${count} <main> elements`);
+  }
+});
+
+test('App and QuickAsk are alternative roots, never rendered together', () => {
+  // This is what makes the one-main-per-root rule sound. If a future change
+  // mounted both, App's <main> would nest inside QuickAsk's and the invariant
+  // would quietly stop meaning anything.
+  assert.match(
+    MAIN,
+    /isQuickWindow\(\)\s*\?\s*<QuickAsk \/>\s*:\s*<App \/>/,
+    'the root chooses one of the two windows',
   );
 });
 
@@ -90,9 +163,13 @@ test('the screens that used to nest a <main> are labelled sections', () => {
 // ---- the visually-hidden helper ------------------------------------------
 
 test('.sr-only stays in the accessibility tree', () => {
-  const at = CSS.indexOf('.sr-only');
+  // Comments are stripped first: a comment that names .sr-only (as the
+  // skip-link rule's does, explaining why it is not .sr-only) would otherwise
+  // be found first and the slice below would read the wrong rule entirely.
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const at = bare.indexOf('.sr-only');
   assert.ok(at >= 0, 'index.css must define .sr-only');
-  const rule = CSS.slice(at, CSS.indexOf('}', at));
+  const rule = bare.slice(at, bare.indexOf('}', at));
   // display:none and visibility:hidden both remove the element from the a11y
   // tree, which defeats the entire purpose of the class.
   assert.doesNotMatch(rule, /display:\s*none/, '.sr-only must not use display:none');

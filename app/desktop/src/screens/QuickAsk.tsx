@@ -145,7 +145,12 @@ export default function QuickAsk() {
   };
 
   return (
-    <div className="quick">
+    <main className="quick" id="quick-content" tabIndex={-1}>
+      {/* Quick Ask is its own window and its own React root, so App's skip
+          link is not in this document. Without one here, the first Tab lands
+          on "Hide" in the header rather than on the question box, which is the
+          only thing anyone opens this window to reach. */}
+      <a className="skip-link" href="#quick-box">Skip to the question box</a>
       <div className="quick-head">
         <span className="quick-brand">NeuraOS</span>
         <span className="quick-model mono">{model || 'no model yet'}</span>
@@ -171,7 +176,7 @@ export default function QuickAsk() {
         </div>
       )}
       {error && <div className="chip-note" role="alert">{error}</div>}
-      <div className="quick-box">
+      <div className="quick-box" id="quick-box" tabIndex={-1}>
         <textarea
           ref={box}
           value={question}
@@ -188,6 +193,6 @@ export default function QuickAsk() {
       {answer && !busy && (
         <button className="quick-continue" onClick={handOff}>Continue in NeuraOS <Icon name="chevron-right" size={12} /></button>
       )}
-    </div>
+    </main>
   );
 }
