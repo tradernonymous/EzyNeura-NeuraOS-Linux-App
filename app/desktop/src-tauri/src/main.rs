@@ -33,6 +33,7 @@ mod byok;
 mod chat_store;
 mod crash;
 mod diag;
+mod doctor;
 mod engine;
 mod gguf;
 mod hf_oauth;
@@ -363,6 +364,7 @@ fn main() {
             hf_oauth::hf_oauth_exchange,
             hf_oauth::hf_oauth_refresh,
             diag::diagnostics,
+            doctor::doctor_facts,
             engine::engine_find_node,
             engine::engine_start,
             engine::engine_stop,

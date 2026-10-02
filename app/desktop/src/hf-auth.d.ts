@@ -46,6 +46,12 @@ export declare const CLIENT_ID_KEY: string;
 export declare const DOCS_URL: string;
 /** Check a pasted access token against whoami, store it, resolve with the user. */
 export declare function useToken(token: string, fetchImpl?: typeof fetch): Promise<any>;
+/**
+ * Check a pasted access token WITHOUT storing it. Resolves with the user it
+ * belongs to, or throws with what is wrong. The "test" button next to the paste
+ * field; useToken is the one that commits.
+ */
+export declare function checkToken(token: string, fetchImpl?: typeof fetch): Promise<any>;
 
 export declare function signedIn(): boolean;
 export declare function accessToken(): HfToken | null;

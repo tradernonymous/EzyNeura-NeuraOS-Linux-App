@@ -3,6 +3,7 @@ import { api } from '../api';
 import { APP_VERSION } from '../version';
 import ConnectionCard from '../components/ConnectionCard';
 import DiagnosticsCard from '../components/DiagnosticsCard';
+import DoctorCard from '../components/DoctorCard';
 import LocalModelsCard from '../components/LocalModelsCard';
 import DictationCard from '../components/DictationCard';
 import ConnectorsCard from '../components/ConnectorsCard';
@@ -235,6 +236,8 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState }
               </details>
             </div>
           </section>
+
+          <DoctorCard />
 
           <DiagnosticsCard state={diagnosticsState} />
         </main>

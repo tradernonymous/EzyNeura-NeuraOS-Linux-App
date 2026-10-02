@@ -55,6 +55,8 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
   const [user, setUser] = useState<any>(() => hfAuth.cachedUser());
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testNote, setTestNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState('');
@@ -133,6 +135,27 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
     }
   };
 
+  // E4: check a token without keeping it. The paste field is the one place
+  // where a token is most likely to be wrong -- truncated by the clipboard, a
+  // read-only token, the wrong one of two -- and the only feedback otherwise is
+  // a failed sign-in that looks like the app's fault.
+  //
+  // This deliberately does not save: a button labelled "Test" that quietly
+  // wrote the value to the keyring would be a nasty surprise, and the point is
+  // to find out before committing to it.
+  const test = async () => {
+    setTesting(true);
+    setTestNote('');
+    try {
+      const who = await hfAuth.checkToken(token);
+      setTestNote(`That token works — it belongs to ${who?.name || 'your account'}. Use it to sign in.`);
+    } catch (e) {
+      setTestNote(((e as Error).message || String(e)).split('\n')[0]);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const field = showClientId && hasShell() ? <ClientIdField buildId={buildId} onDocs={openDocs} /> : null;
 
   if (signedIn) {
@@ -186,7 +209,20 @@ export default function HfSignIn({ compact, showClientId, onSignedIn }: Props) {
           spellCheck={false}
         />
         <button type="submit" className="primary" disabled={!token.trim() || busy}>{busy ? 'Checking…' : 'Use token'}</button>
+        <button
+          type="button"
+          onClick={test}
+          disabled={!token.trim() || busy || testing}
+          title="Check this token without saving it"
+        >
+          {testing ? 'Testing…' : 'Test token'}
+        </button>
         <button type="button" onClick={() => setOpen(false)}>Cancel</button>
+        {testNote && (
+          <span className="settings-hint hf-test-note" role="status">
+            {testNote}
+          </span>
+        )}
         <span className="settings-hint mono hf-page">{hfAuth.TOKEN_PAGE.split('?')[0]}</span>
       </form>
     );

@@ -1739,6 +1739,117 @@ button.primary:hover:not(:disabled) {
   line-height: 1.5;
 }
 
+.settings-hint.is-error { color: var(--warn); }
+
+/* ---- the skills catalogue: what a skill costs, and what is wrong with it -- */
+/* B2: the standing prompt cost, on the row rather than in a tooltip, because a
+   cost hidden behind a hover is a cost nobody pays attention to. */
+.skill-cost { font-size: 11px; color: var(--text-3); }
+.skill-cost-total { color: var(--text-3); opacity: 0.85; }
+
+/* A warning does not stop the install, so it must not look like an error. */
+.skill-warn {
+  font-size: 11px;
+  color: var(--warn);
+  line-height: 1.45;
+}
+
+/* E4: the result of the "Test token" button. A settings-hint variant, so it
+   sits with the other hints; the full row lets a long sentence wrap, and it is
+   deliberately not the error chip above, because a token that works is not an
+   error. */
+.hf-test-note { flex-basis: 100%; color: var(--text-2); }
+
+/* ---- the Doctor (D6) ----------------------------------------------------- */
+/* One row per check. The state is carried by a mark and a word as well as a
+   colour, because this card is read by people who are already stuck and some
+   of them cannot tell green from amber. */
+.doctor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.doctor-row {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.doctor-row:last-child { border-bottom: 0; }
+
+.doctor-mark {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--bg-2);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.doctor-row.is-ok .doctor-mark { color: var(--ok); border-color: var(--ok); }
+.doctor-row.is-warn .doctor-mark { color: var(--warn); border-color: var(--warn); }
+.doctor-row.is-bad .doctor-mark { color: var(--danger, var(--warn)); border-color: var(--danger, var(--warn)); }
+
+.doctor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.doctor-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.doctor-state {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.doctor-row.is-warn .doctor-state { color: var(--warn); }
+.doctor-row.is-bad .doctor-state { color: var(--danger, var(--warn)); }
+
+.doctor-detail {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* The fix is the whole reason the card exists, so it is set in mono and kept
+   selectable: it is a command, and somebody will want to copy it verbatim. */
+.doctor-fix {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+  padding: 5px 7px;
+  margin-top: 3px;
+  border-left: 2px solid var(--border);
+  background: var(--bg-2);
+  border-radius: 0 4px 4px 0;
+  user-select: text;
+}
+
 .provider-row {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);

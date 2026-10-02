@@ -91,6 +91,20 @@ export async function diagnosticsFacts(): Promise<DiagnosticsFacts> {
   return call<DiagnosticsFacts>('diagnostics');
 }
 
+// ---- the Doctor ------------------------------------------------------------
+//
+// One pass over everything NeuraOS depends on (D6). The facts come from
+// src-tauri/src/doctor.rs and the sentences from src/doctor.js; this only
+// carries the shape across the boundary. Nothing here is a secret -- the
+// backend reports whether a key is present, never what it is -- which is what
+// makes the card safe to paste into a bug report.
+
+export type { DoctorFacts } from './doctor.js';
+
+export async function doctorFacts(): Promise<import('./doctor.js').DoctorFacts> {
+  return call<import('./doctor.js').DoctorFacts>('doctor_facts');
+}
+
 // ---- the local folder ----------------------------------------------------
 //
 // Real paths on this machine, confined to one folder by the shell (src-tauri/

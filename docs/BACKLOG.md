@@ -12,7 +12,11 @@ clippy as a real gate, `Cargo.lock` committed and `--locked`, actions pinned
 to commit SHAs, a bundle-size ceiling, and a frontend build that no longer
 dies of memory) is written up in `docs/UPGRADE_WAVE_1.md`. Its own file
 because this backlog has grown past what a single editor can safely append
-to. Later waves follow `docs/APP_UPGRADE_PLAN.md`.
+to. **Wave 2, skills you can trust and a Doctor** (a context cost and a lint on
+every skill before it installs, unmet prerequisites named, the Doctor card in
+Settings with a fix for everything broken, and a Test button for a Hugging
+Face token that saves nothing) is written up in `docs/UPGRADE_WAVE_2.md`.
+Later waves follow `docs/APP_UPGRADE_PLAN.md`.
 
 ## Status
 

@@ -9,6 +9,11 @@ import '../chats.js';
 import '../hf-auth.js';
 import '../hf-models.js';
 import '../hf-skills.js';
+import '../skill-lint.js';
+import '../skill-prereqs.js';
+
+const skillLint: typeof import('../skill-lint.js') = (globalThis as any).FreeAI4USkillLint;
+const skillPrereqs: typeof import('../skill-prereqs.js') = (globalThis as any).FreeAI4USkillPrereqs;
 
 const hfAuth: typeof import('../hf-auth.js') = (globalThis as any).FreeAI4UHfAuth;
 const hfModels: typeof import('../hf-models.js') = (globalThis as any).FreeAI4UHfModels;
@@ -73,6 +78,10 @@ export default function LibraryScreen() {
     () => hfSkills.readInstalled(),
   );
   const [localRoot] = useState<string>(readLocalRoot);
+  // What a skill costs, and what is wrong with it (B2, B3, B7). Computed once
+  // per catalogue rather than per render: the cost is a pure function of the
+  // entry, and the lint is the expensive part.
+  const [linted, setLinted] = useState<Record<string, { cost: number; errors: string[]; warnings: string[]; prereqWarning: string; missing: import('../skill-prereqs.js').ToolRecord[] }>>({});
 
   // --- HuggingFace state ---
   const [hfSignedIn, setHfSignedIn] = useState(false);
@@ -162,12 +171,57 @@ export default function LibraryScreen() {
     setHfCatalogLoading(true);
     const hfToken = hfAuth.accessToken()?.access_token;
     hfSkills.loadCatalog(hfToken || undefined)
-      .then((rows: any) => setHfCatalog(Array.isArray(rows) ? rows : []))
+      .then((rows: any) => {
+        const list = Array.isArray(rows) ? rows : [];
+        setHfCatalog(list);
+        setLinted(lintCatalog(list));
+      })
       .catch(() => setHfCatalog([]))
       .finally(() => setHfCatalogLoading(false));
   };
 
   useEffect(() => { load(); }, []);
+
+  /**
+   * lintCatalog(list) -- every rule, run once per catalogue entry.
+   *
+   * The folder is what the skill will actually install into, so the
+   * name-is-the-folder rule has something real to check against. The
+   * prerequisite lookup is the cheap one: the doctor already probes this
+   * machine, but the catalog is read before anyone opens Settings, so a skill
+   * asking for `jq` is reported here rather than when it is used.
+   */
+  const lintCatalog = (list: any[]) => {
+    const out: typeof linted = {};
+    for (const s of list) {
+      const slug = hfSkills.skillSlug(s?.name || '');
+      if (!slug) continue;
+      const result = skillLint.lintSkill(s?.content, { folder: slug });
+      const check = skillPrereqs.checkPrerequisites(
+        { frontmatter: s?.compatibility, content: s?.content },
+        // A tool is "present" unless the app can prove otherwise. Guessing
+        // "missing" here would put a red warning on every skill of a machine
+        // that has the tool, which is the crying-wolf failure this avoids.
+        () => true,
+      );
+      out[slug] = {
+        cost: skillLint.contextCostTokens(s),
+        errors: result.errors,
+        warnings: result.warnings,
+        prereqWarning: skillPrereqs.missingWarning(check.missing),
+        missing: check.missing,
+      };
+    }
+    return out;
+  };
+
+  // What the installed set already costs, so the catalogue can be read against
+  // it: the number that makes a fourth near-identical skill a decision rather
+  // than a reflex.
+  const installedCost = Object.keys(installed).reduce((sum, slug) => {
+    const record = installed[slug];
+    return sum + skillLint.contextCostTokens({ name: record?.name || '', description: '' });
+  }, 0);
 
   const show = (s: Skill) => {
     setOpen(s);
@@ -268,6 +322,11 @@ export default function LibraryScreen() {
               const status = hfSkills.installStatus(s, installed);
               const busy = state?.phase === 'working';
               const record = installed[slug];
+              const review = linted[slug];
+              // A skill that fails a lint rule does not work, so the button is
+              // off rather than present-and-failing: a refusal with the reason
+              // on screen beats an error after three files have landed.
+              const blocked = !!review?.errors.length;
               return (
                 <div key={s.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <button className={`skill-item ${open?.name === s.name ? 'active' : ''}`} onClick={() => { setOpen({ name: s.name, description: s.description, source: s.repo || 'hf' }); setContent(s.content); }}>
@@ -280,16 +339,41 @@ export default function LibraryScreen() {
                     <div className="skill-desc">{s.description}</div>
                     <div className="skill-src">{s.repo}{s.tags?.length ? ' · ' + s.tags.join(', ') : ''}</div>
                   </button>
+                  {/* B2: what this costs every prompt from the moment it lands.
+                      Shown on the row rather than in a tooltip, because a cost
+                      hidden behind a hover is a cost nobody pays attention to. */}
+                  {review && (
+                    <div className="skill-cost">
+                      {skillLint.contextCostLabel(review.cost)} in every prompt
+                      {installedCost + review.cost > 0 && (
+                        <span className="skill-cost-total">
+                          {' '}· {skillLint.contextCostLabel(installedCost + review.cost)} with your installed skills
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {review?.errors.map((e: string, i: number) => (
+                    <div key={i} className="stream-error">Cannot install: {e}</div>
+                  ))}
+                  {review?.warnings.map((w: string, i: number) => (
+                    <div key={i} className="skill-warn">{w}</div>
+                  ))}
+                  {/* B7: unmet prerequisites do not block -- the tool may be
+                      added later -- but they are said out loud here rather than
+                      discovered when the skill is used and fails. */}
+                  {review?.prereqWarning && <div className="skill-warn">{review.prereqWarning}</div>}
                   <div className="skill-src" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       onClick={() => installSkill(s)}
-                      disabled={busy || !localRoot}
-                      title={localRoot
+                      disabled={busy || !localRoot || blocked}
+                      title={blocked
+                        ? review.errors.join(' ')
+                        : localRoot
                         ? `Write this skill into ${hfSkills.SKILLS_DIR}/${slug} in the open folder`
                         : 'Open a folder first — a skill installs into the folder you are working in'}
                     >
                       <Icon name="download" size={12} />{' '}
-                      {busy ? 'Installing…' : status === 'update' ? 'Update' : status === 'installed' ? 'Reinstall' : 'Install'}
+                      {busy ? 'Installing…' : blocked ? 'Cannot install' : status === 'update' ? 'Update' : status === 'installed' ? 'Reinstall' : 'Install'}
                     </button>
                     {!localRoot && <span>Open a folder to install</span>}
                     {localRoot && state?.phase === 'working' && <span>{state.text}</span>}

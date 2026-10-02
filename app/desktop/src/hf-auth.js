@@ -476,11 +476,25 @@
   // --- personal access token ---------------------------------------------
 
   /**
-   * Sign in with a pasted access token: checked against whoami first, so a
-   * typo or a token without the Inference Providers permission is refused
-   * here rather than as a 401 on the first chat turn. Resolves with the user.
+   * checkToken(token, fetchImpl)
+   *
+   * Whether a pasted token works, without storing it. Resolves with the user
+   * Hugging Face says it belongs to, or throws with a sentence that says what
+   * is wrong.
+   *
+   * Separate from useToken because the two answer different questions. "Use
+   * token" commits: it saves the value to the keyring and signs you in. A
+   * *test* must not, because the whole reason to want one is that you are not
+   * yet sure -- you may have pasted the wrong token, or be trying one before
+   * deciding to keep it, and a button labelled "test" that quietly saved a
+   * credential would be a nasty surprise.
+   *
+   * The three failures worth distinguishing are kept distinct because each has
+   * a different next step for the user: a malformed string is a copy-paste
+   * problem, a 401 is a wrong-or-revoked token, and missing the inference
+   * permission is a checkbox on Hugging Face's own page.
    */
-  async function useToken(token, fetchImpl) {
+  async function checkToken(token, fetchImpl) {
     var value = String(token || '').trim();
     if (!/^hf_[A-Za-z0-9]{20,}$/.test(value)) {
       throw new Error('That does not look like a Hugging Face token (they start with hf_).');
@@ -499,6 +513,20 @@
     if (!canInfer) {
       throw new Error('This token cannot call Inference Providers. Tick "Make calls to Inference Providers" when you create it.');
     }
+    return user;
+  }
+
+  /**
+   * Sign in with a pasted access token: checked first, so a typo or a token
+   * without the Inference Providers permission is refused here rather than as a
+   * 401 on the first chat turn. Resolves with the user.
+   *
+   * checkToken does the checking and useToken does the storing, so the two
+   * cannot disagree about what a valid token is.
+   */
+  async function useToken(token, fetchImpl) {
+    var value = String(token || '').trim();
+    var user = await checkToken(value, fetchImpl);
     saveUser(user);
     saveToken({ access_token: value, token_type: 'bearer', source: 'pat' });
     return user;
@@ -534,6 +562,7 @@
     CLIENT_ID_KEY: CLIENT_ID_KEY,
     DOCS_URL: DOCS_URL,
     useToken: useToken,
+    checkToken: checkToken,
     signedIn: signedIn,
     accessToken: accessToken,
     authHeaders: authHeaders,
