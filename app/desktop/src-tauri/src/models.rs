@@ -955,6 +955,25 @@ pub async fn local_model_download(
     let dest = dir.join(&name);
     let part = dir.join(format!("{}.part", name));
 
+    // U04: refuse before the first byte, with the number, when the disk
+    // cannot hold a model. The floor (1 GiB) covers the smallest GGUF plus
+    // headroom; a resume only needs what is still missing. sysfacts owns
+    // the measurement so the guard and the Doctor read the same fact.
+    {
+        let already = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+        let floor: u64 = 1024 * 1024 * 1024;
+        let facts = crate::sysfacts::sysfacts(dir.display().to_string());
+        if let Some(free) = facts.disk_free_bytes {
+            if free + already < floor {
+                return Err(format!(
+                    "Only {} free on {} -- a model needs at least 1 GiB. Free space or pick a smaller quant.",
+                    crate::sysfacts::bytes_label(free),
+                    dir.display()
+                ));
+            }
+        }
+    }
+
     {
         let mut active = match downloading().lock() {
             Ok(g) => g,

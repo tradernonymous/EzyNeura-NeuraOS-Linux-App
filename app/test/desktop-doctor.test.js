@@ -79,9 +79,9 @@ test('every row has the same shape: what, verdict, found, fix', () => {
       assert.equal(typeof r.fix, 'string');
     }
   }
-  // Ten checks, always, in a stable order — a doctor that loses a row silently is worse than none.
+  // Thirteen checks, always, in a stable order — a doctor that loses a row silently is worse than none.
   assert.deepEqual(doctor.verdicts({}).map((r) => r.id),
-    ['engine', 'node', 'git', 'sandbox', 'xdotool', 'hf', 'keys', 'model', 'image', 'disk']);
+    ['engine', 'node', 'git', 'sandbox', 'xdotool', 'hf', 'keys', 'model', 'image', 'disk', 'power', 'link', 'driver']);
 });
 
 test('engine down and Node missing fail with the exact fix', () => {
@@ -252,4 +252,60 @@ test('the screen wears it: card in Settings, Doctor in System, wide, styled', ()
   for (const sel of ['.doctor-rows', '.doctor-row', '.doctor-dot', '.doctor-state', '.doctor-fix']) {
     assert.ok(css.includes(sel + ' {'), `index.css has ${sel}`);
   }
+});
+
+test('U07/U35: power, link and driver ride the same probe line, read-only', () => {
+  const cmd = doctor.probeCommand();
+  assert.match(cmd, /BAT\*\/status/, 'battery comes from sysfs');
+  assert.match(cmd, /nmcli/, 'metered comes from NetworkManager');
+  assert.match(cmd, /sys\/module\/nouveau/, 'nouveau is a directory test');
+  assert.match(cmd, /nvidia-smi/, 'the proprietary driver is a presence check');
+  const stripped = cmd.replace(/\d?>\/?dev\/null/g, '').replace(/\d?>&\d/g, '');
+  assert.ok(!/[<>]/.test(stripped), 'still read-only: no new redirections');
+});
+
+test('U07/U35: the new probe lines parse, absence stays unknown', () => {
+  const parsed = doctor.parseProbe(
+    ['battery:Discharging', 'metered:yes (guessed)', 'nvidia:no', 'nouveau:yes'].join('\n'),
+  );
+  assert.equal(parsed.battery, 'Discharging');
+  assert.equal(parsed.metered, true);
+  assert.equal(parsed.nvidia, false);
+  assert.equal(parsed.nouveau, true);
+  const empty = doctor.parseProbe('battery:\nmetered:unknown\n');
+  assert.equal(empty.battery, null);
+  assert.equal(empty.metered, null);
+});
+
+test('U07: discharging warns, AC passes, a desktop skips', () => {
+  const onBattery = byId(doctor.verdicts({
+    shell: true, platform: 'linux',
+    probe: { tools: {}, name: 'a', email: 'b', diskGb: 120, battery: 'Discharging', metered: false, nvidia: null, nouveau: null },
+  }));
+  assert.equal(onBattery.power.state, 'warn');
+  assert.match(onBattery.power.note, /battery/);
+  assert.equal(onBattery.link.state, 'skip', 'an unmetered link is not news');
+
+  const onAc = byId(doctor.verdicts({
+    shell: true, platform: 'linux',
+    probe: { tools: {}, name: 'a', email: 'b', diskGb: 120, battery: 'Charging', metered: true, nvidia: null, nouveau: null },
+  }));
+  assert.equal(onAc.power.state, 'ok');
+  assert.equal(onAc.link.state, 'warn');
+  assert.match(onAc.link.note, /Metered/);
+});
+
+test('U35: nvidia-smi answering passes, nouveau-alone warns with the fix', () => {
+  const withNvidia = byId(doctor.verdicts({
+    shell: true, platform: 'linux',
+    probe: { tools: {}, name: 'a', email: 'b', diskGb: 120, battery: null, metered: null, nvidia: true, nouveau: false },
+  }));
+  assert.equal(withNvidia.driver.state, 'ok');
+
+  const nouveauOnly = byId(doctor.verdicts({
+    shell: true, platform: 'linux',
+    probe: { tools: {}, name: 'a', email: 'b', diskGb: 120, battery: null, metered: null, nvidia: false, nouveau: true },
+  }));
+  assert.equal(nouveauOnly.driver.state, 'warn');
+  assert.match(nouveauOnly.driver.fix, /Driver Manager/);
 });

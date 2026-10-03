@@ -1,0 +1,27 @@
+# Workflow lint: every workflow file must parse, and every external action
+# must be SHA-pinned. Gating, not informational -- an unparseable workflow
+# fails as a nameless file-run that is easy to miss on a PR (this happened
+# with agent-triage.yml), so the check belongs where it cannot be skipped.
+name: Workflow lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Parse workflows, enforce SHA pins
+        run: |
+          pip install --quiet pyyaml
+          python3 scripts/check-workflows.py

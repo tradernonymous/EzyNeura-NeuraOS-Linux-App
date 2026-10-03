@@ -181,9 +181,34 @@ jobs:
               --generate-notes
           fi
 
+      # U03: a hyphenated tag (v2.12.0-rc1) is a preview, not a release.
+      # It is marked prerelease, and the desktop-preview moving tag is
+      # repointed at it with the same files, so the app's preview channel
+      # has something to read. Stable tags leave the preview line alone.
+      - name: Prereleases move the desktop-preview tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.stage.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          case "$tag" in
+            *-*) ;;
+            *) echo "stable tag: the preview channel keeps its current build"; exit 0 ;;
+          esac
+          gh release edit "$tag" --prerelease --repo "$GITHUB_REPOSITORY"
+          gh release delete desktop-preview --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh release create desktop-preview release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "NeuraOS preview ($VERSION)" \
+            --notes "A preview build for the app's preview update channel. Not a release." \
+            --prerelease
+
   apt:
     needs: [stage, release]
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    # Prereleases never enter the stable apt repository: a -rc .deb must not
+    # be offered as an upgrade to stable-channel installs (U03).
+    if: (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) || inputs.publish
     runs-on: ubuntu-22.04
     permissions:
       pages: write

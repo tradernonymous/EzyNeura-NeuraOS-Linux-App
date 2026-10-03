@@ -1,0 +1,30 @@
+# Deterministic design audit (U46). Informational on purpose: this job reports
+# new hardcoded colours, sub-12px text, unreachable click targets, alt-less
+# images and !important flags, but never fails the gate -- the tree carries
+# 268 grandfathered findings (2026-10-03) that U31/U32's human pass will burn
+# down. The BASELINE below is the ratchet: lower it as fixes land, never raise
+# it. When it reaches zero, promote this job into desktop-build.yml as a gate.
+name: Design audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Deterministic UI rules (new findings fail, old ones are grandfathered)
+        env:
+          DESIGN_AUDIT_BASELINE: '268'
+        run: node scripts/design-audit.mjs

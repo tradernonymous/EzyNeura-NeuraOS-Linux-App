@@ -81,10 +81,26 @@ function recording(base: typeof fetch): typeof fetch {
 
 // The Linux port has its own releases (docs/MASTER_PLAN.md L7), versioned
 // and read through GitHub's releases/latest redirect; the Windows app keeps
-// upstream's moving tag. Decided once, from the platform the window is on.
-const release: { repo?: string; tag?: string } = isLinux()
-  ? { repo: LINUX_RELEASES_REPO, tag: update.LATEST_TAG }
-  : {};
+// upstream's moving tag. U03 adds the channel: stable follows releases,
+// preview follows the desktop-preview moving tag that release.yml advances
+// on prerelease tags. The tag is read at check time so flipping the channel
+// takes effect on the next check, not the next launch.
+const CHANNEL_KEY = 'freeai4u.updateChannel';
+
+export type UpdateChannel = 'stable' | 'preview';
+
+export function readChannel(): UpdateChannel {
+  try {
+    return localStorage.getItem(CHANNEL_KEY) === 'preview' ? 'preview' : 'stable';
+  } catch {
+    return 'stable';
+  }
+}
+
+function releaseFor(channel: UpdateChannel): { repo?: string; tag?: string } {
+  if (!isLinux()) return {};
+  return { repo: LINUX_RELEASES_REPO, tag: update.channelTag(channel) };
+}
 
 const DISMISSED_KEY = 'freeai4u.updateDismissed';
 const POLL_MS = 1000 * 60 * 60;
@@ -128,6 +144,9 @@ export interface UpdateCheck {
   downloaded: DownloadedBuild | null;
   /** Download, verify and run the installer (or save the portable exe, or open the release page). */
   install: () => void;
+  /** U03: stable follows releases, preview follows prereleases. */
+  channel: UpdateChannel;
+  setChannel: (channel: UpdateChannel) => void;
 }
 
 function dismissedVersion(): string {
@@ -151,6 +170,16 @@ export function useUpdateCheck(): UpdateCheck {
   const [installNotice, setInstallNotice] = useState('');
   const [checkError, setCheckError] = useState('');
   const [downloaded, setDownloaded] = useState<DownloadedBuild | null>(null);
+  const [channel, setChannelState] = useState<UpdateChannel>(() => readChannel());
+
+  const setChannel = useCallback((next: UpdateChannel) => {
+    setChannelState(next);
+    try {
+      localStorage.setItem(CHANNEL_KEY, next);
+    } catch { /* best effort */ }
+    setInfo(null);
+    setCheckError('');
+  }, []);
   // How this copy was installed, so the banner names the artifact that will
   // actually be used. Undefined until the shell answers.
   const [kind, setKind] = useState<import('./update.js').InstallKind | undefined>(undefined);
@@ -172,7 +201,7 @@ export function useUpdateCheck(): UpdateCheck {
     const fetchImpl = hasShell() ? signedFetch : fetch;
     lastCheckFailure = '';
     noReleaseYet = false;
-    const found = await update.fetchVersion({ fetchImpl: recording(fetchImpl), repo: release.repo, tag: release.tag });
+    const found = await update.fetchVersion({ fetchImpl: recording(fetchImpl), repo: releaseFor(channel).repo, tag: releaseFor(channel).tag });
     if (!found && noReleaseYet) {
       setCheckError('');
       return 'none';
@@ -186,7 +215,7 @@ export function useUpdateCheck(): UpdateCheck {
     if (!manual && dismissedVersion() === found.version) return 'current';
     setInfo(found);
     return 'update';
-  }, []);
+  }, [channel]);
 
   useEffect(() => {
     void checkNow();
@@ -206,11 +235,11 @@ export function useUpdateCheck(): UpdateCheck {
       // Asked again rather than read from state: the answer decides which
       // installer runs, and a click before the first answer must not guess.
       const kind = await installKind();
-      const plan = update.installPlan({ installer: update.installerFor(info, kind), repo: release.repo, tag: release.tag });
+      const plan = update.installPlan({ installer: update.installerFor(info, kind), repo: releaseFor(channel).repo, tag: releaseFor(channel).tag });
       if (!plan) {
         // A portable copy and a release with no portable build: the release
         // page is where the user picks a file, rather than an installer run here.
-        if (info) window.open(update.desktopUrl(release.repo, release.tag), '_blank', 'noreferrer');
+        if (info) window.open(update.desktopUrl(releaseFor(channel).repo, releaseFor(channel).tag), '_blank', 'noreferrer');
         return;
       }
       // Without a shell there is nothing to install with; the release page is the
@@ -253,14 +282,14 @@ export function useUpdateCheck(): UpdateCheck {
         setInstallError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [info]);
+  }, [info, channel]);
 
   return {
     info,
     installer: update.installerFor(info, kind),
     dismiss,
     humanSize: update.humanSize,
-    releaseUrl: update.desktopUrl(release.repo, release.tag),
+    releaseUrl: update.desktopUrl(releaseFor(channel).repo, releaseFor(channel).tag),
     checkNow,
     checkError,
     installState,
@@ -268,5 +297,7 @@ export function useUpdateCheck(): UpdateCheck {
     installNotice,
     downloaded,
     install,
+    channel,
+    setChannel,
   };
 }

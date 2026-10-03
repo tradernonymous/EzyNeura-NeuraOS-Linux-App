@@ -29,10 +29,21 @@
   // releases and reads GitHub's own "latest" redirect instead (tag LATEST).
   var DEFAULT_TAG = 'desktop-latest';
   var LATEST_TAG = 'latest';
+  // U03: the preview channel reads the manifest from a moving tag that
+  // release.yml advances on every prerelease (v*-*) tag. It is a tag, not
+  // 'latest', because GitHub's latest redirect only serves non-prereleases.
+  var PREVIEW_TAG = 'desktop-preview';
   var VERSION_FILE = 'desktop-version.json';
   var DEFAULT_ATTEMPTS = 3;
   var DEFAULT_BASE_DELAY_MS = 1500;
   var MAX_DELAY_MS = 8000;
+
+  // 'stable' follows the newest release, 'preview' the newest prerelease.
+  // Anything else (including a stored value from a future with more
+  // channels) falls back to stable: a channel must never point nowhere.
+  function channelTag(channel) {
+    return channel === 'preview' ? PREVIEW_TAG : LATEST_TAG;
+  }
 
   // github.com/<repo>/releases/download/<tag>/ -- or, for LATEST_TAG, the
   // releases/latest/download/ redirect GitHub keeps pointing at the newest
@@ -232,6 +243,8 @@
     DEFAULT_REPO: DEFAULT_REPO,
     DEFAULT_TAG: DEFAULT_TAG,
     LATEST_TAG: LATEST_TAG,
+    PREVIEW_TAG: PREVIEW_TAG,
+    channelTag: channelTag,
     VERSION_FILE: VERSION_FILE,
     DEFAULT_ATTEMPTS: DEFAULT_ATTEMPTS,
     DEFAULT_BASE_DELAY_MS: DEFAULT_BASE_DELAY_MS,

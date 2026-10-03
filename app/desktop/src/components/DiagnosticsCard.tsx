@@ -6,7 +6,7 @@
 // safe to paste: no token, no key, no chat content.
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { appRelaunch, crashLogReveal, diagnosticsFacts, hasShell, rendererModeGet, rendererModeSet, type DiagnosticsFacts, type RendererMode } from '../bridge';
+import { appRelaunch, crashLogReveal, diagnosticsFacts, engineLogVacuum, hasShell, rendererModeGet, rendererModeSet, type DiagnosticsFacts, type RendererMode } from '../bridge';
 import '../diagnostics.js';
 
 const diagnostics: typeof import('../diagnostics.js') = (globalThis as any).FreeAI4UDiagnostics;
@@ -71,6 +71,15 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
           {hasShell() && (
             <button type="button" onClick={() => crashLogReveal().catch((e: Error) => setMessage(e.message || String(e)))}>
               Open the logs folder
+            </button>
+          )}
+          {hasShell() && (
+            <button
+              type="button"
+              title="Shrink the engine's systemd journal to 200M / 30 days (U06). Nothing else is touched."
+              onClick={() => engineLogVacuum().then(setMessage).catch((e: Error) => setMessage(e.message || String(e)))}
+            >
+              Vacuum engine logs
             </button>
           )}
         </div>

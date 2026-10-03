@@ -18,20 +18,27 @@
   'use strict';
 
   // One shell line for everything that is a presence or a config read. It is
-  // read-only by construction: `command -v`, `git config --get`, `df`.
+  // read-only by construction: `command -v`, `git config --get`, `df`,
+  // sysfs reads, and `nmcli`/`nvidia-smi` presence probes. U07 (power and
+  // metered link) and U35 (driver sanity) ride the same line so the Doctor
+  // stays one round-trip.
   function probeCommand() {
     return (
       'for t in git xdotool bwrap docker podman; do ' +
       'command -v "$t" >/dev/null 2>&1 && echo "tool:$t=yes" || echo "tool:$t=no"; done; ' +
       'echo "name:$(git config --get user.name 2>/dev/null)"; ' +
       'echo "email:$(git config --get user.email 2>/dev/null)"; ' +
-      "df --output=avail -B1073741824 . 2>/dev/null | tail -1 | tr -d ' ' | sed 's/^/disk:/'"
+      "df --output=avail -B1073741824 . 2>/dev/null | tail -1 | tr -d ' ' | sed 's/^/disk:/'; " +
+      'echo "battery:$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1)"; ' +
+      'echo "metered:$(nmcli -t -f GENERAL.METERED dev show 2>/dev/null | head -1 | cut -d: -f2)"; ' +
+      'echo "nouveau:$([ -d /sys/module/nouveau ] && echo yes || echo no)"; ' +
+      'echo "nvidia:$(command -v nvidia-smi >/dev/null 2>&1 && echo yes || echo no)"'
     );
   }
 
   /** The probe's stdout parsed into facts. Tolerates every line it does not know. */
   function parseProbe(stdout) {
-    var out = { tools: {}, name: '', email: '', diskGb: null };
+    var out = { tools: {}, name: '', email: '', diskGb: null, battery: null, metered: null, nvidia: null, nouveau: null };
     var lines = String(stdout == null ? '' : stdout).split(/\r?\n/);
     for (var i = 0; i < lines.length; i += 1) {
       var at = lines[i].indexOf(':');
@@ -48,6 +55,16 @@
       else if (key === 'disk') {
         var gb = Number(value);
         if (Number.isFinite(gb)) out.diskGb = gb;
+      } else if (key === 'battery') {
+        if (value) out.battery = value;
+      } else if (key === 'metered') {
+        var met = value.toLowerCase();
+        if (met.indexOf('yes') === 0) out.metered = true;
+        else if (met.indexOf('no') === 0) out.metered = false;
+      } else if (key === 'nvidia') {
+        out.nvidia = value === 'yes';
+      } else if (key === 'nouveau') {
+        out.nouveau = value === 'yes';
       }
     }
     return out;
@@ -189,6 +206,38 @@
       }
     } else {
       rows.push(row('disk', 'Free disk space', 'skip', 'Not probed on this build.'));
+    }
+
+    // Power and link (U07): a laptop on battery or a metered link is not
+    // broken, so neither row fails — but both change what the app should do
+    // next (defer a 4 GB pull), and silence about them reads as a hang.
+    if (!shell || platform === 'windows' || !probe || probe.battery == null) {
+      rows.push(row('power', 'Power', 'skip', 'Not probed on this build.'));
+    } else if (probe.battery === 'Discharging') {
+      rows.push(row('power', 'Power', 'warn', 'On battery power: large downloads and long local runs drain it.'));
+    } else {
+      rows.push(row('power', 'Power', 'ok', 'On AC power (' + probe.battery.toLowerCase() + ').'));
+    }
+    if (!shell || platform === 'windows' || !probe || probe.metered == null) {
+      rows.push(row('link', 'Network link', 'skip', 'Not probed on this build.'));
+    } else if (probe.metered) {
+      rows.push(row('link', 'Network link', 'warn', 'Metered connection reported: model and runtime downloads wait for an unmetered link unless started by hand.'));
+    } else {
+      rows.push(row('link', 'Network link', 'skip', 'Unmetered — nothing to say.'));
+    }
+
+    // Driver sanity (U35): the thing local-AI users break most. nvidia-smi
+    // answering means the proprietary driver works; nouveau without it means
+    // GPU models fall back to the CPU with no explanation anywhere else.
+    if (!shell || platform === 'windows' || !probe || probe.nvidia == null) {
+      rows.push(row('driver', 'GPU driver', 'skip', 'Not probed on this build.'));
+    } else if (probe.nvidia) {
+      rows.push(row('driver', 'GPU driver', 'ok', 'NVIDIA driver answers (nvidia-smi).'));
+    } else if (probe.nouveau) {
+      rows.push(row('driver', 'GPU driver', 'warn', 'Nouveau open driver, no NVIDIA driver: GPU models run on the CPU.',
+        'Mint menu → Driver Manager → pick the recommended NVIDIA driver, then reboot.'));
+    } else {
+      rows.push(row('driver', 'GPU driver', 'skip', 'No NVIDIA GPU detected — local models run on the CPU.'));
     }
 
     return rows;

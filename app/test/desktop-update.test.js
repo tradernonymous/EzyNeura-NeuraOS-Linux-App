@@ -131,3 +131,25 @@ test("the page recognises the shell's own wording for a missing manifest", () =>
   assert.equal(`${url} answered HTTP 502`.match(missing), null);
   assert.equal(`this release is not signed (${url}.sig answered HTTP 404); refusing to update from it`.match(missing), null);
 });
+
+test('U03: the preview channel reads the desktop-preview tag, unknown channels fall back to stable', () => {
+  assert.equal(update.channelTag('preview'), update.PREVIEW_TAG);
+  assert.equal(update.channelTag('stable'), update.LATEST_TAG);
+  assert.equal(update.channelTag('beta'), update.LATEST_TAG);
+  assert.equal(update.channelTag(null), update.LATEST_TAG);
+  assert.equal(update.channelTag(undefined), update.LATEST_TAG);
+  const preview = update.versionUrl(LINUX_REPO, update.channelTag('preview'));
+  assert.match(preview, /releases\/download\/desktop-preview\/desktop-version\.json/);
+  const stable = update.versionUrl(LINUX_REPO, update.channelTag('stable'));
+  assert.match(stable, /releases\/latest\/download\/desktop-version\.json/);
+});
+
+test('U03: hyphenated tags move the preview line and stay out of the stable apt repo', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
+  assert.match(workflow, /desktop-preview/);
+  assert.match(workflow, /--prerelease/);
+  assert.match(workflow, /contains\(github\.ref, '-'\)/);
+  const hook = fs.readFileSync(path.join(ROOT, 'app', 'desktop', 'src', 'useUpdateCheck.ts'), 'utf8');
+  assert.match(hook, /freeai4u\.updateChannel/);
+  assert.match(hook, /channelTag\(channel\)/);
+});
