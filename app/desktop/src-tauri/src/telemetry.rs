@@ -11,7 +11,6 @@
 // does the Doctor fail" for the first time.
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
 
 /// The only events that can be counted. Anything else passed to
 /// `telemetry_record` is ignored, so a new call site cannot silently invent
