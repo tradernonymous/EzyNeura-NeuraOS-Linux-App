@@ -114,6 +114,10 @@ export async function engineLogVacuum(): Promise<string> {
   return call<string>('engine_log_vacuum');
 }
 
+export async function crashBundleSave(): Promise<string> {
+  return call<string>('crash_bundle_save');
+}
+
 // ---- opt-in counts-only telemetry (U01) ------------------------------------
 //
 // Default off, aggregate counters only (launch, doctor_run, crash,

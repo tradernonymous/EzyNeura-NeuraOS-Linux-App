@@ -306,6 +306,7 @@ fn main() {
             app_relaunch,
             log_client_event,
             crash_log_reveal,
+            crash::crash_bundle_save,
             runtimes::runtime_install,
             runtimes::runtime_facts,
             engine::engine_service_status,
