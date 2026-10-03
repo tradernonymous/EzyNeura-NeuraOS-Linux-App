@@ -91,6 +91,29 @@ export async function diagnosticsFacts(): Promise<DiagnosticsFacts> {
   return call<DiagnosticsFacts>('diagnostics');
 }
 
+// ---- machine guard facts (U04/U06/U07/U35) --------------------------------
+//
+// Read-only facts from src-tauri/src/sysfacts.rs: free disk, battery,
+// metered link, NVIDIA driver, nouveau, Vulkan ICD. Unknown is null/false,
+// never an error: a missing nmcli is not a fact about the machine.
+export interface SysFacts {
+  disk_free_bytes: number | null;
+  disk_path: string;
+  on_battery: boolean | null;
+  metered: boolean | null;
+  nvidia_driver: boolean;
+  nouveau_loaded: boolean;
+  vulkan_icd: boolean;
+}
+
+export async function sysFacts(path: string): Promise<SysFacts> {
+  return call<SysFacts>('sysfacts', { path });
+}
+
+export async function engineLogVacuum(): Promise<string> {
+  return call<string>('engine_log_vacuum');
+}
+
 // ---- the local folder ----------------------------------------------------
 //
 // Real paths on this machine, confined to one folder by the shell (src-tauri/

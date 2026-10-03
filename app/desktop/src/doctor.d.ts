@@ -30,6 +30,15 @@ export interface ProbeFacts {
   name: string;
   email: string;
   diskGb: number | null;
+  /** sysfs battery status (Discharging/Charging/Full), or null when there is
+   * no battery to ask. U07. */
+  battery: string | null;
+  /** NetworkManager's metered flag for the default connection. U07. */
+  metered: boolean | null;
+  /** nvidia-smi answers: the proprietary driver is present. U35. */
+  nvidia: boolean | null;
+  /** /sys/module/nouveau exists: the open driver is loaded. U35. */
+  nouveau: boolean | null;
 }
 
 /** The one read-only shell line the doctor probes with. */

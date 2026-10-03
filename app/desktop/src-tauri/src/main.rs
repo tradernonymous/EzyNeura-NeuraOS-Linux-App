@@ -59,6 +59,7 @@ mod selection;
 mod save;
 mod sd;
 mod secrets;
+mod sysfacts;
 #[cfg(windows)]
 mod webview2;
 mod whisper;
@@ -331,6 +332,8 @@ fn main() {
             acp::acp_stop,
             acp::acp_list,
             save::save_file_dialog,
+            sysfacts::sysfacts,
+            sysfacts::engine_log_vacuum,
             net::remote_get,
             net::update_manifest,
             net::remote_download,
