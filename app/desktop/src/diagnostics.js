@@ -86,10 +86,19 @@
 
   // Anything shaped like a Hub token, an OpenAI key or an Authorization header.
   function redact(text) {
+    // U48: the pattern list is the PII bar, not a suggestion. GitHub tokens,
+    // AWS keys and PEM private-key blocks ride in crash logs and pasted
+    // diagnostics exactly the way HF/OpenAI keys do, so they die the same
+    // way. Private keys are block-matched, not line-matched: half a key is
+    // still a key worth stealing the other half of.
     return String(text == null ? '' : text)
       .replace(/hf_[A-Za-z0-9]{8,}/g, 'hf_<redacted>')
       .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-<redacted>')
-      .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1<redacted>');
+      .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1<redacted>')
+      .replace(/gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}/g, 'gh_<redacted>')
+      .replace(/AKIA[0-9A-Z]{16}/g, 'AKIA<redacted>')
+      .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, '<private key redacted>')
+      .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g, '<private key redacted>');
   }
 
   // An engine address can carry a token or a key in its query string; the
