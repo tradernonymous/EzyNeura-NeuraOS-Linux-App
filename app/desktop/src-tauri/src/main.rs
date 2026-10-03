@@ -60,6 +60,7 @@ mod save;
 mod sd;
 mod secrets;
 mod sysfacts;
+mod telemetry;
 #[cfg(windows)]
 mod webview2;
 mod whisper;
@@ -305,6 +306,7 @@ fn main() {
             app_relaunch,
             log_client_event,
             crash_log_reveal,
+            crash::crash_bundle_save,
             runtimes::runtime_install,
             runtimes::runtime_facts,
             engine::engine_service_status,
@@ -334,6 +336,9 @@ fn main() {
             save::save_file_dialog,
             sysfacts::sysfacts,
             sysfacts::engine_log_vacuum,
+            telemetry::telemetry_get,
+            telemetry::telemetry_set,
+            telemetry::telemetry_record,
             net::remote_get,
             net::update_manifest,
             net::remote_download,

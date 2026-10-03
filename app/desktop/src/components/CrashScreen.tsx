@@ -4,16 +4,16 @@
 // back (Relaunch, through Tauri's own restart so the shutdown runs and the
 // window state is saved), and where the note went (the crash log).
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { appRelaunch, hasShell, logClientEvent } from '../bridge';
+import { appRelaunch, crashBundleSave, hasShell, logClientEvent } from '../bridge';
 
 type Props = { children: ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; savedReport: string | null; saveFailed: boolean };
 
 export default class CrashScreen extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, savedReport: null, saveFailed: false };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, savedReport: null, saveFailed: false };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -37,7 +37,23 @@ export default class CrashScreen extends Component<Props, State> {
             </button>
           ) : null}
           <button onClick={() => window.location.reload()}>Reload the window</button>
+          {hasShell() ? (
+            <button
+              title="Write a redacted crash report next to the log, safe to attach to a bug report. Nothing is sent anywhere."
+              onClick={() => crashBundleSave()
+                .then((path) => this.setState({ savedReport: path, saveFailed: false }))
+                .catch(() => this.setState({ saveFailed: true }))}
+            >
+              Save a crash report
+            </button>
+          ) : null}
         </div>
+        {this.state.savedReport && (
+          <p className="settings-hint">Crash report saved to {this.state.savedReport} — read it, then attach it to your report.</p>
+        )}
+        {this.state.saveFailed && (
+          <p className="settings-hint">The report could not be written; the log folder button in Settings → Diagnostics still opens the raw log.</p>
+        )}
         <p className="settings-hint">
           Your chats are saved on this machine and will be there after the relaunch.
         </p>

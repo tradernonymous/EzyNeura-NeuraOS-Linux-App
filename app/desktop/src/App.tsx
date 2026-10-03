@@ -19,7 +19,7 @@ import { useRecipeScheduler, useEvalScheduler } from './schedulers';
 import LocalTree from './components/LocalTree';
 import LocalTerminal from './components/LocalTerminal';
 import './shell.js';
-import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, projectHome, gitClone, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet } from './bridge';
+import { chatStoreBackend, chatStoreSetAside, onAppQuitting, quitReady, hasShell, launchTakePath, onDeepLink, onOpenPath, pickFolder, projectHome, gitClone, quickHotkeySet, secretDelete, secretGet, secretSet, selectionHotkeySet, engineStart, preferLocalEngine, mainShow, onScreenAsk, portalShortcutsBind, screenHotkeySet, telemetryRecord } from './bridge';
 import { askAboutScreen, readScreenHotkey } from './desktopControl';
 import { readEnabled as voiceTypeEnabled, readHotkey as voiceTypeHotkey } from './voiceType';
 import { QUICK_HANDOFF_KEY } from './screens/QuickAsk';
@@ -164,6 +164,9 @@ export default function App() {
   useEvalScheduler();
   // The ambient layer's <=6px drift toward the pointer; off under reduced motion.
   useParallax();
+  // U01: one anonymous launch count per start, recorded only when the person
+  // opted in (the shell no-ops otherwise, so this call is always safe).
+  useEffect(() => { void telemetryRecord('launch').catch(() => {}); }, []);
   // Cold-start marks (NEURA-035, reported in Settings → Diagnostics). Layout
   // effects run right after React's first commit; "chat ready" is the first
   // frame after paint with Chat's composer in the DOM. Both are set once.

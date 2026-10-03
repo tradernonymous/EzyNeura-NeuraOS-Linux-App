@@ -7,6 +7,7 @@ import {
   localServerFind,
   projectHome,
   runLocal,
+  telemetryRecord,
 } from '../bridge';
 import { isLinux } from '../platform';
 import Icon from './Icon';
@@ -75,6 +76,7 @@ export default function DoctorCard({ engineHealthy }: Props) {
     facts.imageServer = image;
     facts.probe = probe ? doctor.parseProbe(probe.stdout) : null;
     setRows(doctor.verdicts(facts));
+    void telemetryRecord('doctor_run').catch(() => {});
     setRanAt(Date.now());
     setBusy(false);
   }, []);

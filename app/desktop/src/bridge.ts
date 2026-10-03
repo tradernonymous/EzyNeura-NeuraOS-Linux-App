@@ -114,6 +114,32 @@ export async function engineLogVacuum(): Promise<string> {
   return call<string>('engine_log_vacuum');
 }
 
+export async function crashBundleSave(): Promise<string> {
+  return call<string>('crash_bundle_save');
+}
+
+// ---- opt-in counts-only telemetry (U01) ------------------------------------
+//
+// Default off, aggregate counters only (launch, doctor_run, crash,
+// download_done, run_done). No network anywhere: the counts live in a JSON
+// file beside the crash log, and sharing means the user copies numbers.
+export interface TelemetryState {
+  enabled: boolean;
+  counts: Record<string, number>;
+}
+
+export async function telemetryGet(): Promise<TelemetryState> {
+  return call<TelemetryState>('telemetry_get');
+}
+
+export async function telemetrySet(enabled: boolean): Promise<TelemetryState> {
+  return call<TelemetryState>('telemetry_set', { enabled });
+}
+
+export async function telemetryRecord(event: string): Promise<boolean> {
+  return call<boolean>('telemetry_record', { event });
+}
+
 // ---- the local folder ----------------------------------------------------
 //
 // Real paths on this machine, confined to one folder by the shell (src-tauri/
