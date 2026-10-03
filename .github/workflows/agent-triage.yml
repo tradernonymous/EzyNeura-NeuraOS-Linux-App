@@ -43,7 +43,7 @@ jobs:
     steps:
       - name: Skip without a key (green no-op)
         if: ${{ secrets.ANTHROPIC_API_KEY == '' }}
-        run: echo "No ANTHROPIC_API_KEY secret: triage skipped by design."
+        run: echo 'No ANTHROPIC_API_KEY secret - triage skipped by design.'
 
       # Pinned to a commit SHA like every other action in this repo.
       # Check https://github.com/anthropics/claude-code-action/releases for
@@ -53,4 +53,4 @@ jobs:
         uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1 (2026-10-03; re-pin on upgrade)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: ${{ inputs.prompt || 'Review this thread against docs/UPGRADE_PLAN_03OCT.md and docs/BACKLOG.md: is it already covered, and by what? Answer in three bullets.' }}
+          prompt: "${{ inputs.prompt || 'Review this thread against docs/UPGRADE_PLAN_03OCT.md and docs/BACKLOG.md - is it already covered, and by what? Answer in three bullets.' }}"
