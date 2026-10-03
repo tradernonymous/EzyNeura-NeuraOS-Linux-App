@@ -42,6 +42,9 @@ export interface StatusBarProps {
   checkError: string;
   /** Download, verify and run the installer (the banner's flow). */
   onInstallUpdate: () => void;
+  /** U03: stable follows releases, preview follows prereleases. */
+  updateChannel: 'stable' | 'preview';
+  onUpdateChannel: (channel: 'stable' | 'preview') => void;
   installState: InstallState;
   installError: string;
   /** A portable copy's result: where the new exe was saved. */
@@ -264,7 +267,7 @@ function useLocalChip(): import('../local-status.js').LocalChip {
 
 export default function StatusBar({
   engine, state, signedIn, updateAvailable, onCheckUpdates, checkError, onInstallUpdate,
-  installState, installError, installNotice,
+  installState, installError, installNotice, updateChannel, onUpdateChannel,
 }: StatusBarProps) {
   const tone = TONE[state] || TONE.checking;
   const local = useLocalChip();
@@ -304,6 +307,17 @@ export default function StatusBar({
         installError={installError}
         installNotice={installNotice}
       />
+      <label className="status-item status-muted" title="Stable follows releases; preview follows prerelease builds (desktop-preview tag).">
+        Channel{' '}
+        <select
+          aria-label="Update channel"
+          value={updateChannel}
+          onChange={(e) => onUpdateChannel(e.target.value === 'preview' ? 'preview' : 'stable')}
+        >
+          <option value="stable">Stable</option>
+          <option value="preview">Preview</option>
+        </select>
+      </label>
       <span className="status-item status-muted">v{APP_VERSION}</span>
     </footer>
   );

@@ -14,6 +14,10 @@ export declare const DEFAULT_REPO: string;
 export declare const DEFAULT_TAG: string;
 /** The tag value that means GitHub's own releases/latest redirect. */
 export declare const LATEST_TAG: string;
+/** Moving tag release.yml advances on every prerelease tag (U03). */
+export declare const PREVIEW_TAG: string;
+/** 'stable' follows releases, 'preview' prereleases; unknown falls back to stable. */
+export declare function channelTag(channel: string | null | undefined): string;
 export declare const VERSION_FILE: string;
 export declare const DEFAULT_ATTEMPTS: number;
 export declare const DEFAULT_BASE_DELAY_MS: number;

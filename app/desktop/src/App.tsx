@@ -123,6 +123,8 @@ export default function App() {
     checkNow,
     checkError,
     installNotice,
+    channel: updateChannel,
+    setChannel: setUpdateChannel,
   } = useUpdateCheck();
   const [showFolder, setShowFolder] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
@@ -872,6 +874,8 @@ export default function App() {
         // check (dismissed versions are reported) and the banner's install flow.
         onCheckUpdates={() => checkNow(true)}
         checkError={checkError}
+        updateChannel={updateChannel}
+        onUpdateChannel={setUpdateChannel}
         onInstallUpdate={installUpdate}
         installState={installState}
         installError={installError}
