@@ -8,8 +8,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { appRelaunch, crashLogReveal, diagnosticsFacts, engineLogVacuum, hasShell, rendererModeGet, rendererModeSet, telemetryGet, telemetrySet, type DiagnosticsFacts, type RendererMode, type TelemetryState } from '../bridge';
 import '../diagnostics.js';
+import '../backup.js';
 
 const diagnostics: typeof import('../diagnostics.js') = (globalThis as any).FreeAI4UDiagnostics;
+const backupLib: typeof import('../backup.js') = (globalThis as any).FreeAI4UBackup;
 
 export default function DiagnosticsCard({ state }: { state?: string }) {
   const [facts, setFacts] = useState<DiagnosticsFacts | null>(null);
@@ -86,6 +88,54 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
               Vacuum engine logs
             </button>
           )}
+          <button
+            type="button"
+            title="Download settings as a file (U08). Secrets never leave; chats are not settings and stay."
+            onClick={() => {
+              try {
+                const doc = backupLib.exportBackup(window.localStorage);
+                const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'neuraos-settings.json';
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                const n = Object.keys(doc.values).length;
+                setMessage(`Exported ${n} setting${n === 1 ? '' : 's'} (${doc.skippedSecrets.length} secret(s) left behind).`);
+              } catch (e: unknown) {
+                setMessage(`Export failed: ${(e as Error).message || String(e)}`);
+              }
+            }}
+          >
+            Export settings
+          </button>
+          <label className="status-item status-button" title="Restore settings from a file (U08). Only keys this build knows are written; secrets are never imported.">
+            Import settings
+            <input
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const result = backupLib.importBackup(JSON.parse(String(reader.result)), window.localStorage);
+                    if (result.errors.length) {
+                      setMessage(`Import refused: ${result.errors.join('; ')}`);
+                    } else {
+                      setMessage(`Restored ${result.restored.length} setting(s), skipped ${result.skipped.length}. Takes effect on relaunch for most settings.`);
+                    }
+                  } catch (err: unknown) {
+                    setMessage(`Import refused: not a settings file (${(err as Error).message || String(err)}).`);
+                  }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
         </div>
         {message && <p className="settings-hint">{message}</p>}
         {hasShell() && telemetry && (
