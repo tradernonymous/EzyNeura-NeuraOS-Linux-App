@@ -6,7 +6,7 @@
 // safe to paste: no token, no key, no chat content.
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { appRelaunch, crashLogReveal, diagnosticsFacts, engineLogVacuum, hasShell, rendererModeGet, rendererModeSet, type DiagnosticsFacts, type RendererMode } from '../bridge';
+import { appRelaunch, crashLogReveal, diagnosticsFacts, engineLogVacuum, hasShell, rendererModeGet, rendererModeSet, telemetryGet, telemetrySet, type DiagnosticsFacts, type RendererMode, type TelemetryState } from '../bridge';
 import '../diagnostics.js';
 
 const diagnostics: typeof import('../diagnostics.js') = (globalThis as any).FreeAI4UDiagnostics;
@@ -15,6 +15,7 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
   const [facts, setFacts] = useState<DiagnosticsFacts | null>(null);
   const [message, setMessage] = useState('');
   const [open, setOpen] = useState(false);
+  const [telemetry, setTelemetry] = useState<TelemetryState | null>(null);
 
   useEffect(() => {
     if (!hasShell()) return;
@@ -22,6 +23,9 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
     diagnosticsFacts()
       .then((found) => { if (!cancelled) setFacts(found); })
       .catch(() => { if (!cancelled) setFacts(null); });
+    telemetryGet()
+      .then((state) => { if (!cancelled) setTelemetry(state); })
+      .catch(() => { if (!cancelled) setTelemetry(null); });
     return () => { cancelled = true; };
   }, []);
 
@@ -84,6 +88,22 @@ export default function DiagnosticsCard({ state }: { state?: string }) {
           )}
         </div>
         {message && <p className="settings-hint">{message}</p>}
+        {hasShell() && telemetry && (
+          <p className="settings-hint">
+            <label>
+              <input
+                type="checkbox"
+                checked={telemetry.enabled}
+                onChange={(e) => telemetrySet(e.target.checked).then(setTelemetry).catch((err: Error) => setMessage(err.message || String(err)))}
+              />{' '}
+              Count anonymous usage (launches, Doctor runs, crashes, finished downloads and runs) on this machine.
+              Off by default; the counts never leave the PC unless pasted into a report.
+              {telemetry.enabled && Object.keys(telemetry.counts).length > 0 && (
+                <> Current counts: {Object.entries(telemetry.counts).map(([k, v]) => `${k}=${v}`).join(', ')}.</>
+              )}
+            </label>
+          </p>
+        )}
         {open && <pre className="diagnostics-report">{report}</pre>}
       </div>
       <RendererRow />

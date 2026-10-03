@@ -60,6 +60,7 @@ mod save;
 mod sd;
 mod secrets;
 mod sysfacts;
+mod telemetry;
 #[cfg(windows)]
 mod webview2;
 mod whisper;
@@ -334,6 +335,9 @@ fn main() {
             save::save_file_dialog,
             sysfacts::sysfacts,
             sysfacts::engine_log_vacuum,
+            telemetry::telemetry_get,
+            telemetry::telemetry_set,
+            telemetry::telemetry_record,
             net::remote_get,
             net::update_manifest,
             net::remote_download,
