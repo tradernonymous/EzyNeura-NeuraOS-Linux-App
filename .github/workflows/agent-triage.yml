@@ -41,15 +41,29 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - name: Skip without a key (green no-op)
-        if: ${{ secrets.ANTHROPIC_API_KEY == '' }}
-        run: echo 'No ANTHROPIC_API_KEY secret - triage skipped by design.'
+      # A secret cannot be read from an `if:`: GitHub's context-availability
+      # table grants `secrets` to `env`, `with` and `run` but not to a job or
+      # step `if`. Referencing it there does not skip the step -- it makes the
+      # whole file invalid, and the run fails as a nameless 0-second "workflow
+      # file issue" that is easy to miss. So detect the key in a step and gate
+      # the real work on that step's output.
+      - name: Check for an API key (green no-op without one)
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo 'No ANTHROPIC_API_KEY secret - triage skipped by design.'
+          fi
 
       # Pinned to a commit SHA like every other action in this repo.
       # Check https://github.com/anthropics/claude-code-action/releases for
       # the current v1 tag and update the SHA below when moving it.
       - name: Claude triage
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        if: steps.key.outputs.present == 'true'
         uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1 (2026-10-03; re-pin on upgrade)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
