@@ -97,15 +97,20 @@ pub fn telemetry_record(event: String) -> bool {
 mod tests {
     use super::*;
 
-    fn tmp() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("neuraos-telemetry-test-{}", std::process::id()));
+    /// A store file private to one test. `name` must differ per test: Rust runs
+    /// tests in parallel, and these tests create, delete and re-read the store
+    /// by path, so a shared path lets one test's `remove_file` land between
+    /// another's `record_event` and its `load` -- an intermittent failure at
+    /// the count assertion that only shows up under CI timing.
+    fn tmp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("neuraos-telemetry-test-{}-{}", std::process::id(), name));
         let _ = std::fs::create_dir_all(&dir);
         dir.join("telemetry.json")
     }
 
     #[test]
     fn disabled_counts_nothing_and_unknown_events_never_count() {
-        let path = tmp();
+        let path = tmp("disabled");
         let _ = std::fs::remove_file(&path);
         assert!(!record_event(&path, "launch"), "off by default");
         assert!(!record_event(&path, "keystrokes"), "not allowlisted");
@@ -115,7 +120,7 @@ mod tests {
 
     #[test]
     fn enabling_counts_only_allowlisted_events_and_disabling_wipes() {
-        let path = tmp();
+        let path = tmp("enabling");
         let _ = std::fs::remove_file(&path);
         let mut store = load(&path);
         store.enabled = true;
