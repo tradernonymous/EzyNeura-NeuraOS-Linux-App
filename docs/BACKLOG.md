@@ -104,6 +104,24 @@ against a real desktop, a systemd user session, a keyring, or the
 as a service for yourself; nothing of it is copied here); the first run on
 the PC is that verification.
 
+## UI plan, phase 9: the Design inspector in four tabs
+
+- **Seven tabs became four, grouped by task** (`docs/UI_UPGRADE_PLAN.md`
+  P9, from a nine-repo survey of design-agent projects): **Style** folds
+  the old Tweaks, Tokens and Components tabs into one surface for
+  everything that styles the page (the page's own controls, page tokens,
+  the design system, the component palette — each a folded section);
+  **Review** merges Comments and Checks into one feedback loop, with the
+  pin count on the tab and a canvas click landing there; **Mockups** and
+  **History** keep their names and content.
+- Nothing moved between stores: the tweaks schema protocol, the version
+  store, the gate and the exports keep their data where they had it;
+  only the paths changed. Old tab ids cannot return (pinned in
+  `desktop-create.test.js`).
+
+Verified here: `tsc --noEmit`, `node --test`, `npm run build`, and the
+design-audit ratchet unchanged.
+
 ## UI plan, phase 6: Agents, one space
 
 - **One space with a switch** (`components/SpaceSwitch.tsx`, the Create

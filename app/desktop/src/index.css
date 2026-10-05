@@ -4768,6 +4768,18 @@ button.linkish {
 .inspector-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 8px; font-size: 12px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
 .inspector-tabs button.active { color: var(--text-1); border-bottom-color: var(--accent); }
 .inspector-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+/* Style tab (UI plan P9): one surface for everything that styles the page;
+   its sections fold, so the parts stay out of each other's way. */
+.style-tab { display: flex; flex-direction: column; gap: 10px; }
+.review-tab { display: flex; flex-direction: column; gap: 10px; }
+.review-tab h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.inspector-section { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 10px; }
+.inspector-section > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; padding: 9px 0; font-size: 12px; font-weight: 600; color: var(--text-2); user-select: none; }
+.inspector-section > summary::-webkit-details-marker { display: none; }
+.inspector-section > summary::after { content: '▾'; margin-left: auto; color: var(--text-3); }
+.inspector-section[open] > summary::after { transform: rotate(180deg); }
+.inspector-section > summary:hover { color: var(--text-1); }
+.inspector-section > :not(summary) { margin: 10px 0; }
 .tweaks { display: flex; flex-direction: column; gap: 10px; }
 .tweak { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; font-size: 12px; }
 .tweak input[type='range'], .tweak input:not([type]) { grid-column: 1 / -1; width: 100%; }

@@ -360,6 +360,47 @@ Nothing here was worth forcing a change to close a checkbox.
       the first real visual confirmation this issue has had, rather than a
       second guess.
 
+### P9 — Design studio: the inspector's seven tabs become four ✅
+
+The right-hand inspector had grown one tab per artifact type — Tweaks,
+Tokens, Components, Mockups, Comments, Checks, History — and three of them
+edited the same design system from different angles: Tweaks moved the
+page's own tokens, Tokens showed and imported the system, Components
+inserted parts built from those tokens. Two more (Comments, Checks) were
+two destinations for the same "tell me what to fix" moment. A survey of
+nine open-source design-agent projects in October 2026 (nexu-io/open-design,
+VoltAgent/awesome-claude-design, alchaincyf/huashu-design, JimLiu/baoyu-design,
+6551Team/claude-code-design-guide, rohitg00/awesome-claude-design,
+Dammyjay93/interface-design, open-pencil/open-pencil, superdesigndev/superdesign)
+converged on the same three moves, so the studio took them:
+
+1. **One surface for one source of truth.** Every repo that carries a
+   design system (open-design's brand contract, baoyu-design's binding
+   tokens/components sync, interface-design's single `system.md`) keeps
+   tokens, rules and the parts that embody them in ONE place — separate
+   stores are where drift starts. So Style now holds everything that
+   styles the page: *This page's controls* (the Tweaks schema), *Page
+   tokens*, *Design system* (tokens.css, DESIGN.md, import, brand from a
+   URL) and *Components*, each its own folded `<details>` section.
+2. **Feedback is one loop, not two tabs.** huashu-design's five-dimension
+   review, interface-design's review pass and rohitg00's anti-slop kit all
+   frame gate + critique + fixes as one review moment. Review merges the
+   comments (point at an element, say what changes) with the checks score,
+   findings and the optional critique; the tab picks up a `Review n`
+   count while pins exist, and a click on the canvas lands there.
+3. **Progressive disclosure inside the tab, not more tabs.** The small
+   visible core with subordinate sections revealed on demand is the
+   organizing lesson of claude-code-design-guide's layered runtime and
+   baoyu-design's lazy sub-skills; superdesign's exploration model is why
+   Mockups stays its own canvas-adjacent tab, and open-pencil's
+   everything-through-one-surface is the reason not to go further than
+   four.
+
+Nothing moved between stores: the schema protocol (tweaks.js), the version
+store, the gate and the exports all keep their data where they had it —
+only the paths to reach them changed. `desktop-create.test.js` pins the
+four-tab shape, the folded sections, and that no old tab id can return.
+
 ## Verification, every phase
 
 Each phase is its own PR, and per `.claude/skills/steward/SKILL.md`:

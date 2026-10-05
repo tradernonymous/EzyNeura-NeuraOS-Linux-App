@@ -66,9 +66,11 @@ type SlopFinding = import('../design/slop.js').SlopFinding;
 //   left   -- the brief as a thread, the model and the design system;
 //   centre -- the canvas: a sandboxed iframe (allow-scripts, never
 //             same-origin) in a device frame, with View / Comment / Edit;
-//   right  -- Tweaks (the page's tokens as controls), Tokens (the system,
-//             import, brand from a URL), Comments, Checks (the anti-slop
-//             gate) and History (a version per AI turn and per edit).
+//   right  -- four tabs grouped by task, not by artifact: Style (the page's
+//             own controls and tokens, the design system, the component
+//             palette -- one surface for everything that styles the page),
+//             Review (element comments and the anti-slop gate -- one
+//             feedback loop), Mockups and History.
 //
 // A generation is a DRAFT until "Apply to canvas": it is scored first, and its
 // three directions (by the book, refined, novel) are token swaps done here, so
@@ -125,7 +127,20 @@ interface Pin {
 }
 
 type Tool = 'view' | 'comment' | 'edit';
-type Tab = 'tweaks' | 'tokens' | 'components' | 'mockups' | 'comments' | 'checks' | 'history';
+type Tab = 'style' | 'review' | 'mockups' | 'history';
+
+// The inspector's tabs, grouped by the task at hand rather than by artifact:
+// everything that styles the page is one surface (the old Tweaks / Tokens /
+// Components tabs all edited the same design system from different angles),
+// and feedback is one loop (comments plus the gate were two destinations for
+// the same "tell me what to fix" moment). Sections inside Style fold, so the
+// tab stays one click while its parts stay out of each other's way.
+const TABS: Array<{ id: Tab; label: string; hint: string }> = [
+  { id: 'style', label: 'Style', hint: 'The page\u2019s own controls and tokens, the design system, and the component palette' },
+  { id: 'review', label: 'Review', hint: 'Comments on elements and the anti-slop checks' },
+  { id: 'mockups', label: 'Mockups', hint: 'Carousel cards from the canvas deck, as PNG' },
+  { id: 'history', label: 'History', hint: 'A version per AI turn and per edit' },
+];
 
 type Viewport = import('../design/stage.js').PresetId;
 const VIEWPORTS = stageLib.PRESETS;
@@ -303,7 +318,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
   const [mockFormat, setMockFormat] = useState('square');
   const [fit, setFit] = useState(true);
   const [tool, setTool] = useState<Tool>('view');
-  const [tab, setTab] = useState<Tab>('tweaks');
+  const [tab, setTab] = useState<Tab>('style');
   const [pins, setPins] = useState<Pin[]>([]);
   const [tweaks, setTweakValues] = useState<Record<string, string>>({});
   const [versions, setVersions] = useState<Version[]>([]);
@@ -462,7 +477,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
       } else if (data.type === 'neura:pick' && !draft) {
         const pin: Pin = { id: `p${Date.now().toString(36)}`, nid: String(data.nid || ''), tag: String(data.tag || ''), text: String(data.text || ''), outer: String(data.outer || ''), comment: '' };
         setPins((prev) => (prev.some((p) => p.nid === pin.nid) ? prev : [...prev, pin]));
-        setTab('comments');
+        setTab('review');
       } else if (data.type === 'neura:tweaks-available') {
         // Versioned: a schema from another protocol version is not guessed at.
         if (data.version !== tweaksLib.VERSION) { setTweakSchema(null); return; }
@@ -1283,108 +1298,135 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
       <aside className={`studio-right ${!canvasHtml && !draft ? 'is-idle' : ''} ${inspectorFolded ? 'is-folded' : ''}`}>
         <div className="inspector-tabs" role="tablist" aria-label="Inspector">
-          {(['tweaks', 'tokens', 'components', 'mockups', 'comments', 'checks', 'history'] as Tab[]).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-              {t === 'comments' && pins.length ? `Comments ${pins.length}` : t.charAt(0).toUpperCase() + t.slice(1)}
+          {TABS.map(({ id, label, hint }) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)} title={hint}>
+              {id === 'review' && pins.length ? `Review ${pins.length}` : label}
             </button>
           ))}
         </div>
         <div className="inspector-body">
-          {tab === 'tweaks' && tweakSchema && (
-            <div className="tweaks page-tweaks">
-              <h4>This page's controls</h4>
-              {draft && <p className="settings-hint">Apply or discard the draft to use them.</p>}
-              {tweakSchema.controls.map((c) => {
-                const value = schemaValues[c.var] ?? String(c.default);
-                return (
-                  <div key={c.var} className="tweak">
-                    <span>{c.label} <span className="mono tweak-var">{c.var}</span></span>
-                    {c.type === 'color' && (
-                      <input type="color" value={value} disabled={!!draft} aria-label={c.label} onChange={(e) => setSchemaTweak(c.var, e.target.value)} />
-                    )}
-                    {c.type === 'slider' && (
-                      <input type="range" min={c.min} max={c.max} step={c.step} value={parseFloat(value)} disabled={!!draft} aria-label={c.label}
-                        onChange={(e) => setSchemaTweak(c.var, `${e.target.value}${c.unit || ''}`)} />
-                    )}
-                    {c.type === 'toggle' && (
-                      <button role="switch" aria-checked={value === c.on} aria-label={c.label} disabled={!!draft} className={`tweak-toggle ${value === c.on ? 'on' : ''}`}
-                        onClick={() => setSchemaTweak(c.var, value === c.on ? String(c.off) : String(c.on))}>
-                        {value === c.on ? 'On' : 'Off'}
-                      </button>
-                    )}
-                    {c.type === 'select' && (
-                      <span className="question-options" role="radiogroup" aria-label={c.label}>
-                        {(c.options || []).map((o) => (
-                          <button key={o.value} role="radio" aria-checked={value === o.value} disabled={!!draft} className={value === o.value ? 'is-picked' : ''}
-                            onClick={() => setSchemaTweak(c.var, o.value)}>{o.label}</button>
-                        ))}
-                      </span>
-                    )}
-                    {c.type !== 'select' && c.type !== 'toggle' && <span className="tweak-value mono">{value}</span>}
+          {tab === 'style' && (
+            <div className="style-tab">
+              {tweakSchema && (
+                <details className="inspector-section" open>
+                  <summary>This page's controls</summary>
+                  <div className="tweaks page-tweaks">
+                    {draft && <p className="settings-hint">Apply or discard the draft to use them.</p>}
+                    {tweakSchema.controls.map((c) => {
+                      const value = schemaValues[c.var] ?? String(c.default);
+                      return (
+                        <div key={c.var} className="tweak">
+                          <span>{c.label} <span className="mono tweak-var">{c.var}</span></span>
+                          {c.type === 'color' && (
+                            <input type="color" value={value} disabled={!!draft} aria-label={c.label} onChange={(e) => setSchemaTweak(c.var, e.target.value)} />
+                          )}
+                          {c.type === 'slider' && (
+                            <input type="range" min={c.min} max={c.max} step={c.step} value={parseFloat(value)} disabled={!!draft} aria-label={c.label}
+                              onChange={(e) => setSchemaTweak(c.var, `${e.target.value}${c.unit || ''}`)} />
+                          )}
+                          {c.type === 'toggle' && (
+                            <button role="switch" aria-checked={value === c.on} aria-label={c.label} disabled={!!draft} className={`tweak-toggle ${value === c.on ? 'on' : ''}`}
+                              onClick={() => setSchemaTweak(c.var, value === c.on ? String(c.off) : String(c.on))}>
+                              {value === c.on ? 'On' : 'Off'}
+                            </button>
+                          )}
+                          {c.type === 'select' && (
+                            <span className="question-options" role="radiogroup" aria-label={c.label}>
+                              {(c.options || []).map((o) => (
+                                <button key={o.value} role="radio" aria-checked={value === o.value} disabled={!!draft} className={value === o.value ? 'is-picked' : ''}
+                                  onClick={() => setSchemaTweak(c.var, o.value)}>{o.label}</button>
+                              ))}
+                            </span>
+                          )}
+                          {c.type !== 'select' && c.type !== 'toggle' && <span className="tweak-value mono">{value}</span>}
+                        </div>
+                      );
+                    })}
+                    <button onClick={resetSchemaTweaks} disabled={!!draft}>Back to the page's defaults</button>
+                    <p className="settings-hint">Saved in the page itself, so every version and export keeps them.</p>
                   </div>
-                );
-              })}
-              <button onClick={resetSchemaTweaks} disabled={!!draft}>Back to the page's defaults</button>
-              <p className="settings-hint">Saved in the page itself, so every version and export keeps them.</p>
-            </div>
-          )}
-          {tab === 'tweaks' && (
-            vars.length ? (
-              <div className="tweaks">
-                {tweakSchema && <h4>Page tokens</h4>}
-                {vars.map((v) => {
-                  const value = tweaks[v.name] ?? v.value;
-                  const control = artifact.controlFor(v.name, value);
-                  return (
-                    <label key={v.name} className="tweak">
-                      <span className="mono">{v.name}</span>
-                      {control.kind === 'color' && <input type="color" value={value} onChange={(e) => setTweak(v.name, e.target.value)} />}
-                      {control.kind === 'length' && (
-                        <input type="range" min={control.min} max={control.max} step={control.step} value={parseFloat(value)}
-                          onChange={(e) => setTweak(v.name, `${e.target.value}${control.unit}`)} />
-                      )}
-                      {control.kind === 'number' && (
-                        <input type="range" min={control.min} max={control.max} step={control.step} value={parseFloat(value)} onChange={(e) => setTweak(v.name, e.target.value)} />
-                      )}
-                      {control.kind === 'text' && <input value={value} onChange={(e) => setTweak(v.name, e.target.value)} />}
-                      <span className="tweak-value mono">{value}</span>
-                    </label>
-                  );
-                })}
-                <button onClick={resetTweaks} disabled={!Object.keys(tweaks).length && !/neura-tweaks/.test(canvasHtml)}>Reset tweaks</button>
-              </div>
-            ) : <div className="empty">{canvasHtml ? 'This page declares no :root tokens to tweak.' : 'Tweaks appear once there is a page.'}</div>
-          )}
-
-          {tab === 'tokens' && (
-            <div className="tokens-tab">
-              <p className="settings-hint">{system.notes}</p>
-              <pre className="skill-content">{systemsLib.tokensCss(system)}</pre>
-              <details>
-                <summary>DESIGN.md</summary>
-                <pre className="skill-content">{systemsLib.designMd(system)}</pre>
-              </details>
-              <label className="import-file">
-                <span>Import DESIGN.md or tokens.css</span>
-                <input type="file" accept=".md,.css,.txt" onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
-              </label>
-              <h4>Brand from a URL</h4>
-              <input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://brand-site.com" disabled={!active} aria-label="Brand page address" />
-              <button onClick={extractBrand} disabled={brandBusy || !brandUrl.trim() || !active}>{brandBusy ? 'Extracting…' : 'Extract'}</button>
-              {brandSystem && (
-                <div className="brand-roles">
-                  {(['--paper', '--ink', '--accent', '--muted'] as const).map((role) => {
-                    const report = brand.contrastReport(brandSystem.tokens[role], brandSystem.tokens['--paper']);
-                    return (
-                      <div key={role} className="brand-role">
-                        <span className="swatch" style={{ background: brandSystem.tokens[role] }} />
-                        <span className="role-name">{role}</span>
-                        <span className={`role-aa ${report.passAA ? 'ok' : 'bad'}`}>{role === '--paper' ? 'bg' : `${report.ratio}:1`}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                </details>
               )}
+              <details className="inspector-section" open={!tweakSchema}>
+                <summary>Page tokens</summary>
+                {vars.length ? (
+                  <div className="tweaks">
+                    {vars.map((v) => {
+                      const value = tweaks[v.name] ?? v.value;
+                      const control = artifact.controlFor(v.name, value);
+                      return (
+                        <label key={v.name} className="tweak">
+                          <span className="mono">{v.name}</span>
+                          {control.kind === 'color' && <input type="color" value={value} onChange={(e) => setTweak(v.name, e.target.value)} />}
+                          {control.kind === 'length' && (
+                            <input type="range" min={control.min} max={control.max} step={control.step} value={parseFloat(value)}
+                              onChange={(e) => setTweak(v.name, `${e.target.value}${control.unit}`)} />
+                          )}
+                          {control.kind === 'number' && (
+                            <input type="range" min={control.min} max={control.max} step={control.step} value={parseFloat(value)} onChange={(e) => setTweak(v.name, e.target.value)} />
+                          )}
+                          {control.kind === 'text' && <input value={value} onChange={(e) => setTweak(v.name, e.target.value)} />}
+                          <span className="tweak-value mono">{value}</span>
+                        </label>
+                      );
+                    })}
+                    <button onClick={resetTweaks} disabled={!Object.keys(tweaks).length && !/neura-tweaks/.test(canvasHtml)}>Reset tweaks</button>
+                  </div>
+                ) : <div className="empty">{canvasHtml ? 'This page declares no :root tokens to tweak.' : 'Tweaks appear once there is a page.'}</div>}
+              </details>
+
+              <details className="inspector-section">
+                <summary>Design system</summary>
+                <div className="tokens-tab">
+                  <p className="settings-hint">{system.notes}</p>
+                  <pre className="skill-content">{systemsLib.tokensCss(system)}</pre>
+                  <details>
+                    <summary>DESIGN.md</summary>
+                    <pre className="skill-content">{systemsLib.designMd(system)}</pre>
+                  </details>
+                  <label className="import-file">
+                    <span>Import DESIGN.md or tokens.css</span>
+                    <input type="file" accept=".md,.css,.txt" onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
+                  </label>
+                  <h4>Brand from a URL</h4>
+                  <input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://brand-site.com" disabled={!active} aria-label="Brand page address" />
+                  <button onClick={extractBrand} disabled={brandBusy || !brandUrl.trim() || !active}>{brandBusy ? 'Extracting…' : 'Extract'}</button>
+                  {brandSystem && (
+                    <div className="brand-roles">
+                      {(['--paper', '--ink', '--accent', '--muted'] as const).map((role) => {
+                        const report = brand.contrastReport(brandSystem.tokens[role], brandSystem.tokens['--paper']);
+                        return (
+                          <div key={role} className="brand-role">
+                            <span className="swatch" style={{ background: brandSystem.tokens[role] }} />
+                            <span className="role-name">{role}</span>
+                            <span className={`role-aa ${report.passAA ? 'ok' : 'bad'}`}>{role === '--paper' ? 'bg' : `${report.ratio}:1`}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </details>
+
+              <details className="inspector-section">
+                <summary>Components</summary>
+                <div className="components-tab">
+                  <p className="settings-hint">
+                    Built from the page's own tokens (var(--accent), var(--space)…), so they follow the system and the tokens above.
+                    Click one to add it at the end of the page, as a new version.
+                  </p>
+                  {!canvasHtml && <div className="empty">Components can be added once there is a page.</div>}
+                  <div className="component-palette">
+                    {componentsLib.COMPONENTS.map((c) => (
+                      <button key={c.id} className="component-tile" onClick={() => insertComponent(c.id)}
+                        disabled={!canvasHtml || !!draft} title={draft ? 'Apply or discard the draft first' : `Add ${c.label.toLowerCase()} to the page`}>
+                        <span className="component-name">{c.label}</span>
+                        <span className="component-note">{c.note}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </details>
             </div>
           )}
 
@@ -1433,87 +1475,68 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             </div>
           )}
 
-          {tab === 'comments' && (
-            <div className="comments-tab">
-              {!pins.length && <div className="empty">Pick <strong>Comment</strong> on the toolbar, then click an element on the canvas.</div>}
-              {pins.map((pin, i) => (
-                <div key={pin.id} className="pin">
-                  <div className="pin-head">
-                    <span className="pin-no">{i + 1}</span>
-                    <span className="mono">&lt;{pin.tag}&gt;</span>
-                    <span className="pin-text">{pin.text.slice(0, 60)}</span>
-                    <button className="linkish" onClick={() => setPins((prev) => prev.filter((p) => p.id !== pin.id))}>Remove</button>
-                  </div>
-                  <textarea rows={2} value={pin.comment} placeholder="What should change here?" aria-label={`Comment ${i + 1}`} onChange={(e) => {
-                    const comment = e.target.value;
-                    setPins((prev) => prev.map((p) => (p.id === pin.id ? { ...p, comment } : p)));
-                  }} />
-                </div>
-              ))}
-              {pins.length > 0 && (
-                <button className="primary" onClick={applyComments} disabled={working || !pins.some((p) => p.comment.trim()) || !model}>
-                  Apply comments
-                </button>
-              )}
-              <p className="settings-hint">Each comment sends only its element to the model, so smaller local models can do it.</p>
-            </div>
-          )}
-
-          {tab === 'checks' && (
-            checks ? (
-              <div className="checks-tab">
-                {/* The deterministic gate: free, instant, the same every time -- always first. */}
-                <div className="checks-score">{checks.score}<span>/100</span></div>
-                {!checks.findings.length && <div className="empty">Clean: nothing the anti-slop gate flags.</div>}
-                {checks.findings.map((f) => (
-                  <div key={f.id} className="slop-finding"><strong>{f.label}</strong>{f.detail ? ` (${f.detail})` : ''} — {f.why} <em>Fix: {f.fix}</em></div>
-                ))}
-                <div className="critique">
-                  <h4>Critique</h4>
-                  <label className="critique-auto" title="Off by default for models on this PC: a critique is a second model call">
-                    <input type="checkbox" checked={critiqueOn} onChange={(e) => setCritiqueOn(e.target.checked)} />
-                    <span>After every draft</span>
-                  </label>
-                  <button onClick={() => runCritique(draft ? draft.html : canvasHtml, draft ? draft.findings : checks.findings)} disabled={critiqueBusy || !model || working}>
-                    {critiqueBusy ? 'Critiquing…' : 'Critique'}
-                  </button>
-                  {critiqueBusy && <button className="linkish" onClick={() => critiqueAbort.current?.abort()}>Stop</button>}
-                  {critique && (
-                    <div className="critique-result">
-                      <CritiqueRadar scores={critique.scores} />
-                      <div className="critique-average">{critique.average}<span>/10 average, from {model}</span></div>
-                      {([['Keep', critique.keep], ['Fix', critique.fix], ['Quick wins', critique.quickWins]] as Array<[string, string[]]>).map(([title, items]) => (
-                        items.length ? (
-                          <div key={title} className="critique-list">
-                            <strong>{title}</strong>
-                            <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul>
-                          </div>
-                        ) : null
-                      ))}
+          {tab === 'review' && (
+            <div className="review-tab">
+              <div className="comments-tab">
+                <h4>Comments</h4>
+                {!pins.length && <div className="empty">Pick <strong>Comment</strong> on the toolbar, then click an element on the canvas.</div>}
+                {pins.map((pin, i) => (
+                  <div key={pin.id} className="pin">
+                    <div className="pin-head">
+                      <span className="pin-no">{i + 1}</span>
+                      <span className="mono">&lt;{pin.tag}&gt;</span>
+                      <span className="pin-text">{pin.text.slice(0, 60)}</span>
+                      <button className="linkish" onClick={() => setPins((prev) => prev.filter((p) => p.id !== pin.id))}>Remove</button>
                     </div>
-                  )}
-                  {!critique && !critiqueBusy && <p className="settings-hint">A model's view of hierarchy, typography, colour, spacing and originality, scored 1–10. The checks above come first and cost nothing.</p>}
-                </div>
-              </div>
-            ) : <div className="empty">Checks run on the canvas once there is a page.</div>
-          )}
-
-          {tab === 'components' && (
-            <div className="components-tab">
-              <p className="settings-hint">
-                Built from the page's own tokens (var(--accent), var(--space)…), so they follow the system and Tweaks.
-                Click one to add it at the end of the page, as a new version.
-              </p>
-              {!canvasHtml && <div className="empty">Components can be added once there is a page.</div>}
-              <div className="component-palette">
-                {componentsLib.COMPONENTS.map((c) => (
-                  <button key={c.id} className="component-tile" onClick={() => insertComponent(c.id)}
-                    disabled={!canvasHtml || !!draft} title={draft ? 'Apply or discard the draft first' : `Add ${c.label.toLowerCase()} to the page`}>
-                    <span className="component-name">{c.label}</span>
-                    <span className="component-note">{c.note}</span>
-                  </button>
+                    <textarea rows={2} value={pin.comment} placeholder="What should change here?" aria-label={`Comment ${i + 1}`} onChange={(e) => {
+                      const comment = e.target.value;
+                      setPins((prev) => prev.map((p) => (p.id === pin.id ? { ...p, comment } : p)));
+                    }} />
+                  </div>
                 ))}
+                {pins.length > 0 && (
+                  <button className="primary" onClick={applyComments} disabled={working || !pins.some((p) => p.comment.trim()) || !model}>
+                    Apply comments
+                  </button>
+                )}
+                <p className="settings-hint">Each comment sends only its element to the model, so smaller local models can do it.</p>
               </div>
+              {checks ? (
+                <div className="checks-tab">
+                  <h4>Checks</h4>
+                  {/* The deterministic gate: free, instant, the same every time -- always first. */}
+                  <div className="checks-score">{checks.score}<span>/100</span></div>
+                  {!checks.findings.length && <div className="empty">Clean: nothing the anti-slop gate flags.</div>}
+                  {checks.findings.map((f) => (
+                    <div key={f.id} className="slop-finding"><strong>{f.label}</strong>{f.detail ? ` (${f.detail})` : ''} — {f.why} <em>Fix: {f.fix}</em></div>
+                  ))}
+                  <div className="critique">
+                    <label className="critique-auto" title="Off by default for models on this PC: a critique is a second model call">
+                      <input type="checkbox" checked={critiqueOn} onChange={(e) => setCritiqueOn(e.target.checked)} />
+                      <span>After every draft</span>
+                    </label>
+                    <button onClick={() => runCritique(draft ? draft.html : canvasHtml, draft ? draft.findings : checks.findings)} disabled={critiqueBusy || !model || working}>
+                      {critiqueBusy ? 'Critiquing…' : 'Critique'}
+                    </button>
+                    {critiqueBusy && <button className="linkish" onClick={() => critiqueAbort.current?.abort()}>Stop</button>}
+                    {critique && (
+                      <div className="critique-result">
+                        <CritiqueRadar scores={critique.scores} />
+                        <div className="critique-average">{critique.average}<span>/10 average, from {model}</span></div>
+                        {([['Keep', critique.keep], ['Fix', critique.fix], ['Quick wins', critique.quickWins]] as Array<[string, string[]]>).map(([title, items]) => (
+                          items.length ? (
+                            <div key={title} className="critique-list">
+                              <strong>{title}</strong>
+                              <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                            </div>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
+                    {!critique && !critiqueBusy && <p className="settings-hint">A model's view of hierarchy, typography, colour, spacing and originality, scored 1–10. The checks above come first and cost nothing.</p>}
+                  </div>
+                </div>
+              ) : <div className="empty">Checks run on the canvas once there is a page.</div>}
             </div>
           )}
 
