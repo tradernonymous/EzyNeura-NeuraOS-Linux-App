@@ -68,3 +68,21 @@ test('the screens wear it: the switch, the pills, the fold, the gallery', () => 
   const css = read('desktop', 'src', 'index.css');
   for (const sel of ['.create-switch', '.create-card', '.create-gallery', '.select-group', '.studio-right.is-idle', '.studio-project > summary']) assert.ok(css.includes(sel + ' {'), `index.css has ${sel}`);
 });
+
+test('the inspector is four task tabs, not seven artifact tabs (UI plan P9)', () => {
+  const design = read('desktop', 'src', 'screens', 'DesignScreen.tsx');
+  assert.match(design, /type Tab = 'style' \| 'review' \| 'mockups' \| 'history';/);
+  assert.match(design, /useState<Tab>\('style'\)/);
+  // One surface for everything that styles the page: the old tweaks / tokens /
+  // components tabs are sections of Style now, so none of them may come back.
+  assert.ok(!/'tweaks' \| 'tokens'/.test(design), 'the old tab union is gone');
+  assert.ok(!/\{tab === '(tweaks|tokens|components|comments|checks)'/.test(design), 'no block keys off an old tab id');
+  // Style folds its parts: page controls, page tokens, the system, the palette.
+  for (const summary of ['This page\'s controls', 'Page tokens', 'Design system', 'Components']) assert.ok(design.includes(`>${summary}</summary>`), `Style has a ${summary} section`);
+  // Review is one feedback loop, and a pick lands in it.
+  assert.match(design, /setTab\('review'\);/);
+  assert.ok(!/setTab\('comments'\)/.test(design));
+  assert.match(design, /id === 'review' && pins\.length \? `Review \$\{pins\.length\}` : label/);
+  const css = read('desktop', 'src', 'index.css');
+  for (const sel of ['.style-tab', '.review-tab', '.inspector-section']) assert.ok(css.includes(sel + ' {'), `index.css has ${sel}`);
+});
