@@ -411,6 +411,10 @@ export interface EngineStatus {
   port?: number;
   url?: string;
   already_running?: boolean;
+  /** True only for the systemd service's engine, which this app starts
+   * neither -- so anything passed at spawn time (the GitHub OAuth app, for
+   * instance) does not reach it. */
+  service?: boolean;
 }
 
 /** Whether this machine has a Node new enough to run the bundled engine. */
@@ -431,6 +435,33 @@ export async function engineStop(): Promise<EngineStatus> {
 
 export async function engineStatus(): Promise<EngineStatus> {
   return call<EngineStatus>('engine_status');
+}
+
+/**
+ * What a freshly started engine would be given for the GitHub OAuth app.
+ *
+ * `configured` is what Settings needs to say why a connection failed: the
+ * engine reads these two off its own environment (engine/server.js), so
+ * with neither present `/api/github/authorize` answers 500 rather than
+ * going to GitHub. `client_id` is the public half, shown so a person can
+ * check it is the app they registered; only whether a secret exists ever
+ * crosses here, never its value.
+ *
+ * The `*_source` fields are `'keyring'` when this PC holds it, or
+ * `'environment'` when it was inherited from the shell that launched the
+ * app -- the latter is settable only from that shell, which is worth
+ * saying rather than letting a Save appear to do nothing.
+ */
+export interface GithubOauthConfig {
+  configured: boolean;
+  client_id: string;
+  client_secret_set: boolean;
+  client_id_source: 'keyring' | 'environment' | '';
+  client_secret_source: 'keyring' | 'environment' | '';
+}
+
+export async function githubOauthConfig(): Promise<GithubOauthConfig> {
+  return call<GithubOauthConfig>('github_oauth_config');
 }
 
 const ENGINE_MODE_KEY = 'freeai4u.engine_mode';

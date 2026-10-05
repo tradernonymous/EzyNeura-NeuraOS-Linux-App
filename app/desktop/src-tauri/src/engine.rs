@@ -257,6 +257,30 @@ fn port_is_up(port: u16) -> bool {
     .is_ok()
 }
 
+/// The port the engine last started on in this process. A stop/start -- how
+/// a newly saved GitHub OAuth app reaches an engine that is already
+/// running -- reuses it while it is still free, so the address Settings
+/// shows and the callback URL GitHub was told about both survive the
+/// restart instead of quietly changing under the person who just saved.
+fn last_port() -> &'static Mutex<Option<u16>> {
+    static LAST: OnceLock<Mutex<Option<u16>>> = OnceLock::new();
+    LAST.get_or_init(|| Mutex::new(None))
+}
+
+/// The port to start on: the one it last used when that is still free,
+/// otherwise a fresh one the OS picks. The probes are parameters so the
+/// choice itself can be tested without opening a socket.
+fn pick_port(
+    last: Option<u16>,
+    busy: impl Fn(u16) -> bool,
+    fresh: impl Fn() -> Result<u16, String>,
+) -> Result<u16, String> {
+    match last {
+        Some(p) if !busy(p) => Ok(p),
+        _ => fresh(),
+    }
+}
+
 #[tauri::command]
 pub fn engine_status() -> serde_json::Value {
     let guard = match slot().lock() {
@@ -279,6 +303,60 @@ pub fn engine_status() -> serde_json::Value {
         }),
         None => serde_json::json!({ "running": false }),
     }
+}
+
+/// The GitHub OAuth credentials a freshly started engine is given, as the
+/// environment pairs `server.js` reads. Keyring first; anything absent is
+/// left alone so an inherited `GITHUB_CLIENT_ID`/`SECRET` still reaches the
+/// child untouched.
+fn github_env() -> Vec<(String, String)> {
+    [
+        ("github_client_id", "GITHUB_CLIENT_ID"),
+        ("github_client_secret", "GITHUB_CLIENT_SECRET"),
+    ]
+    .iter()
+    .filter_map(|(key, var)| Some(((*var).to_string(), github_half(key, var)?.0)))
+    .collect()
+}
+
+/// One half as the engine would receive it: its value and where it comes
+/// from. The keyring wins, exactly as `github_env` gives it to the child;
+/// anything blank counts as absent so it cannot shadow an inherited one.
+///
+/// The source is only `keyring` or `environment`; `None` means the half
+/// does not exist anywhere, which is what Settings reports as missing.
+fn github_half(key: &str, var: &str) -> Option<(String, &'static str)> {
+    let stored = crate::secrets::read(key).ok().flatten();
+    resolve_half(stored, std::env::var(var).ok())
+}
+
+/// The decision in `github_half`, without the stores: keyring first, then
+/// the environment this app was launched with, and a blank value never
+/// wins -- it would only shadow the half that is actually there.
+fn resolve_half(stored: Option<String>, inherited: Option<String>) -> Option<(String, &'static str)> {
+    let present = |v: Option<String>| v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    present(stored)
+        .map(|v| (v, "keyring"))
+        .or_else(|| present(inherited).map(|v| (v, "environment")))
+}
+
+/// Settings -> Connectors: what a *freshly started* engine would be given
+/// for the GitHub OAuth app. The client ID is returned because GitHub shows
+/// it in its own authorize URL anyway; only whether a secret exists ever
+/// crosses this boundary, never its value.
+#[tauri::command]
+pub fn github_oauth_config() -> serde_json::Value {
+    let id = github_half("github_client_id", "GITHUB_CLIENT_ID");
+    let secret = github_half("github_client_secret", "GITHUB_CLIENT_SECRET");
+    serde_json::json!({
+        "configured": id.is_some() && secret.is_some(),
+        "client_id": id.as_ref().map(|(v, _)| v.clone()).unwrap_or_default(),
+        "client_secret_set": secret.is_some(),
+        // Where a half lives decides whether Settings can change it: an
+        // inherited one is this process's own environment, not the store.
+        "client_id_source": id.as_ref().map(|(_, s)| *s).unwrap_or_default(),
+        "client_secret_source": secret.as_ref().map(|(_, s)| *s).unwrap_or_default(),
+    })
 }
 
 /// Start the bundled engine, or report the one already running. Blocks
@@ -318,11 +396,17 @@ pub fn engine_start(app: tauri::AppHandle) -> Result<serde_json::Value, String> 
         ));
     }
     let dir = engine_dir(&app)?;
-    let port = free_port()?;
+    let preferred = { *last_port().lock().unwrap_or_else(|p| p.into_inner()) };
+    let port = pick_port(preferred, port_is_up, free_port)?;
 
     let mut command = location.command(&["server.js"], &dir);
     command
         .env("PORT", port.to_string())
+        // The GitHub OAuth app, if this machine has one: `server.js` reads
+        // these off its own environment on every authorize, so they have to
+        // be in the child's environment before it starts. Stored in the OS
+        // keyring (secrets.rs), never in a file.
+        .envs(github_env())
         // Deliberately absent, not defaulted to "1": the bundled engine
         // never runs a command or touches a git repo on this machine
         // unless the person turns Build's workspace on later themselves
@@ -365,6 +449,9 @@ pub fn engine_start(app: tauri::AppHandle) -> Result<serde_json::Value, String> 
         let _ = child.wait();
         return Err("the engine did not start listening within 10s".to_string());
     }
+    // Remembered only once it is really listening, so a failed start does
+    // not pin the next one to a port nothing is on.
+    *last_port().lock().unwrap_or_else(|p| p.into_inner()) = Some(port);
 
     {
         let mut guard = match slot().lock() {
@@ -427,6 +514,44 @@ mod tests {
     fn shell_quote_survives_a_single_quote_in_the_path() {
         let quoted = shell_quote(std::path::Path::new("/home/o'brien/app"));
         assert_eq!(quoted, r"'/home/o'\''brien/app'");
+    }
+
+    #[test]
+    fn a_github_half_comes_from_the_keyring_before_the_environment() {
+        assert_eq!(
+            resolve_half(Some("Iv1.abc".into()), Some("inherited".into())),
+            Some(("Iv1.abc".into(), "keyring")),
+            "the store wins, because that is what Settings shows as saved"
+        );
+        assert_eq!(
+            resolve_half(None, Some("inherited".into())),
+            Some(("inherited".into(), "environment")),
+            "an exported pair still reaches the engine with no store entry"
+        );
+    }
+
+    #[test]
+    fn a_blank_github_half_is_absent_rather_than_shadowing_a_real_one() {
+        assert_eq!(resolve_half(Some("   ".into()), None), None, "blank is not a credential");
+        assert_eq!(resolve_half(Some(String::new()), Some("inherited".into())), Some(("inherited".into(), "environment")));
+        assert_eq!(resolve_half(None, Some("  ".into())), None, "nor is a blank export");
+        assert_eq!(resolve_half(None, None), None);
+    }
+
+    #[test]
+    fn a_restart_reuses_the_port_that_is_free() {
+        // The address Settings saved, and the callback URL GitHub was told
+        // about, must both survive a stop/start.
+        let chosen = pick_port(Some(41234), |_| false, || Ok(9999)).unwrap();
+        assert_eq!(chosen, 41234);
+    }
+
+    #[test]
+    fn a_port_taken_by_something_else_is_not_reused() {
+        let chosen = pick_port(Some(41234), |_| true, || Ok(9999)).unwrap();
+        assert_eq!(chosen, 9999, "fall back to one the OS picks rather than a port in use");
+        let chosen = pick_port(None, |_| false, || Ok(9999)).unwrap();
+        assert_eq!(chosen, 9999, "the first start has nothing to reuse");
     }
 }
 

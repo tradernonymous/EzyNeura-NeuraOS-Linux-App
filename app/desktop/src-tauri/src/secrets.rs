@@ -24,7 +24,13 @@ pub const SERVICE: &str = "NeuraOS Desktop";
 /// The keys this app may store. A name outside this list -- and outside the
 /// `byok.` family -- is refused, which keeps the store from becoming a
 /// general-purpose one.
-pub const KEYS: &[&str] = &["hf_token", "hf_user"];
+///
+/// The two `github_*` entries are a GitHub OAuth app's halves, which
+/// `engine/server.js` reads off its own environment on every authorize. They
+/// live here rather than in a file or a settings field precisely because one
+/// of them is a secret (AGENTS.md: "Secrets never travel"); `engine.rs`
+/// hands them to the child when it starts it.
+pub const KEYS: &[&str] = &["hf_token", "hf_user", "github_client_id", "github_client_secret"];
 
 /// NEURA-054: one entry per endpoint the user added, named `byok.<id>`.
 pub const BYOK_PREFIX: &str = "byok.";
@@ -111,6 +117,10 @@ mod tests {
     #[test]
     fn only_the_apps_own_keys_are_accepted() {
         assert!(entry("hf_token").is_ok());
+        // The GitHub OAuth app's two halves live in the store too; a name
+        // that is not on the list is still refused.
+        assert!(entry("github_client_id").is_ok());
+        assert!(entry("github_client_secret").is_ok());
         assert!(entry("not_a_key").is_err());
         assert!(entry("../other").is_err());
     }

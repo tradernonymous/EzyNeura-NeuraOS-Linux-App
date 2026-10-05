@@ -377,6 +377,7 @@ fn main() {
             engine::engine_start,
             engine::engine_stop,
             engine::engine_status,
+            engine::github_oauth_config,
             local::local_pick_folder,
             local::local_project_home,
             git::local_git_status,

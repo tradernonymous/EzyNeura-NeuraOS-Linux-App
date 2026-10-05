@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { pushToast } from './Toasts';
-import { api } from '../api';
-import { authWindowOpen, hasShell, mcpServerCommand, mcpStdioList, mcpStdioStop, onConnectFinished, type McpServerCommand } from '../bridge';
+import { api, getServer, setServer } from '../api';
+import { authWindowOpen, engineStart, engineStatus, engineStop, githubOauthConfig, hasShell, mcpServerCommand, mcpStdioList, mcpStdioStop, onConnectFinished, secretDelete, secretSet, type GithubOauthConfig, type McpServerCommand } from '../bridge';
 import { startStdio, stdioId } from '../tool-run';
 import HfSignIn from './HfSignIn';
 import Hint from './Hint';
@@ -54,6 +54,15 @@ export default function ConnectorsCard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [canAddMore, setCanAddMore] = useState(true);
   const [githubNote, setGithubNote] = useState('');
+  // What a freshly started engine would be given for the GitHub OAuth app.
+  // The engine's own /api/github/status never reports this (server.js is
+  // upstream-verbatim), so the shell is asked instead -- without it the
+  // person clicking Connect had no way to learn why nothing happened.
+  const [oauth, setOauth] = useState<GithubOauthConfig | null>(null);
+  const [appId, setAppId] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [appNote, setAppNote] = useState('');
+  const [appBusy, setAppBusy] = useState(false);
   const [servers, setServers] = useState<McpServer[]>(() => tools.mcpServers());
   const [toolsOn, setToolsOn] = useState(() => tools.enabled());
   const [name, setName] = useState('');
@@ -85,7 +94,7 @@ export default function ConnectorsCard() {
         const list: Account[] = Array.isArray(data?.accounts) ? data.accounts : [];
         setAccounts(list);
         setCanAddMore(data?.canAddMore !== false);
-        setGithubNote(data?.configured === false ? 'The engine has no GitHub app configured (GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET).' : '');
+        setGithubNote('');
         setCheckedAt(Date.now());
         window.dispatchEvent(new Event(GITHUB_CHANGED_EVENT));
         if (announce) {
@@ -107,6 +116,7 @@ export default function ConnectorsCard() {
 
   useEffect(() => {
     refreshGithub();
+    if (hasShell()) githubOauthConfig().then(setOauth).catch(() => setOauth(null));
     const onTools = () => { setServers(tools.mcpServers()); setToolsOn(tools.enabled()); };
     window.addEventListener(tools.CHANGED_EVENT, onTools);
     let stop = () => {};
@@ -145,6 +155,72 @@ export default function ConnectorsCard() {
       .then(() => pushToast('info', `${login} disconnected.`))
       .catch((e: unknown) => pushToast('error', ((e as Error).message || String(e)).split('\n')[0]))
       .finally(() => { setBusy(''); refreshGithub(); });
+  };
+
+  // The engine reads its environment once, when it starts, so a pair saved
+  // now only reaches an engine that is started again. Says what actually
+  // happened rather than a generic "saved": an engine that is not running
+  // needs nothing, and the systemd service's engine is started by systemd
+  // and cannot be given credentials from a credential store at all.
+  const applyGithubOauth = async (): Promise<string> => {
+    const status = await engineStatus().catch(() => null);
+    if (!status?.running) return 'Saved. It applies the next time the engine starts.';
+    if (status.service) {
+      return 'Saved, but this engine is the neuraos-engine service, which starts it without these. Stop the service in Settings → Engine so this app can start the engine with them.';
+    }
+    await engineStop();
+    try {
+      const started = await engineStart();
+      // Only if it really moved: a restart keeps its port (engine.rs), so
+      // the address Settings shows stays true either way.
+      if (started.url && started.url !== getServer()) setServer(started.url);
+      return 'Saved. The engine restarted to pick them up.';
+    } catch (e) {
+      return `Saved, but the engine did not come back: ${((e as Error).message || String(e)).split('\n')[0]}`;
+    }
+  };
+
+  const saveGithubApp = async () => {
+    const id = appId.trim();
+    const secret = appSecret.trim();
+    if (!id || !secret) {
+      setAppNote('Both halves are needed: the client ID and the client secret GitHub issued together.');
+      return;
+    }
+    setAppBusy(true);
+    setAppNote('');
+    try {
+      await secretSet('github_client_id', id);
+      await secretSet('github_client_secret', secret);
+      setAppId('');
+      setAppSecret('');
+      const cfg = await githubOauthConfig();
+      setOauth(cfg);
+      setAppNote(await applyGithubOauth());
+      refreshGithub();
+    } catch (e) {
+      setAppNote(((e as Error).message || String(e)).split('\n')[0]);
+    } finally {
+      setAppBusy(false);
+    }
+  };
+
+  const clearGithubApp = async () => {
+    setAppBusy(true);
+    setAppNote('');
+    try {
+      await secretDelete('github_client_id');
+      await secretDelete('github_client_secret');
+      const cfg = await githubOauthConfig();
+      setOauth(cfg);
+      setAppNote(cfg.configured
+        ? 'Cleared from the credential store; what is left is the pair this app was launched with.'
+        : 'Cleared. Connecting GitHub now stops at the engine with no app to sign in as.');
+    } catch (e) {
+      setAppNote(((e as Error).message || String(e)).split('\n')[0]);
+    } finally {
+      setAppBusy(false);
+    }
   };
 
   const readTools = (serverName: string, address: string) => {
@@ -309,6 +385,60 @@ export default function ConnectorsCard() {
         </div>
         {!canAddMore && <p className="settings-hint">That is the most accounts the engine keeps; disconnect one to add another.</p>}
         {githubNote && <div className="chip-note">{githubNote}</div>}
+
+        {/* The engine reads these two off its own environment on every
+            authorize (engine/server.js), so they are kept with the other
+            secrets this app holds and handed to the child when it starts
+            (engine.rs). With neither present, "Connect GitHub" reaches the
+            engine and stops there -- the note below is what says so. */}
+        {hasShell() && (
+          <>
+            <p className="settings-hint">
+              Connecting GitHub needs an OAuth app of your own. Register one at{' '}
+              <span className="mono">github.com/settings/applications/new</span> with the Authorization callback URL{' '}
+              <span className="mono">http://127.0.0.1/api/github/callback</span> — no port in it; GitHub accepts
+              whichever one the engine happens to use.
+            </p>
+            {oauth && !oauth.configured && (
+              <div className="chip-note">
+                The engine has no GitHub app configured (GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET). Put the two halves
+                GitHub issued below, then Connect GitHub.
+              </div>
+            )}
+            <form className="credential-form" onSubmit={(e) => { e.preventDefault(); saveGithubApp(); }}>
+              <input
+                value={appId}
+                onChange={(e) => { setAppId(e.target.value); setAppNote(''); }}
+                placeholder={oauth?.client_id || 'client ID (Iv1.…)'}
+                aria-label="GitHub OAuth client ID"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <input
+                type="password"
+                value={appSecret}
+                onChange={(e) => { setAppSecret(e.target.value); setAppNote(''); }}
+                placeholder="client secret"
+                aria-label="GitHub OAuth client secret"
+                spellCheck={false}
+                autoComplete="new-password"
+              />
+              <button type="submit" disabled={appBusy || !appId.trim() || !appSecret.trim()}>
+                {appBusy ? 'Saving…' : 'Save'}
+              </button>
+              {oauth?.configured && oauth.client_id_source === 'keyring' && (
+                <button type="button" onClick={clearGithubApp} disabled={appBusy}>Remove</button>
+              )}
+            </form>
+            {appNote && <p className="settings-hint">{appNote}</p>}
+            {oauth?.configured && (
+              <p className="settings-hint">
+                In use: <span className="mono">{oauth.client_id}</span>, secret from the{' '}
+                {oauth.client_secret_source === 'keyring' ? 'credential store' : 'environment this app was launched with'}.
+              </p>
+            )}
+          </>
+        )}
 
         <h3 className="local-heading">Hugging Face</h3>
         <p className="settings-hint">For the Hugging Face models in Chat (the Inference Providers router) and gated downloads.</p>
