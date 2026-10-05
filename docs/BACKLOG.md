@@ -14,6 +14,12 @@ dies of memory) is written up in `docs/UPGRADE_WAVE_1.md`. Its own file
 because this backlog has grown past what a single editor can safely append
 to. Later waves follow `docs/APP_UPGRADE_PLAN.md`.
 
+Local **video generation** is not part of any plan above and is not built.
+Its phase plan — researched, not started — is `docs/VIDEO_PLAN.md`: a
+ComfyUI runtime reusing `runtimes.rs`, a job runner shaped like `sd.rs`,
+Wan 2.2 TI2V-5B and LTX-Video 2B as the first models, and the VRAM reality
+stated up front rather than discovered.
+
 ## Status
 
 | Phase | What | Status |
