@@ -156,7 +156,9 @@
     var prompt = String(req.prompt || '').trim();
     if (!prompt) return { error: 'Say what to draw.' };
     if (row.kind === 'local') {
-      return { route: 'local', model: row.model || '', notes: [], body: images.localRequest({ prompt: prompt, size: req.size }) };
+      // steps only when the caller asked for a number; null otherwise, so
+      // the shell picks the model's own (the Steps pill's "Model's own").
+      return { route: 'local', model: row.model || '', notes: [], body: images.localRequest({ prompt: prompt, size: req.size, steps: req.steps }) };
     }
     if (row.kind === 'browser') {
       var model = String(req.model || '').trim() || images.modelFor(row, 'generate');

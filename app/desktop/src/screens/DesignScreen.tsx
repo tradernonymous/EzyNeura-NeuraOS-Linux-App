@@ -31,6 +31,8 @@ import '../design/exports.js';
 import '../design/diagram-layout.js';
 import '../design/components.js';
 import '../design/mockups.js';
+import '../design/outline.js';
+import '../design/undo.js';
 // zip.js first: office.js takes its zip writer from the global.
 import '../files/zip.js';
 import '../files/office.js';
@@ -49,6 +51,8 @@ const exportsLib: typeof import('../design/exports.js') = (globalThis as any).Fr
 const diagramLib: typeof import('../design/diagram-layout.js') = (globalThis as any).FreeAI4UDiagramLayout;
 const componentsLib: typeof import('../design/components.js') = (globalThis as any).FreeAI4UDesignComponents;
 const mockups: typeof import('../design/mockups.js') = (globalThis as any).FreeAI4UMockups;
+const outlineLib: typeof import('../design/outline.js') = (globalThis as any).FreeAI4UDesignOutline;
+const undoLib: typeof import('../design/undo.js') = (globalThis as any).FreeAI4UDesignUndo;
 const zip: typeof import('../files/zip.js') = (globalThis as any).FreeZip;
 const office: typeof import('../files/office.js') = (globalThis as any).FreeOffice;
 const savedModels: typeof import('../saved-models.js') = (globalThis as any).FreeAI4USavedModels;
@@ -269,6 +273,62 @@ interface DesignProps {
   onMode?: (mode: import('../create.js').CreateModeId) => void;
 }
 
+/**
+ * Presentation mode (every design app's Present): the canvas full-screen in
+ * its own sandboxed frame -- the same allow-scripts, never-same-origin rule
+ * as the studio's -- paged with the arrow keys, space and clicks; Esc or a
+ * click outside closes it. A deck pages one slide at a time through the
+ * frame's own neura:deck-go, so what presents is exactly what the studio
+ * shows.
+ */
+function PresentOverlay({ html, deck, onClose }: { html: string; deck: boolean; onClose: () => void }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [at, setAt] = useState({ index: 0, count: 0 });
+  const post = (message: Record<string, unknown>) => {
+    try { ref.current?.contentWindow?.postMessage(message, '*'); } catch { /* the frame is reloading */ }
+  };
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (!ref.current || e.source !== ref.current.contentWindow) return;
+      const data = e.data || {};
+      if (data.type === 'neura:ready') post({ type: 'neura:mode', mode: 'view' });
+      else if (data.type === 'neura:deck') setAt({ index: Math.max(0, Number(data.index) || 0), count: Math.max(0, Math.min(500, Math.floor(Number(data.count) || 0))) });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const go = (delta: number) => {
+    if (!at.count) return;
+    post({ type: 'neura:deck-go', index: stageLib.clampSlide(at.index, at.count, delta) });
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+      else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  return (
+    <div className="design-present" role="dialog" aria-label="Presentation" tabIndex={-1} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <iframe ref={ref} title="Presentation" sandbox="allow-scripts" srcDoc={artifact.inject(html)} />
+      <div className="design-present-bar">
+        {/* No onClick here: the overlay closes only when a click lands on the
+            overlay itself, so a click on this bar can never close it. */}
+        {deck && (
+          <>
+            <span className="mono" aria-live="polite">{at.count ? stageLib.counter(at.index, at.count) : ''}</span>
+            <button onClick={() => go(-1)} disabled={!at.count || at.index === 0} aria-label="Previous slide">‹</button>
+            <button onClick={() => go(1)} disabled={!at.count || at.index >= at.count - 1} aria-label="Next slide">›</button>
+          </>
+        )}
+        <button onClick={onClose} title="Close (Esc)">Close</button>
+      </div>
+    </div>
+  );
+}
+
 export default function DesignScreen({ viewportHint, onMode }: DesignProps = {}) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -316,7 +376,16 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
   const [mockSlides, setMockSlides] = useState<string[]>([]);
   const [mockIndex, setMockIndex] = useState(0);
   const [mockFormat, setMockFormat] = useState('square');
-  const [fit, setFit] = useState(true);
+  // Zoom: Fit scales the device into the stage; a percentage shows it at
+  // that scale (the stage scrolls). Deck mode always fits (letterboxed).
+  const [zoom, setZoom] = useState<'fit' | '50' | '100' | '150' | '200'>('fit');
+  // Presentation mode: the canvas full-screen, paged like a talk.
+  const [presenting, setPresenting] = useState(false);
+  // Undo/redo beside the version timeline (undo.js): every new canvas from
+  // outside the frame marks what was there; undo/redo apply as versions.
+  const [undoState, setUndoState] = useState(() => undoLib.initial());
+  // The deck's outline (outline.js): a title per slide for the filmstrip.
+  const [outline, setOutline] = useState<Array<import('../design/outline.js').OutlineEntry>>([]);
   const [tool, setTool] = useState<Tool>('view');
   const [tab, setTab] = useState<Tab>('style');
   const [pins, setPins] = useState<Pin[]>([]);
@@ -457,14 +526,40 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     }
   };
 
-  /** A new canvas from outside the frame: saved, versioned and reloaded. */
+  /** A new canvas from outside the frame: saved, versioned, undoable. */
   const commit = (html: string, label: string) => {
     if (!active) return;
     const clean = artifact.strip(html);
     frameEdit.current = '';
+    setUndoState((s) => undoLib.mark(s, canvasHtml));
     saveCanvas(clean);
     setVersions(versionsLib.push(active.id, { html: clean, label }));
   };
+
+  // Undo/redo step through the working stack; each step lands as an ordinary
+  // version ("Undo" / "Redo" rows in History), so nothing is hidden.
+  const doUndo = () => {
+    const step = undoLib.undo(undoState, canvasHtml);
+    if (!step || !active) return;
+    setUndoState(step.state);
+    commit(step.present, 'Undo');
+  };
+  const doRedo = () => {
+    const step = undoLib.redo(undoState, canvasHtml);
+    if (!step || !active) return;
+    setUndoState(step.state);
+    commit(step.present, 'Redo');
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (typingIn(e.target)) return;
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); }
+      else if ((meta && e.shiftKey && e.key.toLowerCase() === 'z') || (meta && e.key.toLowerCase() === 'y')) { e.preventDefault(); doRedo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }); // re-bound every render: the handlers close over the current stacks
 
   // What the frame says. Only the frame this screen made is listened to.
   useEffect(() => {
@@ -534,6 +629,30 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
       setName('');
     } catch (err) {
       setError((err as Error).message);
+    }
+  };
+
+  // A copy with everything the open one has (page, brand, prompt): the
+  // "Save as" every design app offers, so an experiment never costs the
+  // original. Create-then-update, because create takes only name/template.
+  const duplicateProject = async () => {
+    if (!active) return;
+    try {
+      const p: any = await api.designCreateProject({
+        name: `${active.name} copy`.slice(0, 80),
+        template: active.template,
+        prompt: active.prompt || '',
+      });
+      await api.designUpdateProject(p.id, {
+        canvas: active.canvas || {},
+        brand: active.brand || null,
+        status: active.status === 'draft' ? 'draft' : 'drafted',
+      });
+      await refresh();
+      setActiveId(p.id);
+      pushToast('ok', `Duplicated as “${p.name}”.`);
+    } catch (err) {
+      pushToast('error', (err as Error).message);
     }
   };
 
@@ -708,6 +827,20 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
   // ---- tweaks: the page's own tokens as controls ------------------------------
 
   const vars = useMemo(() => artifact.cssVars(canvasHtml), [canvasHtml]);
+  // The page's own colour pairs against its background, checked the way the
+  // brand roles are (brand.js): a live WCAG readout while tokens are tweaked.
+  // Only pairs both colours of which parse show up; a length is not a colour.
+  const contrastPairs = useMemo(() => {
+    if (!canvasHtml || draft) return [];
+    const paper = vars.find((v) => v.name === '--paper' || v.name === '--bg')?.value;
+    if (!paper) return [];
+    return ['--ink', '--text', '--fg', '--accent', '--muted'].flatMap((role) => {
+      const ink = vars.find((v) => v.name === role)?.value;
+      if (!ink) return [];
+      const report = brand.contrastReport(ink, paper);
+      return report.ratio == null ? [] : [{ role, ratio: report.ratio, passAA: report.passAA }];
+    });
+  }, [canvasHtml, draft, vars]);
   const setTweak = (varName: string, value: string) => {
     const next = { ...tweaks, [varName]: value };
     setTweakValues(next);
@@ -754,6 +887,20 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  // The filmstrip's facts, fresh with the page: what each slide is called.
+  useEffect(() => {
+    setOutline(viewport === 'deck' && canvasHtml ? outlineLib.outlineOf(artifact.strip(canvasHtml)) : []);
+  }, [canvasHtml, viewport]);
+
+  /** Re-order the deck: the page with a slide moved, as a new version. */
+  const moveSlideTo = (from: number, to: number) => {
+    if (!canvasHtml || !active || draft) return;
+    const clean = artifact.strip(canvasHtml);
+    const next = outlineLib.moveSlide(clean, from, to);
+    if (next === clean) return;
+    commit(next, `Moved slide ${from + 1} to ${to + 1}`);
+  };
 
   // ---- brand: extract from a real page through the engine's SSRF-safe fetch --
 
@@ -1030,8 +1177,9 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
   // ---- layout ----------------------------------------------------------------
 
   const device = stageLib.device(viewport, stageFormat);
-  // Deck mode always fits (letterboxed); the other presets fit on request.
-  const scale = fit || viewport === 'deck' ? stageLib.fitScale(box, device) : 1;
+  // Deck mode always fits (letterboxed); the other presets fit on request or
+  // sit at a chosen zoom (the stage scrolls).
+  const scale = zoom === 'fit' || viewport === 'deck' ? stageLib.fitScale(box, device) : Number(zoom) / 100;
   const chrome = device.frame === 'browser' ? stageLib.CHROME_HEIGHT : 0;
   const checks = useMemo(() => (canvasHtml ? slop.score(canvasHtml) : null), [canvasHtml]);
 
@@ -1053,6 +1201,9 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             options={projects.map((p) => ({ value: p.id, label: p.name, note: p.status }))}
             onPick={(id) => openProject(id)}
           />
+          {active && (
+            <button className="linkish" onClick={duplicateProject} disabled={!!draft} title="A copy with the page, brand and prompt, as a new project">Duplicate project</button>
+          )}
           <div className="studio-new">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New project…" aria-label="New project name" />
             <SelectPill
@@ -1172,7 +1323,20 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             }))}
             onPick={(id) => setViewport(id as Viewport)}
           />
-          <button className={fit || viewport === 'deck' ? 'active' : ''} onClick={() => setFit((f) => !f)} disabled={viewport === 'deck'} title="Fit the device to the stage, or show it at 100%">{fit || viewport === 'deck' ? `Fit ${Math.round(scale * 100)}%` : '100%'}</button>
+          <SelectPill
+            label="Zoom"
+            title="Fit the device to the stage, or a set zoom (the stage scrolls)"
+            value={viewport === 'deck' ? 'fit' : zoom}
+            disabled={viewport === 'deck'}
+            options={[
+              { value: 'fit', label: `Fit ${Math.round(scale * 100)}%`, note: 'the whole device, scaled into the stage' },
+              { value: '50', label: '50%', note: 'half size' },
+              { value: '100', label: '100%', note: 'actual size' },
+              { value: '150', label: '150%', note: 'one and a half' },
+              { value: '200', label: '200%', note: 'twice — for reading the small print' },
+            ]}
+            onPick={(v) => setZoom(v as typeof zoom)}
+          />
           <div className="seg" role="group" aria-label="Canvas tool">
             {(['view', 'comment', 'edit'] as Tool[]).map((t) => (
               <button key={t} className={tool === t ? 'active' : ''} onClick={() => setTool(t)} disabled={!!draft || !canvasHtml}
@@ -1181,6 +1345,9 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
               </button>
             ))}
           </div>
+          <button type="button" onClick={doUndo} disabled={!undoLib.canUndo(undoState) || !!draft || !canvasHtml} title="Undo the last canvas change (Ctrl+Z)">Undo</button>
+          <button type="button" onClick={doRedo} disabled={!undoLib.canRedo(undoState) || !!draft || !canvasHtml} title="Redo (Ctrl+Shift+Z)">Redo</button>
+          <button type="button" onClick={() => setPresenting(true)} disabled={!canvasHtml} title="Present the canvas full-screen (Esc closes)">Present</button>
           <span className="toolbar-spacer" />
           <SelectPill
             label="Export"
@@ -1294,6 +1461,25 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             <button onClick={() => goSlide(1)} disabled={!deck.count || deck.index >= deck.count - 1} aria-label="Next slide"><Icon name="chevron-right" size={14} /></button>
           </div>
         )}
+        {/* The layers panel at deck size (outline.js): jump by title, move a
+            slide -- each move a version, so History keeps the old order. */}
+        {viewport === 'deck' && outline.length > 1 && (
+          <div className="deck-outline" role="listbox" aria-label="Slide outline">
+            {outline.map((row) => (
+              <div key={row.index} role="option" aria-selected={row.index === deck.index} tabIndex={0}
+                className={`deck-outline-row ${row.index === deck.index ? 'is-here' : ''}`}
+                onClick={() => post({ type: 'neura:deck-go', index: row.index })}
+                onKeyDown={(e) => { if (e.key === 'Enter') post({ type: 'neura:deck-go', index: row.index }); }}>
+                <span className="deck-outline-no mono">{row.index + 1}</span>
+                <span className="deck-outline-title">{row.title}</span>
+                <button disabled={row.index === 0 || !!draft} aria-label={`Move slide ${row.index + 1} up`}
+                  onClick={(e) => { e.stopPropagation(); moveSlideTo(row.index, row.index - 1); }} title="Move up">↑</button>
+                <button disabled={row.index === outline.length - 1 || !!draft} aria-label={`Move slide ${row.index + 1} down`}
+                  onClick={(e) => { e.stopPropagation(); moveSlideTo(row.index, row.index + 1); }} title="Move down">↓</button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <aside className={`studio-right ${!canvasHtml && !draft ? 'is-idle' : ''} ${inspectorFolded ? 'is-folded' : ''}`}>
@@ -1371,6 +1557,16 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
                       );
                     })}
                     <button onClick={resetTweaks} disabled={!Object.keys(tweaks).length && !/neura-tweaks/.test(canvasHtml)}>Reset tweaks</button>
+                    {contrastPairs.length > 0 && (
+                      <div className="token-contrast">
+                        <span className="settings-hint">Contrast on {vars.find((v) => v.name === '--paper' || v.name === '--bg')?.name}:</span>
+                        {contrastPairs.map((p) => (
+                          <span key={p.role} className={`role-aa ${p.passAA ? 'ok' : 'bad'}`} title={`${p.role}: ${p.ratio}:1 — AA body text needs 4.5:1`}>
+                            <span className="mono">{p.role}</span> {p.ratio}:1 {p.passAA ? 'AA ✓' : 'low'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : <div className="empty">{canvasHtml ? 'This page declares no :root tokens to tweak.' : 'Tweaks appear once there is a page.'}</div>}
               </details>
@@ -1558,6 +1754,10 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
           )}
         </div>
       </aside>
+
+      {presenting && (draft ? draft.html : canvasHtml) && (
+        <PresentOverlay html={draft ? draft.html : canvasHtml} deck={viewport === 'deck'} onClose={() => setPresenting(false)} />
+      )}
     </div>
   );
 }

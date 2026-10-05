@@ -12,13 +12,19 @@ import '../images.js';
 import '../failure.js';
 import '../puter.js';
 import '../image-run.js';
+import '../image-adjust.js';
+// zip.js first: nothing here takes its writer from the global, but the
+// gallery's ZIP does, and the order is the file's own rule.
+import '../files/zip.js';
 import { call, hasShell, puterSigninOpen } from '../bridge';
 import { pushToast } from '../components/Toasts';
-import { savePictureUrl } from '../files/save';
+import { saveFile, savePictureUrl, base64ToBytes } from '../files/save';
 
 const images: typeof import('../images.js') = (globalThis as any).FreeAI4UImages;
 const failure: typeof import('../failure.js') = (globalThis as any).FreeAI4UFailure;
 const puter: typeof import('../puter.js') = (globalThis as any).FreeAI4UPuter;
+const adjustLib: typeof import('../image-adjust.js') = (globalThis as any).FreeAI4UImageAdjust;
+const zip: typeof import('../files/zip.js') = (globalThis as any).FreeZip;
 // The runner Chat shares, the kept choice Chat reads, and Chat's hand-off.
 const imageRun: typeof import('../image-run.js') = (globalThis as any).FreeAI4UImageRun;
 type RunDeps = import('../image-run.js').RunDeps;
@@ -62,6 +68,11 @@ interface Job {
   from?: string;
 }
 
+/** One quick action waiting on a gallery card, before Apply (image-adjust.js). */
+type QuickSpec = import('../image-adjust.js').AdjustSpec & { adjust: { brightness: number; contrast: number; saturation: number } };
+
+const EMPTY_QUICK: QuickSpec = { rotate: 0, flipH: false, flipV: false, crop: null, adjust: { brightness: 100, contrast: 100, saturation: 100 } };
+
 /** A picture the user chose to change: its bytes, its name, and its own shape. */
 interface Source {
   url: string;
@@ -104,6 +115,9 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
     images.SIZE_PRESETS.some((p: any) => p.id === kept.size) ? kept.size : images.SIZE_PRESETS[0].id,
   );
   const [prompt, setPrompt] = useState('');
+  // A local draw's step count: 'auto' sends none, so sd-server picks what the
+  // model was tuned for; a number overrides it (more steps, more minutes).
+  const [steps, setSteps] = useState('auto');
   // Make a picture, or change one. Two tasks rather than two screens: the
   // service, model and shape decisions are the same ones either way.
   const [mode, setMode] = useState<'generate' | 'edit'>(taskHint || 'generate');
@@ -134,6 +148,11 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   // Set when the user cancels or the screen goes away: the poll loop reads it
   // instead of running on after nobody is looking.
   const stopPolling = useRef(false);
+  // The last plan carried out, so "Again" can ask for it once more with a new
+  // seed (image-run.js withSeed): the one-button reroll every image tool has.
+  const lastPlan = useRef<{ kind: 'generate' | 'edit'; plan: ImagePlan } | null>(null);
+  // Quick actions waiting per gallery card (image-adjust.js), keyed by ts.
+  const [quickSpecs, setQuickSpecs] = useState<Record<number, QuickSpec>>({});
 
   // What the shell knows about sd-server. A browser build has no shell, so it
   // simply has no "This PC" row -- not a row that fails when pressed.
@@ -328,32 +347,15 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
    * testable, the same calls Chat makes) and carried out by imageRun.runImage,
    * so this function only says what came back.
    */
-  const run = async (kind: 'generate' | 'edit') => {
-    const text = prompt.trim();
-    if (busy || !choice || (kind === 'generate' && !text)) return;
-    const from = kind === 'edit' ? source?.url || '' : '';
-    const plan: ImagePlan = kind === 'edit'
-      ? images.editRequest(choice, {
-        prompt: text,
-        source: from,
-        mask: mask?.url || '',
-        size,
-        model,
-        sourceWidth: source?.width,
-        sourceHeight: source?.height,
-      })
-      : imageRun.drawPlan(choice, { prompt: text, size, model });
-    // A refusal is the whole answer: nothing is sent, and the reason is the
-    // sentence the plan gave rather than one invented here.
-    if (!plan.route) {
-      setError({ summary: 'Nothing was sent', upstream: '', walk: '', advice: plan.error });
-      return;
-    }
+  /** Carry a plan out and put what came back in the gallery. Both Draw and
+      Again end here, so a reroll can never drift from a first run. */
+  const carryOut = async (kind: 'generate' | 'edit', plan: ImagePlan, from: string) => {
     setBusy(true);
     setError(null);
     setPuterMsg('');
     stopPolling.current = false;
     try {
+      lastPlan.current = { kind, plan };
       // Null means cancelled: the user stopped it, which is not an error and
       // not an image. (`finally` below puts the button back.)
       const done = await imageRun.runImage(kind, choice, plan, runDeps());
@@ -368,6 +370,37 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const run = async (kind: 'generate' | 'edit') => {
+    const text = prompt.trim();
+    if (busy || !choice || (kind === 'generate' && !text)) return;
+    const from = kind === 'edit' ? source?.url || '' : '';
+    const plan: ImagePlan = kind === 'edit'
+      ? images.editRequest(choice, {
+        prompt: text,
+        source: from,
+        mask: mask?.url || '',
+        size,
+        model,
+        sourceWidth: source?.width,
+        sourceHeight: source?.height,
+      })
+      : imageRun.drawPlan(choice, { prompt: text, size, model, steps: steps === 'auto' ? undefined : Number(steps) });
+    // A refusal is the whole answer: nothing is sent, and the reason is the
+    // sentence the plan gave rather than one invented here.
+    if (!plan.route) {
+      setError({ summary: 'Nothing was sent', upstream: '', walk: '', advice: plan.error });
+      return;
+    }
+    await carryOut(kind, plan, from);
+  };
+
+  /** The same ask once more, with a fresh seed where the service takes one. */
+  const runAgain = async () => {
+    const last = lastPlan.current;
+    if (!last || busy || !choice) return;
+    await carryOut(last.kind, imageRun.withSeed(last.plan), last.kind === 'edit' ? source?.url || '' : '');
   };
   const submit = () => { run(mode === 'edit' ? 'edit' : 'generate'); };
 
@@ -392,6 +425,80 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   };
   // A picture opened large, over the screen, until Esc or a click outside.
   const [preview, setPreview] = useState<Job | null>(null);
+
+  // ---- quick actions: Adobe Express's one-click edits, done here -----------
+
+  /**
+   * One quick action, applied on a canvas in this window per image-adjust.js's
+   * plan: rotate, flip, crop, or the sliders via Apply. The new picture joins
+   * the gallery beside the original -- nothing was uploaded, and the note says
+   * so, the same way a local draw's does.
+   */
+  const applyAdjust = (job: Job, spec: QuickSpec) => {
+    const img = new Image();
+    img.onload = () => {
+      const specOut = { ...spec, width: img.naturalWidth, height: img.naturalHeight };
+      const plan = adjustLib.plan(specOut);
+      const canvas = document.createElement('canvas');
+      canvas.width = plan.width;
+      canvas.height = plan.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { pushToast('error', 'This window cannot edit pictures.'); return; }
+      if (plan.filter) ctx.filter = plan.filter;
+      ctx.translate(plan.width / 2, plan.height / 2);
+      ctx.rotate(plan.angle);
+      ctx.scale(plan.sx, plan.sy);
+      ctx.drawImage(img, plan.src.x, plan.src.y, plan.src.width, plan.src.height, -plan.src.width / 2, -plan.src.height / 2, plan.src.width, plan.src.height);
+      const url = canvas.toDataURL('image/png');
+      const said = adjustLib.label(specOut);
+      setGallery((prev) => [{
+        prompt: said === 'unchanged' ? job.prompt : `${job.prompt} — ${said}`,
+        url,
+        size: job.size,
+        who: 'quick action (here)',
+        notes: ['edited on this PC — nothing was sent anywhere'],
+        ts: Date.now(),
+        from: job.url,
+      }, ...prev].slice(0, 60));
+      setQuickSpecs((prev) => ({ ...prev, [job.ts]: { ...EMPTY_QUICK } }));
+    };
+    img.onerror = () => pushToast('error', 'That picture could not be drawn for the quick action.');
+    img.src = job.url;
+  };
+
+  const setQuick = (ts: number, patch: Partial<QuickSpec>) => {
+    setQuickSpecs((prev) => ({ ...prev, [ts]: { ...EMPTY_QUICK, ...prev[ts], ...patch } }));
+  };
+  const setQuickKnob = (ts: number, knob: 'brightness' | 'contrast' | 'saturation', value: number) => {
+    setQuickSpecs((prev) => {
+      const base = prev[ts] || EMPTY_QUICK;
+      return { ...prev, [ts]: { ...base, adjust: { ...base.adjust, [knob]: value } } };
+    });
+  };
+
+  /** Every picture this session drew that is still a data: PNG, zipped. */
+  const [savingZip, setSavingZip] = useState(false);
+  const saveAllZip = async () => {
+    if (!gallery.length || savingZip) return;
+    setSavingZip(true);
+    try {
+      const files: Array<{ name: string; data: Uint8Array }> = [];
+      let skipped = 0;
+      gallery.forEach((j, i) => {
+        if (/^data:image\/png/.test(j.url)) {
+          files.push({ name: `image-${String(i + 1).padStart(2, '0')}.png`, data: base64ToBytes(j.url.slice(j.url.indexOf(',') + 1)) });
+        } else skipped += 1;
+      });
+      if (!files.length) { pushToast('warn', 'Only pictures drawn or edited here can be zipped; the others have their own Save.'); return; }
+      const archive = await zip.writeZip(files);
+      pushToast('ok', await saveFile({ name: 'images.zip', bytes: archive, mime: 'application/zip' }));
+      if (skipped) pushToast('info', `${skipped} picture(s) from a cloud service were left out; save those on their own.`);
+    } catch (e) {
+      pushToast('error', String((e as Error).message || e));
+    } finally {
+      setSavingZip(false);
+    }
+  };
   useEffect(() => {
     if (!preview) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreview(null); };
@@ -488,6 +595,23 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
             }))}
             onPick={(id) => { setSize(id); imageRun.writeChoice({ size: id }); }}
           />
+          {/* Only a draw on this PC takes steps: a cloud service decides its
+              own, and an edit follows its source, not a step count. */}
+          {isLocal && mode === 'generate' && (
+            <SelectPill
+              label="Steps"
+              title="How long this PC works on a draw — more steps, more detail, more minutes"
+              value={steps}
+              options={[
+                { value: 'auto', label: "Model's own", note: 'sd-server picks what the model was tuned for' },
+                { value: '20', label: '20', note: 'a sketch, fast' },
+                { value: '28', label: '28', note: 'the middle' },
+                { value: '40', label: '40', note: 'slow, more detail' },
+                { value: '60', label: '60', note: 'the long haul' },
+              ]}
+              onPick={setSteps}
+            />
+          )}
           <button onClick={refresh} title="Re-read the engine's image services" aria-label="Refresh">
             <Icon name="refresh" size={14} />
           </button>
@@ -622,6 +746,12 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                   ? (mode === 'edit' ? 'Sign in to change it' : 'Sign in to draw')
                   : mode === 'edit' ? 'Change the picture' : 'Draw'}
             </button>
+            {/* The reroll every image tool has: the same ask, a fresh seed
+                where the service takes one (image-run.js withSeed). */}
+            <button onClick={runAgain} disabled={busy || !lastPlan.current}
+              title="Ask once more for the same thing — a new seed where the service takes one">
+              Again
+            </button>
             {/* A job on this PC is minutes of this machine's own work, so it
                 says what the server said and can be stopped -- the one thing a
                 spinner cannot offer. */}
@@ -689,6 +819,12 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
         </div>
 
         <div className="images-gallery">
+          {gallery.length > 1 && (
+            <div className="images-gallery-bar">
+              <span className="settings-hint">{gallery.length} in this session's gallery (never on disk unless saved)</span>
+              <button onClick={saveAllZip} disabled={savingZip} title="Every picture drawn or edited here, zipped">{savingZip ? 'Zipping…' : 'Save all (ZIP)'}</button>
+            </div>
+          )}
           {gallery.length === 0 && !busy && (
             <div className="empty-state">
               <div className="empty-icon"><Icon name="image" size={28} /></div>
@@ -718,11 +854,47 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                       again: it becomes the source in the composer, where it
                       sits beside whatever comes back. */}
                   <button onClick={() => changeThis(job)}>Change this</button>
+                  <button onClick={() => { setPrompt(job.prompt); }} title="Its words back in the composer, to draw again with a twist">Use prompt</button>
                   <button onClick={() => removeJob(job)} title="Remove it from this list (a saved copy is not touched)">Delete</button>
                 </span>
                 {job.from && (
                   <span className="image-notes">Changed from a picture you chose</span>
                 )}
+                {/* One-click edits done right here, per image-adjust.js: each
+                    button draws the new picture on this PC's canvas and puts
+                    it beside the original; nothing is uploaded. */}
+                <details className="image-quick">
+                  <summary>Quick actions (here, no upload)</summary>
+                  <div className="image-quick-body">
+                    <div className="image-quick-row">
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, rotate: 1 })} title="A quarter turn to the right">⟳</button>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, rotate: -1 })} title="A quarter turn to the left">⟲</button>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, flipH: true })}>Flip H</button>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, flipV: true })}>Flip V</button>
+                    </div>
+                    <div className="image-quick-row">
+                      <span className="settings-hint">Centre-crop:</span>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 1, h: 1, label: '1:1' } })}>1:1</button>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 4, h: 5, label: '4:5' } })}>4:5</button>
+                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 16, h: 9, label: '16:9' } })}>16:9</button>
+                    </div>
+                    <div className="image-quick-row image-quick-sliders">
+                      <label>Brightness
+                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.brightness}
+                          onChange={(e) => setQuickKnob(job.ts, 'brightness', Number(e.target.value))} />
+                      </label>
+                      <label>Contrast
+                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.contrast}
+                          onChange={(e) => setQuickKnob(job.ts, 'contrast', Number(e.target.value))} />
+                      </label>
+                      <label>Saturation
+                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.saturation}
+                          onChange={(e) => setQuickKnob(job.ts, 'saturation', Number(e.target.value))} />
+                      </label>
+                      <button onClick={() => applyAdjust(job, quickSpecs[job.ts] || EMPTY_QUICK)}>Apply</button>
+                    </div>
+                  </div>
+                </details>
                 {job.notes.length > 0 && (
                   <span className="image-notes">{job.notes.join(' · ')}</span>
                 )}
