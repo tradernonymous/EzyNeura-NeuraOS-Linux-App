@@ -1275,3 +1275,29 @@ parsing its `<style>` declarations straight. Pinned by
 `desktop-create-tabs.test.js` (360 tests green); tsc, build, cargo 185,
 clippy, skills green; toolbar screenshotted under Xvfb. Not walked on the
 Mint machine yet.
+
+## Create: dropdowns off the screen, Design without This PC (2026-10-06)
+
+Two faults from the Mint machine. (1) Every SelectPill panel was
+absolutely-placed inside its own column: anchored right in a 280px
+column, or beside a pill near an edge, it ran off the screen. The panel
+is portaled to <body> now and placed against the viewport -- fixed
+coordinates, clamped on both axes, flipped above the pill when there is
+no room below, re-placed on scroll and resize, z-index above the app.
+The outside-click check knows the panel is outside the box, so a pick
+still fires. Placement writes the SAME reference when the numbers do not
+change: the effect runs every render, and a fresh object each time looped
+React until the window died (#185 -- caught under Xvfb, pinned in a
+test). (2) Design offered This PC only while the model server happened
+to be running, so a stopped server looked like "Design cannot use local
+models" next to the image tab's always-there sd-server row. The row is
+always offered now (stopped says "not running -- Generate starts it"),
+is the default when nothing else is chosen, and the first Generate
+starts the server -- the last file it ran, else the first saved model --
+then takes the model from what came up; nothing to start is said in
+words, never an empty base URL. The engine's own 'local' row keeps the
+id, the rule Chat keeps. 362 tests green (the portal, the clamp, the
+no-loop rule and the row pinned in desktop-create-tabs); tsc, build,
+cargo 185, clippy, skills green; Service panel screenshotted under Xvfb:
+open, on-screen, the local row with its note. Not walked on the Mint
+machine yet.

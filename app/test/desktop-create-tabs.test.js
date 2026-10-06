@@ -126,16 +126,29 @@ test('a negative prompt rides a local draw, a seed pins it', () => {
   assert.ok(pinned.notes.some((n) => /seed 7/.test(n)), 'the card says the seed it used');
 });
 
-test('the Design tab offers This PC: the row is polled and the stream goes straight to it', () => {
+test('the Design tab offers This PC: the row is always there and a stopped server starts on Generate', () => {
   const design = read('desktop', 'src', 'screens', 'DesignScreen.tsx');
-  assert.match(design, /import \{ hasShell, writeLocalFile, localModelStatus \} from '\.\.\/bridge';/);
+  assert.match(design, /import \{ hasShell, writeLocalFile, localModelStatus, localModelStart \} from '\.\.\/bridge';/);
   assert.match(design, /import '\.\.\/local-models\.js';/);
   assert.match(design, /localModels\.providerRow\(status\)/, 'the same row Chat shows');
   assert.match(design, /setInterval\(read, 15000\)/, 'polled: models come and go while the app is open');
-  assert.match(design, /localRow \? \[\{ id: localRow\.id, label: localRow\.label \}\] : \[\]/, 'in the Service list');
-  assert.match(design, /if \(localRow && !provider\) setProvider\(localRow\.id\)/, 'This PC first when nothing is chosen');
-  assert.match(design, /provider === localRow\.id/, 'the model list and the stream key off the row');
-  assert.match(design, /streamLocalChat\(local\.baseUrl/, 'the ask goes straight to localhost, not through the engine');
+  // Always offered, the way the image tab offers This PC: stopped says so in
+  // its note instead of vanishing.
+  assert.match(design, /Local model \(This PC\)/, 'the row exists before the server does');
+  assert.match(design, /not running — Generate starts it/);
+  assert.match(design, /if \(!provider && providers\.some\(\(p\) => p\.id === 'local'\)\) setProvider\('local'\)/, 'This PC first when nothing is chosen');
+  // The engine's own 'local' wins the id, the rule Chat keeps.
+  assert.match(design, /const engineOwnsLocal = engineRows\.some\(\(p\) => p\.id === 'local'\)/);
+  // Down, then up: the last file it ran, else the first saved model, and the
+  // turn waits on the load rather than failing on an empty base URL.
+  assert.match(design, /const ensureLocal = async/);
+  assert.match(design, /localModelStart\(\{ repo: '', file: status\.file \}\)/);
+  assert.match(design, /ensureUnsloth\(entry\)/);
+  assert.match(design, /Nothing to start on this PC/, 'nothing to start is said in words');
+  assert.match(design, /provider === 'local' && !engineOwnsLocal/, 'the model list and the stream key off the row');
+  assert.match(design, /streamLocalChat\(local\.baseUrl, body\.model \|\| local\.model/, 'the model comes from the server that came up');
+  // Generate stays clickable for a stopped server -- that is the point.
+  assert.match(design, /\(!model && !\(provider === 'local' && !engineOwnsLocal\)\)/);
 });
 
 test('Service, Model and System live on the toolbar, not behind the Project fold', () => {
@@ -171,4 +184,26 @@ test('a design system imports from another app: ZIP, HTML, JSON, or the plain fi
   // The CSS path still reads an HTML export's <style> block as-is.
   const sys = systems.importSystem('<style>:root { --brand: #336699; }</style>');
   assert.equal(sys.tokens['--brand'], '#336699');
+});
+
+test('a dropdown panel is portaled to the body and clamped, never off-screen', () => {
+  const pill = read('desktop', 'src', 'components', 'SelectPill.tsx');
+  assert.match(pill, /createPortal/, 'the panel is not inside the narrow column');
+  assert.match(pill, /function clampPanel/, 'x and y are clamped to the viewport');
+  assert.match(pill, /btn\.top - 6 - panel\.offsetHeight/, 'no room below? it opens above');
+  // The panel lives outside the box, so the outside-click check has to know it.
+  assert.match(pill, /panelRef\.current\?\./);
+  assert.match(pill, /document\.addEventListener\('scroll', move, true\)/, 're-placed when the column scrolls');
+  const css = read('desktop', 'src', 'index.css');
+  assert.match(css, /\.select-panel \{[^}]*position: fixed;/);
+  assert.match(css, /\.select-panel \{[^}]*max-height: calc\(100vh - 16px\);/);
+  assert.match(css, /\.select-panel \{[^}]*z-index: 1000;/);
+});
+
+// The one that bit first: a placement effect that fires on every render must
+// write the SAME reference when nothing moved, or React loops until the
+// window dies (#185). Pinned so a "cleanup" of place() cannot bring it back.
+test('placing the panel does not loop: same numbers, same reference', () => {
+  const pill = read('desktop', 'src', 'components', 'SelectPill.tsx');
+  assert.match(pill, /setAt\(\(prev\) => \(prev && prev\.top === next\.top && prev\.left === next\.left \? prev : next\)\)/);
 });

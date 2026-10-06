@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icon';
 
 // A picker that belongs to this app rather than to the operating system.
@@ -9,6 +10,12 @@ import Icon from './Icon';
 // as a web page in a frame. This is the same choice as a pill that names the
 // current value, opening a panel that lists the options with the reason for
 // each -- which is also where a note like "needs a key" can be said at all.
+//
+// The panel is PORTALED to the body and placed against the viewport: in a
+// 280px column or beside the right edge, an absolutely-placed panel ran off
+// the screen (the Design pickers did, on a real Mint machine). Fixed
+// coordinates, clamped to the viewport on both axes, flipped above the pill
+// when there is no room below, and re-placed on scroll and resize.
 
 export interface SelectOption {
   value: string;
@@ -34,6 +41,18 @@ interface SelectPillProps {
   width?: number;
 }
 
+/** Viewport-clamped coordinates for the panel, against the pill's button. */
+function clampPanel(btn: DOMRect, panel: { offsetWidth: number; offsetHeight: number }) {
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const left = Math.max(8, Math.min(btn.right - panel.offsetWidth, vw - panel.offsetWidth - 8));
+  const below = btn.bottom + 6;
+  const top = below + panel.offsetHeight > vh - 8
+    ? Math.max(8, btn.top - 6 - panel.offsetHeight)
+    : below;
+  return { top, left };
+}
+
 export default function SelectPill({
   label,
   title,
@@ -47,23 +66,49 @@ export default function SelectPill({
 }: SelectPillProps) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Measured after paint, so the first frame is hidden rather than misplaced.
+  // Same numbers, SAME reference: the placement effect runs on every render,
+  // and a new object each time would be a setState loop (#185).
+  const place = () => {
+    const btn = buttonRef.current;
+    const panel = panelRef.current;
+    if (!btn || !panel) return;
+    const next = clampPanel(btn.getBoundingClientRect(), panel);
+    setAt((prev) => (prev && prev.top === next.top && prev.left === next.left ? prev : next));
+  };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAt(null);
+      return;
+    }
+    // The panel is OUTSIDE the box (portal), so a click inside it must not
+    // count as "somewhere else" -- it would close before the pick fired.
     const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const move = () => place();
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', move);
+    document.addEventListener('scroll', move, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', move);
+      document.removeEventListener('scroll', move, true);
     };
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = options.find((o) => o.value === value);
   const shown = useMemo(() => {
@@ -72,10 +117,15 @@ export default function SelectPill({
     return options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
   }, [options, filter]);
 
+  // The panel can change height after opening (a filter, a longer list), so
+  // it is placed on open and re-placed whenever the list it shows changes.
+  useLayoutEffect(() => { if (open) place(); }); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="select-pill" ref={boxRef} style={width ? { maxWidth: width } : undefined}>
       <button
         type="button"
+        ref={buttonRef}
         className={`pill ${open ? 'open' : ''}`}
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
@@ -88,8 +138,14 @@ export default function SelectPill({
         <Icon name="chevron-down" size={12} />
       </button>
 
-      {open && (
-        <div className="select-panel" role="listbox" aria-label={title}>
+      {open && createPortal(
+        <div
+          className="select-panel"
+          role="listbox"
+          aria-label={title}
+          ref={panelRef}
+          style={at ? { top: at.top, left: at.left } : { visibility: 'hidden' }}
+        >
           {filterable && options.length > 6 && (
             <input
               className="select-filter"
@@ -128,7 +184,8 @@ export default function SelectPill({
             ))}
             {shown.length === 0 && <div className="select-empty">Nothing matches.</div>}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
