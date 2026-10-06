@@ -17,7 +17,9 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
 const create = require('../desktop/src/create.js');
 require('../desktop/src/image-run.js');
+require('../desktop/src/design/systems.js');
 const run = globalThis.FreeAI4UImageRun;
+const systems = globalThis.FreeAI4UDesignSystems;
 
 test('two tabs over the five modes, each tab with its own sub-switch', () => {
   assert.deepEqual(create.TABS.map((t) => t.id), ['design', 'image']);
@@ -122,4 +124,51 @@ test('a negative prompt rides a local draw, a seed pins it', () => {
   assert.equal(pinned.body.seed, 7);
   assert.equal(pinned.body.negativePrompt, 'dog', 'the seed does not drop the negative');
   assert.ok(pinned.notes.some((n) => /seed 7/.test(n)), 'the card says the seed it used');
+});
+
+test('the Design tab offers This PC: the row is polled and the stream goes straight to it', () => {
+  const design = read('desktop', 'src', 'screens', 'DesignScreen.tsx');
+  assert.match(design, /import \{ hasShell, writeLocalFile, localModelStatus \} from '\.\.\/bridge';/);
+  assert.match(design, /import '\.\.\/local-models\.js';/);
+  assert.match(design, /localModels\.providerRow\(status\)/, 'the same row Chat shows');
+  assert.match(design, /setInterval\(read, 15000\)/, 'polled: models come and go while the app is open');
+  assert.match(design, /localRow \? \[\{ id: localRow\.id, label: localRow\.label \}\] : \[\]/, 'in the Service list');
+  assert.match(design, /if \(localRow && !provider\) setProvider\(localRow\.id\)/, 'This PC first when nothing is chosen');
+  assert.match(design, /provider === localRow\.id/, 'the model list and the stream key off the row');
+  assert.match(design, /streamLocalChat\(local\.baseUrl/, 'the ask goes straight to localhost, not through the engine');
+});
+
+test('Service, Model and System live on the toolbar, not behind the Project fold', () => {
+  const design = read('desktop', 'src', 'screens', 'DesignScreen.tsx');
+  // The fold closes the moment a project is open, which is exactly when the
+  // model has to be seen -- so the pickers moved to the toolbar.
+  const spacer = design.indexOf('toolbar-spacer');
+  assert.ok(spacer > 0);
+  for (const label of ['label="Service"', 'label="Model"', 'label="System"']) {
+    const at = design.indexOf(label);
+    assert.ok(at > spacer, `${label} is after the spacer, in the toolbar`);
+  }
+  assert.ok(!/studio-pickers/.test(design + read('desktop', 'src', 'index.css')), 'the hidden block is gone, CSS with it');
+});
+
+test('a design system imports from another app: ZIP, HTML, JSON, or the plain files', () => {
+  const design = read('desktop', 'src', 'screens', 'DesignScreen.tsx');
+  assert.match(design, /accept="\.md,\.css,\.txt,\.zip,\.json,\.html,\.htm"/);
+  assert.match(design, /zip\.readEntries\(/, 'another app\'s export ZIP is opened here');
+  assert.match(design, /systemsLib\.jsonTokens\(raw\)/, 'a JSON token export becomes declarations first');
+  // The tokens themselves stay pure and node-tested.
+  const css = systems.jsonTokens(JSON.stringify({
+    color: { accent: '#12Ab34', deep: { $value: '#000000' } },
+    font: { sizes: { base: '16px' } },
+    ref: { bad: '{color.accent}' },
+    badjson: 'x',
+  }));
+  assert.match(css, /--color-accent: #12Ab34;/);
+  assert.match(css, /--color-deep: #000000;/, '$value leaves are the value');
+  assert.match(css, /--font-sizes-base: 16px;/, 'camelCase keys become kebab');
+  assert.ok(!/\{color\.accent\}/.test(css), 'a reference means nothing without its file');
+  assert.equal(systems.jsonTokens('not json at all'), '', 'unparseable text is empty, not a guess');
+  // The CSS path still reads an HTML export's <style> block as-is.
+  const sys = systems.importSystem('<style>:root { --brand: #336699; }</style>');
+  assert.equal(sys.tokens['--brand'], '#336699');
 });

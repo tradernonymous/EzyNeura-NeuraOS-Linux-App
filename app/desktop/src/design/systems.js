@@ -195,6 +195,44 @@
     return out;
   }
 
+  /**
+   * A token file from another tool (Figma, Style Dictionary, Claude Design's
+   * own export) as CSS declarations: `{ "color": { "accent": "#fff" } }`
+   * becomes `--color-accent: #fff;`, so importSystem can read it like any
+   * other file. `$value` leaves are the value; a `{reference}` is skipped --
+   * it means nothing without the file it points at. Unparseable text: ''.
+   */
+  function jsonTokens(text) {
+    var parsed;
+    try { parsed = JSON.parse(String(text || '')); } catch (e) { return ''; }
+    if (!parsed || typeof parsed !== 'object') return '';
+    var lines = [];
+    var kebab = function (key) {
+      return String(key).replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[_\s]+/g, '-').toLowerCase();
+    };
+    var walk = function (node, path) {
+      if (node === null || typeof node !== 'object') return;
+      if (typeof node.$value === 'string' || typeof node.$value === 'number') {
+        var leaf = String(node.$value).trim();
+        if (leaf && leaf.charAt(0) !== '{') lines.push('  --' + path.join('-') + ': ' + leaf + ';');
+        return;
+      }
+      Object.keys(node).forEach(function (key) {
+        if (key === '$value' || key === '$type' || key === '$description') return;
+        var value = node[key];
+        var next = path.concat(kebab(key));
+        if (typeof value === 'string' || typeof value === 'number') {
+          var text = String(value).trim();
+          if (text && text.charAt(0) !== '{') lines.push('  --' + next.join('-') + ': ' + text + ';');
+        } else {
+          walk(value, next);
+        }
+      });
+    };
+    walk(parsed, []);
+    return lines.join('\n');
+  }
+
   /** An imported file as a system: its tokens over the neutral base. */
   function importSystem(source, name) {
     var found = parseTokens(source);
@@ -269,6 +307,7 @@
     designMd: designMd,
     fromBrand: fromBrand,
     parseTokens: parseTokens,
+    jsonTokens: jsonTokens,
     importSystem: importSystem,
     readStore: readStore,
     saveImported: saveImported,
