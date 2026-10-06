@@ -51,7 +51,7 @@ export declare const HANDOFF_EVENT: string;
 export declare function readChoice(storage?: Pick<Storage, 'getItem'> | null): KeptChoice;
 export declare function writeChoice(patch: Partial<KeptChoice>, storage?: Pick<Storage, 'getItem' | 'setItem'> | null): KeptChoice;
 export declare function modelFor(choice: Partial<ImageChoice> | null, kind: 'generate' | 'edit', kept?: Partial<KeptChoice>): string;
-export declare function drawPlan(choice: Partial<ImageChoice> | null, request: { prompt: string; size?: string; model?: string; steps?: number }): ImagePlan;
+export declare function drawPlan(choice: Partial<ImageChoice> | null, request: { prompt: string; size?: string; model?: string; steps?: number; negativePrompt?: string }): ImagePlan;
 export declare function withSeed(plan: ImagePlan, seed?: number): ImagePlan;
 export declare function runLocal(body: any, deps: RunDeps): Promise<string>;
 export declare function runImage(kind: 'generate' | 'edit', choice: Partial<ImageChoice> | null, plan: ImagePlan, deps: RunDeps): Promise<ImageResult | null>;
