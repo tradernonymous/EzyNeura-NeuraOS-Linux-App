@@ -970,16 +970,18 @@ html, body, #root {
 }
 
 .select-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  width: min(320px, 76vw);
+  /* Portaled to <body> and placed by SelectPill: fixed against the
+     viewport, clamped on both axes, so it can never run off the screen. */
+  position: fixed;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   padding: 6px;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-2);
-  z-index: 40;
+  z-index: 1000;
 }
 
 .select-filter {

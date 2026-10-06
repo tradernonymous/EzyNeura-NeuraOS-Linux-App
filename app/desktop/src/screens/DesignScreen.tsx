@@ -4,8 +4,8 @@ import { escapeHtml } from '../markdown';
 import Icon from '../components/Icon';
 import SelectPill from '../components/SelectPill';
 import { pushToast } from '../components/Toasts';
-import { isSavedProvider, streamSaved } from '../run-model';
-import { hasShell, writeLocalFile, localModelStatus } from '../bridge';
+import { ensureUnsloth, isSavedProvider, streamSaved } from '../run-model';
+import { hasShell, writeLocalFile, localModelStatus, localModelStart } from '../bridge';
 import { saveFile, base64ToBytes } from '../files/save';
 import { NAVIGATE_EVENT } from '../Sidebar';
 import { DESIGN_BRIEF_KEY } from './ChatScreen';
@@ -471,15 +471,24 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     return () => clearInterval(timer);
   }, []);
 
-  // The Service pill's rows: the saved ones, This PC, then the engine. One
-  // list, derived, so the local row joins the moment it is ready.
-  const providers = useMemo(
-    () => [...mineRows(), ...(localRow ? [{ id: localRow.id, label: localRow.label }] : []), ...engineRows],
-    [engineRows, localRow],
-  );
-  // Nothing chosen yet and This PC is up: This PC is the default, the same
+  // The Service pill's rows: the saved ones, This PC, then the engine. The
+  // local row is ALWAYS there when the shell is (the image tab's own rule) --
+  // stopped or starting says so in its note -- and only when the engine does
+  // not already answer to 'local' itself, the same precedence Chat keeps.
+  const engineOwnsLocal = engineRows.some((p) => p.id === 'local');
+  const providers = useMemo(() => {
+    const direct = localRow
+      ? { id: localRow.id, label: localRow.label }
+      : hasShell() && !engineRows.some((p) => p.id === 'local')
+        ? { id: 'local', label: 'Local model (This PC)', note: 'not running — Generate starts it' }
+        : null;
+    return [...mineRows(), ...(direct ? [direct] : []), ...engineRows];
+  }, [engineRows, localRow]);
+  // Nothing chosen yet and This PC answers: This PC is the default, the same
   // rule the image picker keeps.
-  useEffect(() => { if (localRow && !provider) setProvider(localRow.id); }, [localRow, provider]);
+  useEffect(() => {
+    if (!provider && providers.some((p) => p.id === 'local')) setProvider('local');
+  }, [provider, providers]);
 
   // The critique runs by itself only for a cloud provider (critique.js).
   useEffect(() => {
@@ -488,10 +497,11 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
   useEffect(() => {
     if (!provider) { setModels([]); return; }
-    // This PC serves one model at a time; the list is that one.
-    if (localRow && provider === localRow.id) {
-      setModels([localRow.model]);
-      setModel(localRow.model);
+    // This PC: its model when the server is up, none when it is down -- and
+    // Generate still works down, because ensureLocal starts the server first.
+    if (provider === 'local' && !engineOwnsLocal) {
+      setModels(localRow ? [localRow.model] : []);
+      setModel(localRow ? localRow.model : '');
       return;
     }
     if (isSavedProvider(provider)) {
@@ -505,7 +515,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
       setModels(ids);
       setModel((m) => (ids.includes(m) ? m : ids[0] || ''));
     }).catch(() => setModels([]));
-  }, [provider]);
+  }, [provider, localRow, engineOwnsLocal]);
 
   // The project's own thread and timeline, and its brand as the default system.
   useEffect(() => {
@@ -696,16 +706,49 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
   // ---- generation: the engine's chat route (or a local model) is the designer
 
+  /**
+   * This PC's server, up if it is down -- the image tab's rule for sd-server:
+   * the row is always offered, and the first ask starts what it needs. The
+   * last file the server ran wins; else the first saved model; else there is
+   * nothing to start and the caller says so in words rather than hanging.
+   */
+  const ensureLocal = async () => {
+    pushToast('info', 'Starting the local model — a minute or two of this machine…');
+    const status = await localModelStatus().catch(() => null);
+    if (status && status.state === 'ready') {
+      const up = localModels.providerRow(status);
+      if (up) { setLocalRow(up); return up; }
+    }
+    const entry = savedModels.list().find((m) => m.kind === 'unsloth' && !!m.path);
+    try {
+      const started = status && status.file
+        ? await localModelStart({ repo: '', file: status.file })
+        : entry
+          ? await ensureUnsloth(entry)
+          : null;
+      const row = started ? localModels.providerRow(started) : null;
+      if (row) { setLocalRow(row); return row; }
+    } catch (err) {
+      throw new Error((err as Error).message || String(err));
+    }
+    return null;
+  };
+
   const collect = async (messages: Array<{ role: string; content: string }>, controller: AbortController, onText?: (text: string) => void) => {
     let acc = '';
     // Three ways to ask: the engine's chat route, one of "my models", or
     // This PC's model server straight over localhost (its own key, its own
-    // port -- the engine never sees it).
-    const local = localRow && provider === localRow.id ? localRow : null;
+    // port -- the engine never sees it). This PC's row is offered stopped as
+    // well as ready, so this is where a stopped server is started.
+    const wantsLocal = provider === 'local' && !engineOwnsLocal;
+    const local = wantsLocal ? (localRow || await ensureLocal()) : null;
+    if (wantsLocal && !local) {
+      throw new Error('Nothing to start on this PC: pick a model in Settings → Local models, then try again.');
+    }
     const stream: typeof streamChat = isSavedProvider(provider)
       ? streamMine
       : local
-        ? (_p, body, onFrame, signal) => streamLocalChat(local.baseUrl, body.model, body.messages, onFrame, signal, local.apiKey || undefined)
+        ? (_p, body, onFrame, signal) => streamLocalChat(local.baseUrl, body.model || local.model, body.messages, onFrame, signal, local.apiKey || undefined)
         : streamChat;
     await stream(provider, { model, messages }, (frame) => {
       if (frame.content) {
@@ -718,7 +761,9 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
   const generate = async (withAnswers?: Array<{ label: string; answer: string }>) => {
     const text = (withAnswers ? pendingBrief : brief).trim();
-    if (!text || !provider || !model || working || !active) return;
+    // A local ask needs no model yet: collect starts the server first and
+    // takes the model from what came up. Everything else needs its list.
+    if (!text || !provider || working || !active || (!model && !(provider === 'local' && !engineOwnsLocal))) return;
     setWorking(true);
     setError('');
     setDraft(null);
@@ -1404,7 +1449,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             />
             {working
               ? <button className="stop-btn" onClick={() => abortRef.current?.abort()}><Icon name="stop" size={12} /> Stop</button>
-              : <button className="primary" onClick={() => generate()} disabled={!brief.trim() || !model || !active}>Generate</button>}
+              : <button className="primary" onClick={() => generate()} disabled={!brief.trim() || !active || (!model && !(provider === 'local' && !engineOwnsLocal))}>Generate</button>}
           </div>
         )}
         {isDiagram && active && (
@@ -1468,7 +1513,7 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             label="Service"
             title="Which service designs — This PC, your saved models, or the engine"
             value={provider}
-            options={providers.map((p: any) => ({ value: p.id, label: p.label }))}
+            options={providers.map((p: any) => ({ value: p.id, label: p.label, ...(p.note ? { note: p.note } : {}) }))}
             onPick={(id) => setProvider(id)}
           />
           <SelectPill
