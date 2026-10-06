@@ -944,6 +944,16 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     }).catch(() => pushToast('error', 'That file could not be read.'));
   };
 
+  /** A page from a file onto the canvas, as one version like any other. */
+  const importHtml = (file: File) => {
+    if (!active || draft) return;
+    file.text().then((text) => {
+      if (!/<[a-z][^>]*>/i.test(text)) { pushToast('warn', `${file.name} has no HTML page in it.`); return; }
+      commit(text, `Imported: ${file.name}`);
+      pushToast('ok', `${file.name} is on the canvas.`);
+    }).catch(() => pushToast('error', 'That file could not be read.'));
+  };
+
   // ---- exports: on the host, never from inside the sandbox --------------------
 
   const bytes = (text: string) => new TextEncoder().encode(text);
@@ -951,6 +961,29 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     if (!canvasHtml || !active) return;
     saveFile({ name: `${slugOf(active.name)}.html`, bytes: bytes(artifact.strip(canvasHtml)), mime: 'text/html' })
       .then((m) => pushToast('ok', m)).catch((e: unknown) => pushToast('error', String((e as Error).message || e)));
+  };
+
+  /**
+   * Share a link, the way Claude Design does — except this link carries the
+   * page itself (a data: URL), so nothing is uploaded and the link is the
+   * whole page. Too big for one link? The HTML goes on the clipboard and the
+   * toast says so.
+   */
+  const copyLink = async () => {
+    if (!canvasHtml) return;
+    const html = artifact.strip(canvasHtml);
+    try {
+      const link = `data:text/html;base64,${btoa(unescape(encodeURIComponent(html)))}`;
+      if (link.length > 1_500_000) {
+        await navigator.clipboard.writeText(html);
+        pushToast('ok', 'Too big for one link — the page itself is on the clipboard instead.');
+      } else {
+        await navigator.clipboard.writeText(link);
+        pushToast('ok', 'Link copied: paste it in any browser. Nothing was uploaded.');
+      }
+    } catch (e) {
+      pushToast('error', `Could not copy: ${(e as Error).message}`);
+    }
   };
 
   const exportPdf = () => {
@@ -1204,6 +1237,14 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
           {active && (
             <button className="linkish" onClick={duplicateProject} disabled={!!draft} title="A copy with the page, brand and prompt, as a new project">Duplicate project</button>
           )}
+          {/* A page from a file onto the canvas — Claude Design takes a
+              design file in; this one takes the HTML it would export. */}
+          <label className={`linkish import-html${!active || draft || working ? ' is-off' : ''}`}
+            title="Bring an HTML page onto the canvas as a new version (needs an open project)">
+            Import HTML…
+            <input type="file" accept=".html,.htm,text/html" disabled={!active || !!draft || working}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importHtml(f); e.target.value = ''; }} />
+          </label>
           <div className="studio-new">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New project…" aria-label="New project name" />
             <SelectPill
@@ -1283,6 +1324,28 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
           </form>
         ) : (
           <div className="studio-brief">
+            {/* Claude Design's "idea to visual in minutes": the starts are
+                one click from the box, each dropping its brief in whole. */}
+            <div className="brief-chips" role="group" aria-label="Quick starts">
+              {createLib.cardsFor('design')
+                .filter((c) => c.brief && createLib.modeAt(c.mode)?.screen === 'design')
+                .map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className="brief-chip"
+                    disabled={!active}
+                    title={card.brief}
+                    onClick={() => {
+                      const m = createLib.modeAt(card.mode);
+                      if (m?.viewport) setViewport(m.viewport as Viewport);
+                      setBrief(card.brief);
+                    }}
+                  >
+                    {card.label}
+                  </button>
+                ))}
+            </div>
             <textarea
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
@@ -1348,6 +1411,8 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
           <button type="button" onClick={doUndo} disabled={!undoLib.canUndo(undoState) || !!draft || !canvasHtml} title="Undo the last canvas change (Ctrl+Z)">Undo</button>
           <button type="button" onClick={doRedo} disabled={!undoLib.canRedo(undoState) || !!draft || !canvasHtml} title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button type="button" onClick={() => setPresenting(true)} disabled={!canvasHtml} title="Present the canvas full-screen (Esc closes)">Present</button>
+          <button type="button" onClick={() => void copyLink()} disabled={!canvasHtml || !!draft}
+            title="A private link that carries the page itself — paste it in any browser (nothing is uploaded)">Copy link</button>
           <span className="toolbar-spacer" />
           <SelectPill
             label="Export"

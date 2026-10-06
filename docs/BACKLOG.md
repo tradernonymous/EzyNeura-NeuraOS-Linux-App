@@ -1230,3 +1230,27 @@ bare UNet/DiT file, wrong for a whole checkpoint that already carries it.
 checkpoint set now starts exactly like the single file that already worked
 on the PC (`-m`), plus `--vae` for the paired VAE. Split sets (FLUX.2,
 Qwen-Image, Z-Image) are unchanged. Not verified on the PC yet.
+
+## Create: two exclusive tabs, a workflow rail, Claude Design's edges (2026-10-06)
+
+The Create space is now two EXCLUSIVE tabs -- Design and Image -- over the
+same five modes: one screen is ever mounted, the tab moves the view the top
+bar highlights (`create.TABS`, `tabOf`, `modesForTab` in create.js; the
+sub-switch under the tabs keeps Page · Deck · Post and Image · Edit, and
+the sidebar's child is "Image" to match). Design grew the edges Claude
+Design has and this did not: quick-start chips over the brief (every
+template one click), `Import HTML…` (a file onto the canvas as one
+version), and `Copy link` (the page as a data: URL, nothing uploaded; too
+big for one link and the HTML goes on the clipboard instead, said so).
+Image grew ComfyUI's order without its nodes: a workflow rail (Text to
+image, Image to image, Inpaint, Variations -- which rerolls at once, or
+says to draw one first -- Enhance), a seed box and a negative prompt shown
+only when This PC can take them (both reach the plan: `drawPlan` carries
+`negativePrompt`, the seed rides `withSeed`), and the quick actions lifted
+into one `QuickControls` shared by each gallery card and the Enhance panel,
+with a canvas upscale at 1.5x/2x. Three new design starts (App screen,
+One-pager, Email) ride the existing modes, so the mode union did not grow.
+Pinned by `app/test/desktop-create-tabs.test.js`. Gate green: tsc, 357
+node tests, vite build, 185 cargo tests, clippy, skills. Screenshotted
+under Xvfb against the bundled engine on 8787 (both tabs, tab switch,
+top-nav follow); not walked on real Mint hardware yet.

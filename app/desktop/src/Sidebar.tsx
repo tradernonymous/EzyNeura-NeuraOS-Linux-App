@@ -53,7 +53,7 @@ export const SUB_VIEWS: Array<{ id: ViewId; label: string; parent: NavId; hint: 
   { id: 'parallel', label: 'Worktrees', parent: 'code', hint: 'Several agents at once, each in its own git worktree' },
   { id: 'acp', label: 'External agents', parent: 'code', hint: 'Claude Code, Gemini CLI, Codex over ACP' },
   { id: 'design', label: 'Design', parent: 'create', hint: 'Pages, decks and posts' },
-  { id: 'images', label: 'Images', parent: 'create', hint: 'Draw and change pictures' },
+  { id: 'images', label: 'Image', parent: 'create', hint: 'Draw and change pictures' },
   { id: 'library', label: 'Library', parent: 'agents', hint: 'Skills and memory' },
   { id: 'agents', label: 'Agents', parent: 'agents', hint: 'Sub-agents chat can run or delegate to' },
   { id: 'recipes', label: 'Recipes', parent: 'agents', hint: 'Saved prompts, servers and schedules' },

@@ -73,6 +73,58 @@ type QuickSpec = import('../image-adjust.js').AdjustSpec & { adjust: { brightnes
 
 const EMPTY_QUICK: QuickSpec = { rotate: 0, flipH: false, flipV: false, crop: null, adjust: { brightness: 100, contrast: 100, saturation: 100 } };
 
+/**
+ * The one-click edits as one surface (image-adjust.js): rotate, flip, crop,
+ * the sliders and an upscale, drawn on this PC's canvas. Shown per gallery
+ * card and again in the Enhance workflow, so the same action is the same
+ * button wherever it is found. Rotate, flip and crop apply at once; the
+ * sliders wait for Apply.
+ */
+function QuickControls({ spec, onKnob, onApply, onUpscale }: {
+  spec: QuickSpec;
+  onKnob: (knob: 'brightness' | 'contrast' | 'saturation', value: number) => void;
+  onApply: (spec: QuickSpec) => void;
+  onUpscale: (factor: number) => void;
+}) {
+  return (
+    <div className="image-quick-body">
+      <div className="image-quick-row">
+        <button onClick={() => onApply({ ...EMPTY_QUICK, rotate: 1 })} title="A quarter turn to the right">⟳</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, rotate: -1 })} title="A quarter turn to the left">⟲</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, flipH: true })}>Flip H</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, flipV: true })}>Flip V</button>
+      </div>
+      <div className="image-quick-row">
+        <span className="settings-hint">Centre-crop:</span>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, crop: { w: 1, h: 1, label: '1:1' } })}>1:1</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, crop: { w: 4, h: 5, label: '4:5' } })}>4:5</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK, crop: { w: 16, h: 9, label: '16:9' } })}>16:9</button>
+        <button onClick={() => onApply({ ...EMPTY_QUICK })}>Full</button>
+      </div>
+      <div className="image-quick-row image-quick-sliders">
+        <label>Brightness
+          <input type="range" min={0} max={200} value={spec.adjust.brightness}
+            onChange={(e) => onKnob('brightness', Number(e.target.value))} />
+        </label>
+        <label>Contrast
+          <input type="range" min={0} max={200} value={spec.adjust.contrast}
+            onChange={(e) => onKnob('contrast', Number(e.target.value))} />
+        </label>
+        <label>Saturation
+          <input type="range" min={0} max={200} value={spec.adjust.saturation}
+            onChange={(e) => onKnob('saturation', Number(e.target.value))} />
+        </label>
+        <button onClick={() => onApply(spec)}>Apply</button>
+      </div>
+      <div className="image-quick-row">
+        <span className="settings-hint">Upscale (here):</span>
+        <button onClick={() => onUpscale(1.5)} title="1.5× on this PC's canvas — nothing is sent anywhere">×1.5</button>
+        <button onClick={() => onUpscale(2)} title="2× on this PC's canvas — nothing is sent anywhere">×2</button>
+      </div>
+    </div>
+  );
+}
+
 /** A picture the user chose to change: its bytes, its name, and its own shape. */
 interface Source {
   url: string;
@@ -96,6 +148,20 @@ type SdStatus = {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The workflows on the rail: what a run IS, in one click, the way ComfyUI
+ * opens a workflow before it shows a single parameter. Each one names its
+ * task (draw or change) and the rail picks it; the composer below shapes it.
+ */
+const FLOWS = [
+  { id: 'txt2img', label: 'Text to image', note: 'Words in, picture out', icon: 'image' as const, task: 'generate' as const },
+  { id: 'img2img', label: 'Image to image', note: 'Start from a picture', icon: 'design' as const, task: 'edit' as const },
+  { id: 'inpaint', label: 'Inpaint', note: 'Paint the part to change', icon: 'brush' as const, task: 'edit' as const },
+  { id: 'variation', label: 'Variations', note: 'Again, a new seed', icon: 'refresh' as const, task: 'generate' as const },
+  { id: 'enhance', label: 'Enhance', note: 'Crop, colour, upscale', icon: 'sliders' as const, task: 'generate' as const },
+] as const;
+type FlowId = (typeof FLOWS)[number]['id'];
+
 interface ImagesProps {
   /** The Create switch's task: Image → generate, Edit image → edit. */
   taskHint?: 'generate' | 'edit';
@@ -118,12 +184,31 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   // A local draw's step count: 'auto' sends none, so sd-server picks what the
   // model was tuned for; a number overrides it (more steps, more minutes).
   const [steps, setSteps] = useState('auto');
+  // The rail's workflow: what this run IS. It drives the task below, so the
+  // rail and the composer can never disagree about what pressing Draw does.
+  const [flow, setFlow] = useState<FlowId>('txt2img');
+  // On this PC: a seed to pin (ComfyUI's seed box), and words to keep out of
+  // the picture (its negative prompt). Both are sent only when This PC draws.
+  const [seed, setSeed] = useState('');
+  const [negative, setNegative] = useState('');
+  // Enhance's chosen picture: a gallery ts, or the newest by default.
+  const [enhanceTs, setEnhanceTs] = useState<number | null>(null);
   // Make a picture, or change one. Two tasks rather than two screens: the
   // service, model and shape decisions are the same ones either way.
   const [mode, setMode] = useState<'generate' | 'edit'>(taskHint || 'generate');
   useEffect(() => { if (taskHint) setMode(taskHint); }, [taskHint]);
   // The switch above the screen owns the task; a change here tells it.
   const pickMode = (next: 'generate' | 'edit') => { setMode(next); onMode?.(next === 'edit' ? 'edit' : 'image'); };
+  // A task changed from outside (the Create switch's own pills) moves the
+  // rail to a workflow that does that task -- and keeps a workflow already
+  // on it: Edit image lands on Image to image, not away from Inpaint.
+  useEffect(() => {
+    if (!taskHint) return;
+    setFlow((f) => {
+      const here = FLOWS.find((x) => x.id === f);
+      return here && here.task === taskHint ? f : (taskHint === 'edit' ? 'img2img' : 'txt2img');
+    });
+  }, [taskHint]);
   const [source, setSource] = useState<Source | null>(null);
   const [mask, setMask] = useState<Source | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -376,6 +461,7 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
     const text = prompt.trim();
     if (busy || !choice || (kind === 'generate' && !text)) return;
     const from = kind === 'edit' ? source?.url || '' : '';
+    const negativeText = negative.trim() || undefined;
     const plan: ImagePlan = kind === 'edit'
       ? images.editRequest(choice, {
         prompt: text,
@@ -383,17 +469,21 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
         mask: mask?.url || '',
         size,
         model,
+        negativePrompt: negativeText,
         sourceWidth: source?.width,
         sourceHeight: source?.height,
       })
-      : imageRun.drawPlan(choice, { prompt: text, size, model, steps: steps === 'auto' ? undefined : Number(steps) });
+      : imageRun.drawPlan(choice, { prompt: text, size, model, steps: steps === 'auto' ? undefined : Number(steps), negativePrompt: negativeText });
     // A refusal is the whole answer: nothing is sent, and the reason is the
     // sentence the plan gave rather than one invented here.
     if (!plan.route) {
       setError({ summary: 'Nothing was sent', upstream: '', walk: '', advice: plan.error });
       return;
     }
-    await carryOut(kind, plan, from);
+    // A pinned seed: only This PC takes one, and only a draw says it (the
+    // note on the card carries the number). Anything else picks its own.
+    const pinned = kind === 'generate' && isLocal && seed.trim() ? imageRun.withSeed(plan, Number(seed)) : plan;
+    await carryOut(kind, pinned, from);
   };
 
   /** The same ask once more, with a fresh seed where the service takes one. */
@@ -403,6 +493,22 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
     await carryOut(last.kind, imageRun.withSeed(last.plan), last.kind === 'edit' ? source?.url || '' : '');
   };
   const submit = () => { run(mode === 'edit' ? 'edit' : 'generate'); };
+
+  /**
+   * One rail click: the workflow, its task, and its own first move. Asking
+   * for Variations is the reroll itself (the last plan, a fresh seed); with
+   * nothing to vary it says so rather than pressing a dead button.
+   */
+  const pickFlow = (id: FlowId) => {
+    const def = FLOWS.find((f) => f.id === id);
+    if (!def) return;
+    setFlow(id);
+    pickMode(def.task);
+    if (id === 'variation') {
+      if (lastPlan.current) void runAgain();
+      else pushToast('info', 'Draw one picture first — Variations asks for it again with a fresh seed.');
+    }
+  };
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -469,6 +575,37 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
   const setQuick = (ts: number, patch: Partial<QuickSpec>) => {
     setQuickSpecs((prev) => ({ ...prev, [ts]: { ...EMPTY_QUICK, ...prev[ts], ...patch } }));
   };
+
+  /**
+   * Upscale on this PC's canvas: the picture drawn again at 1.5× or 2× with
+   * smoothing, from the bytes already here. Not a model's guess at detail --
+   * a bigger copy, and the card says so.
+   */
+  const upscaleJob = (job: Job, factor: number) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * factor);
+      canvas.height = Math.round(img.naturalHeight * factor);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { pushToast('error', 'This window cannot upscale pictures.'); return; }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      setGallery((prev) => [{
+        prompt: `${job.prompt} — upscaled ×${factor}`,
+        url: canvas.toDataURL('image/png'),
+        size: job.size,
+        who: 'upscale (here)',
+        notes: [`bigger copy drawn on this PC — nothing was sent anywhere`],
+        ts: Date.now(),
+        from: job.url,
+      }, ...prev].slice(0, 60));
+      pushToast('ok', `Upscaled ×${factor} here — nothing was sent anywhere.`);
+    };
+    img.onerror = () => pushToast('error', 'That picture could not be opened to upscale.');
+    img.src = job.url;
+  };
   const setQuickKnob = (ts: number, knob: 'brightness' | 'contrast' | 'saturation', value: number) => {
     setQuickSpecs((prev) => {
       const base = prev[ts] || EMPTY_QUICK;
@@ -512,6 +649,9 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
     setPreview((open) => (open && open.ts === job.ts ? null : open));
   };
 
+  const flowDef = FLOWS.find((f) => f.id === flow) || FLOWS[0];
+  // The picture Enhance works on: the chosen one, else the newest.
+  const enhanceTarget = gallery.find((j) => j.ts === enhanceTs) || gallery[0] || null;
   const readyCount = rows.filter((r) => r.kind === 'server' && r.ready).length;
   const editable = images.canEdit(choice || {});
   const blocked = !choice
@@ -541,17 +681,8 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
           {/* Pills instead of native dropdowns: a <select> opens an
               OS-styled menu, which is the one thing in a hand-styled window
               that still looked like a web page. Each pill names its current
-              value and explains every other one. */}
-          <SelectPill
-            label="Task"
-            title="Make a picture, or change one"
-            value={mode}
-            options={[
-              { value: 'generate', label: 'Make a picture', note: 'from your words alone' },
-              { value: 'edit', label: 'Change a picture', note: 'start from one you choose' },
-            ]}
-            onPick={(id) => pickMode(id === 'edit' ? 'edit' : 'generate')}
-          />
+              value and explains every other one. The rail on the left owns
+              the task now -- draw or change is the workflow, not a pill. */}
           <SelectPill
             label="Engine"
             title="What draws: a cloud service, or this PC"
@@ -619,7 +750,38 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
       </header>
 
       <div className="images-layout">
+        {/* The workflow rail: one click says what this run IS, the way a
+            ComfyUI workflow opens before any parameter does. Only one is on
+            at a time; the composer and the buttons below follow it. */}
+        <nav className="images-rail" aria-label="Workflow">
+          <div className="rail-title">Workflow</div>
+          {FLOWS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`flow-btn ${flow === f.id ? 'active' : ''}`}
+              aria-pressed={flow === f.id}
+              onClick={() => pickFlow(f.id)}
+              title={f.note}
+            >
+              <Icon name={f.icon} size={15} />
+              <span className="flow-text">
+                <span>{f.label}</span>
+                <span className="flow-note">{f.note}</span>
+              </span>
+            </button>
+          ))}
+          <p className="rail-foot settings-hint">
+            {isLocal
+              ? 'This PC draws: seed, steps and the negative prompt below all apply.'
+              : 'Seed, steps and the negative prompt apply when This PC draws.'}
+          </p>
+        </nav>
         <div className="images-composer">
+          <div className="flow-head">
+            <strong>{flowDef.label}</strong>
+            <span className="settings-hint">{flowDef.note}</span>
+          </div>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -633,6 +795,36 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                   : 'Describe the image. Free FLUX draws first; pick another service above to change that.'}
             rows={3}
           />
+
+          {/* Enhance: the one-click edits on a chosen picture, the same
+              buttons as on a gallery card, in one place up front. */}
+          {flow === 'enhance' && (
+            <div className="enhance-panel">
+              <div className="enhance-head">
+                <strong>Enhance a picture</strong>
+                <span className="settings-hint">Drawn on this PC's canvas — nothing is sent anywhere.</span>
+              </div>
+              {!enhanceTarget ? (
+                <p className="settings-hint">Draw a picture first, then come back here to crop, colour and upscale it.</p>
+              ) : (
+                <>
+                  <SelectPill
+                    label="Picture"
+                    title="Which picture to enhance"
+                    value={String(enhanceTarget.ts)}
+                    options={gallery.map((j) => ({ value: String(j.ts), label: (j.prompt || 'Untitled').slice(0, 48) }))}
+                    onPick={(v) => setEnhanceTs(Number(v))}
+                  />
+                  <QuickControls
+                    spec={quickSpecs[enhanceTarget.ts] || EMPTY_QUICK}
+                    onKnob={(knob, value) => setQuickKnob(enhanceTarget.ts, knob, value)}
+                    onApply={(spec) => applyAdjust(enhanceTarget, spec)}
+                    onUpscale={(factor) => upscaleJob(enhanceTarget, factor)}
+                  />
+                </>
+              )}
+            </div>
+          )}
 
           {/* The picture being changed. It is read in this window and stays
               here: it is sent only when the button below is pressed, and only
@@ -704,6 +896,28 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                 </div>
               )}
             </div>
+          )}
+
+          {/* On this PC: the two knobs every local workflow has — a seed to
+              pin and words to keep out. Hidden otherwise, because a cloud
+              service takes neither and a dead field is a lie. */}
+          {isLocal && (
+            <details className="local-knobs" open>
+              <summary className="settings-hint">Seed and negative prompt (This PC)</summary>
+              <div className="seed-row">
+                <label className="settings-hint" htmlFor="images-seed">Seed</label>
+                <input id="images-seed" value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^\d]/g, ''))}
+                  placeholder="Any" inputMode="numeric" aria-describedby="images-seed-hint" />
+                <button onClick={() => setSeed(String(Math.floor(Math.random() * 2147483646) + 1))}
+                  title="A fresh random seed">Dice</button>
+                <button onClick={() => setSeed('')} title="Let each run pick its own">Auto</button>
+                <span id="images-seed-hint" className="settings-hint">Same seed, same draw.</span>
+              </div>
+              <label className="settings-hint" htmlFor="images-negative">Negative prompt — what to keep out</label>
+              <textarea id="images-negative" className="neg-prompt" rows={2} value={negative}
+                onChange={(e) => setNegative(e.target.value)}
+                placeholder="blurry, watermark, extra fingers, text" />
+            </details>
           )}
 
           {/* Puter is one service among several. Chosen, its sign-in is in
@@ -865,35 +1079,12 @@ export default function ImagesScreen({ taskHint, onMode }: ImagesProps = {}) {
                     it beside the original; nothing is uploaded. */}
                 <details className="image-quick">
                   <summary>Quick actions (here, no upload)</summary>
-                  <div className="image-quick-body">
-                    <div className="image-quick-row">
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, rotate: 1 })} title="A quarter turn to the right">⟳</button>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, rotate: -1 })} title="A quarter turn to the left">⟲</button>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, flipH: true })}>Flip H</button>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, flipV: true })}>Flip V</button>
-                    </div>
-                    <div className="image-quick-row">
-                      <span className="settings-hint">Centre-crop:</span>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 1, h: 1, label: '1:1' } })}>1:1</button>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 4, h: 5, label: '4:5' } })}>4:5</button>
-                      <button onClick={() => applyAdjust(job, { ...EMPTY_QUICK, crop: { w: 16, h: 9, label: '16:9' } })}>16:9</button>
-                    </div>
-                    <div className="image-quick-row image-quick-sliders">
-                      <label>Brightness
-                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.brightness}
-                          onChange={(e) => setQuickKnob(job.ts, 'brightness', Number(e.target.value))} />
-                      </label>
-                      <label>Contrast
-                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.contrast}
-                          onChange={(e) => setQuickKnob(job.ts, 'contrast', Number(e.target.value))} />
-                      </label>
-                      <label>Saturation
-                        <input type="range" min={0} max={200} value={(quickSpecs[job.ts] || EMPTY_QUICK).adjust.saturation}
-                          onChange={(e) => setQuickKnob(job.ts, 'saturation', Number(e.target.value))} />
-                      </label>
-                      <button onClick={() => applyAdjust(job, quickSpecs[job.ts] || EMPTY_QUICK)}>Apply</button>
-                    </div>
-                  </div>
+                  <QuickControls
+                    spec={quickSpecs[job.ts] || EMPTY_QUICK}
+                    onKnob={(knob, value) => setQuickKnob(job.ts, knob, value)}
+                    onApply={(spec) => applyAdjust(job, spec)}
+                    onUpscale={(factor) => upscaleJob(job, factor)}
+                  />
                 </details>
                 {job.notes.length > 0 && (
                   <span className="image-notes">{job.notes.join(' · ')}</span>
