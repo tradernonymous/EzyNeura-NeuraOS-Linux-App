@@ -22,6 +22,8 @@ export declare function tokensCss(system: DesignSystem): string;
 export declare function designMd(system: DesignSystem): string;
 export declare function fromBrand(brand: any, name?: string): DesignSystem;
 export declare function parseTokens(source: string): Record<string, string>;
+/** A JSON token export (Figma, Style Dictionary, `$value` leaves) as CSS declarations; '' when unparseable. */
+export declare function jsonTokens(text: string): string;
 export declare function importSystem(source: string, name?: string): DesignSystem | null;
 export declare function readStore(store?: Storage | null): DesignSystem[];
 export declare function saveImported(system: DesignSystem, store?: Storage | null): DesignSystem[];

@@ -1254,3 +1254,24 @@ Pinned by `app/test/desktop-create-tabs.test.js`. Gate green: tsc, 357
 node tests, vite build, 185 cargo tests, clippy, skills. Screenshotted
 under Xvfb against the bundled engine on 8787 (both tabs, tab switch,
 top-nav follow); not walked on real Mint hardware yet.
+
+## Design: This PC's models, pickers off the folded column, systems from other apps (2026-10-06)
+
+Three fixes from a run on real hardware. (1) The Design tab now offers This
+PC's model server exactly as Chat does: `localModelStatus` polled every 15s,
+`localModels.providerRow` as a Service row ("Local · <model>"), its one model
+as the Model list, chosen first when nothing else is chosen, and the turn
+streamed straight to localhost through `streamLocalChat` -- the engine never
+sees it, and `tierOf('local')` keeps the local tier (one generation, no
+auto-critique). (2) Service, Model and System moved out of the left column's
+Project fold (closed the moment a project is open, 280px wide, panel anchored
+right -- off-screen) onto the canvas toolbar, where they wrap and the panel
+opens over open space; the orphaned `.studio-pickers` rule went with them.
+(3) The system import takes other apps' files: an exported ZIP (Claude
+Design's Project HTML zip -- first entry that declares tokens wins), JSON
+token exports through the new pure `systems.jsonTokens` (Figma /
+Style Dictionary, `$value` leaves, `{references}` skipped), and HTML by
+parsing its `<style>` declarations straight. Pinned by
+`desktop-create-tabs.test.js` (360 tests green); tsc, build, cargo 185,
+clippy, skills green; toolbar screenshotted under Xvfb. Not walked on the
+Mint machine yet.

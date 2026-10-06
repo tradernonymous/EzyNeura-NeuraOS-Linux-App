@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { api, streamChat } from '../api';
+import { api, streamChat, streamLocalChat } from '../api';
 import { escapeHtml } from '../markdown';
 import Icon from '../components/Icon';
 import SelectPill from '../components/SelectPill';
 import { pushToast } from '../components/Toasts';
 import { isSavedProvider, streamSaved } from '../run-model';
-import { hasShell, writeLocalFile } from '../bridge';
+import { hasShell, writeLocalFile, localModelStatus } from '../bridge';
 import { saveFile, base64ToBytes } from '../files/save';
 import { NAVIGATE_EVENT } from '../Sidebar';
 import { DESIGN_BRIEF_KEY } from './ChatScreen';
@@ -14,6 +14,9 @@ import '../create.js';
 const createLib: typeof import('../create.js') = (globalThis as any).FreeAI4UCreate;
 import { CODE_HANDOFF_KEY } from './CodeScreen';
 import '../saved-models.js';
+// This PC's own model server, polled the way Chat polls it: the row is
+// "Local · <model>" as soon as llama-server is ready.
+import '../local-models.js';
 // The design modules are UMD (shared with node:test): the import runs the
 // factory, which hangs the API off globalThis in the browser. systems.js
 // before prompt.js -- the prompt reads the systems global.
@@ -56,6 +59,7 @@ const undoLib: typeof import('../design/undo.js') = (globalThis as any).FreeAI4U
 const zip: typeof import('../files/zip.js') = (globalThis as any).FreeZip;
 const office: typeof import('../files/office.js') = (globalThis as any).FreeOffice;
 const savedModels: typeof import('../saved-models.js') = (globalThis as any).FreeAI4USavedModels;
+const localModels: typeof import('../local-models.js') = (globalThis as any).FreeAI4ULocalModels;
 
 type DesignSystem = import('../design/systems.js').DesignSystem;
 type Variant = import('../design/systems.js').Variant;
@@ -335,7 +339,10 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
   const [activeId, setActiveId] = useState('');
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('landing-page');
-  const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
+  // Engine rows only: the saved rows and This PC's model server join the
+  // list below, so the local row appears the moment it is up.
+  const [engineRows, setEngineRows] = useState<Array<{ id: string; label: string }>>([]);
+  const [localRow, setLocalRow] = useState<{ id: string; label: string; baseUrl: string; model: string; apiKey: string } | null>(null);
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -434,12 +441,12 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     refresh();
     api.providers().then((rows: any) => {
       const chat = (Array.isArray(rows) ? rows : []).filter((p: any) => p.kind !== 'image' && p.configured);
-      setProviders([...mineRows(), ...chat.map((p: any) => ({ id: p.id, label: p.label }))]);
+      setEngineRows(chat.map((p: any) => ({ id: p.id, label: p.label })));
       if (chat.length) setProvider(chat[0].id);
       else if (mineRows().length) setProvider(mineRows()[0].id);
     }).catch(() => {
       // No engine is not no models: what runs on this PC is still offered.
-      setProviders(mineRows());
+      setEngineRows([]);
       if (mineRows().length) setProvider(mineRows()[0].id);
     });
     // A brief sent from Chat (/design, or "To Design" on a reply).
@@ -449,6 +456,31 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     } catch { /* nothing handed over */ }
   }, [refresh]);
 
+  // This PC's model server, polled the way Chat polls it: one localhost read
+  // every 15s, answered at once when nothing is running. The row carries the
+  // model in its label, so a change of model is a change of row.
+  useEffect(() => {
+    if (!hasShell()) return;
+    const read = () => {
+      localModelStatus()
+        .then((status) => setLocalRow(localModels.providerRow(status)))
+        .catch(() => setLocalRow(null));
+    };
+    read();
+    const timer = setInterval(read, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // The Service pill's rows: the saved ones, This PC, then the engine. One
+  // list, derived, so the local row joins the moment it is ready.
+  const providers = useMemo(
+    () => [...mineRows(), ...(localRow ? [{ id: localRow.id, label: localRow.label }] : []), ...engineRows],
+    [engineRows, localRow],
+  );
+  // Nothing chosen yet and This PC is up: This PC is the default, the same
+  // rule the image picker keeps.
+  useEffect(() => { if (localRow && !provider) setProvider(localRow.id); }, [localRow, provider]);
+
   // The critique runs by itself only for a cloud provider (critique.js).
   useEffect(() => {
     setCritiqueOn(critiqueLib.defaultOn(promptLib.tierOf(provider), isSavedProvider(provider)));
@@ -456,6 +488,12 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
   useEffect(() => {
     if (!provider) { setModels([]); return; }
+    // This PC serves one model at a time; the list is that one.
+    if (localRow && provider === localRow.id) {
+      setModels([localRow.model]);
+      setModel(localRow.model);
+      return;
+    }
     if (isSavedProvider(provider)) {
       const ids = savedModels.modelsFor(provider).map((m) => m.id);
       setModels(ids);
@@ -660,7 +698,16 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
 
   const collect = async (messages: Array<{ role: string; content: string }>, controller: AbortController, onText?: (text: string) => void) => {
     let acc = '';
-    await (isSavedProvider(provider) ? streamMine : streamChat)(provider, { model, messages }, (frame) => {
+    // Three ways to ask: the engine's chat route, one of "my models", or
+    // This PC's model server straight over localhost (its own key, its own
+    // port -- the engine never sees it).
+    const local = localRow && provider === localRow.id ? localRow : null;
+    const stream: typeof streamChat = isSavedProvider(provider)
+      ? streamMine
+      : local
+        ? (_p, body, onFrame, signal) => streamLocalChat(local.baseUrl, body.model, body.messages, onFrame, signal, local.apiKey || undefined)
+        : streamChat;
+    await stream(provider, { model, messages }, (frame) => {
       if (frame.content) {
         acc += frame.content;
         onText?.(acc);
@@ -934,14 +981,42 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
     }
   };
 
-  const importFile = (file: File) => {
-    file.text().then((source) => {
-      const sys = systemsLib.importSystem(source, file.name.replace(/\.(md|css|txt)$/i, ''));
+  /**
+   * A design system from another tool, as one file (DesignSystem import):
+   * .md / .css / .txt straight through, .html or an exported ZIP by pulling
+   * its `--tokens` declarations out, and a JSON token export (Figma, Style
+   * Dictionary, `$value` leaves) through systems.jsonTokens. Claude
+   * Design's "Project HTML zip" is the ZIP path: the first entry that
+   * declares tokens wins, and its own name becomes the system's.
+   */
+  const importFile = async (file: File) => {
+    try {
+      const strip = (n: string) => n.replace(/\.(md|css|txt|zip|json|html?)$/i, '');
+      if (/\.zip$/i.test(file.name)) {
+        const entries = await zip.readEntries(new Uint8Array(await file.arrayBuffer()));
+        for (const entry of entries) {
+          if (entry.dir || !entry.data || !/\.(css|md|txt|html?)$/i.test(entry.name)) continue;
+          const text = new TextDecoder().decode(entry.data);
+          const sys = systemsLib.importSystem(text, strip(entry.name.split('/').pop() || entry.name));
+          if (!sys) continue;
+          setImported(systemsLib.saveImported(sys));
+          setSystemId(sys.id);
+          pushToast('ok', `${file.name}: ${entry.name} → ${Object.keys(sys.tokens).length} tokens.`);
+          return;
+        }
+        pushToast('warn', `${file.name} holds no tokens.css, DESIGN.md or HTML with --tokens in it.`);
+        return;
+      }
+      const raw = await file.text();
+      const source = /\.json$/i.test(file.name) ? `:root {\n${systemsLib.jsonTokens(raw)}\n}` : raw;
+      const sys = systemsLib.importSystem(source, strip(file.name));
       if (!sys) { pushToast('warn', `${file.name} has no --tokens in it.`); return; }
       setImported(systemsLib.saveImported(sys));
       setSystemId(sys.id);
       pushToast('ok', `${sys.name}: ${Object.keys(sys.tokens).length} tokens.`);
-    }).catch(() => pushToast('error', 'That file could not be read.'));
+    } catch {
+      pushToast('error', 'That file could not be read.');
+    }
   };
 
   /** A page from a file onto the canvas, as one version like any other. */
@@ -1257,34 +1332,6 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
             <button onClick={createProject} disabled={!name.trim()} aria-label="Create project"><Icon name="plus" size={14} /></button>
           </div>
         </div>
-        <div className="studio-block studio-pickers">
-          <SelectPill
-            label="Service"
-            title="Which service designs"
-            value={provider}
-            options={providers.map((p: any) => ({ value: p.id, label: p.label }))}
-            onPick={(id) => setProvider(id)}
-          />
-          <SelectPill
-            label="Model"
-            title="Which model designs"
-            value={model}
-            mono
-            filterable
-            options={models.map((m: string) => ({ value: m, label: m }))}
-            onPick={(m) => setModel(m)}
-          />
-          <SelectPill
-            label="System"
-            title="The design system every page is styled through"
-            value={system.id}
-            options={allSystems.map((s) => ({ value: s.id, label: s.name }))}
-            onPick={(id) => setSystemId(id)}
-          />
-          <span className={`chip tier-${tier}`} title={tier === 'local' ? 'Local tier: one generation, directions as token swaps, assumptions instead of questions' : 'Cloud tier: may ask up to 5 questions first'}>
-            {tier === 'local' ? 'local tier' : 'cloud tier'}
-          </span>
-        </div>
         </details>
 
         <div className="studio-thread" aria-live="polite">
@@ -1414,6 +1461,35 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
           <button type="button" onClick={() => void copyLink()} disabled={!canvasHtml || !!draft}
             title="A private link that carries the page itself — paste it in any browser (nothing is uploaded)">Copy link</button>
           <span className="toolbar-spacer" />
+          {/* Who designs, with what, and through which system: on the toolbar
+              rather than behind the Project fold, so the model is visible and
+              its panel opens over open space instead of a 280px column. */}
+          <SelectPill
+            label="Service"
+            title="Which service designs — This PC, your saved models, or the engine"
+            value={provider}
+            options={providers.map((p: any) => ({ value: p.id, label: p.label }))}
+            onPick={(id) => setProvider(id)}
+          />
+          <SelectPill
+            label="Model"
+            title="Which model designs"
+            value={model}
+            mono
+            filterable
+            options={models.map((m: string) => ({ value: m, label: m }))}
+            onPick={(m) => setModel(m)}
+          />
+          <SelectPill
+            label="System"
+            title="The design system every page is styled through"
+            value={system.id}
+            options={allSystems.map((s) => ({ value: s.id, label: s.name }))}
+            onPick={(id) => setSystemId(id)}
+          />
+          <span className={`chip tier-${tier}`} title={tier === 'local' ? 'Local tier: one generation, directions as token swaps, assumptions instead of questions' : 'Cloud tier: may ask up to 5 questions first'}>
+            {tier === 'local' ? 'local tier' : 'cloud tier'}
+          </span>
           <SelectPill
             label="Export"
             title="HTML, PDF, pictures, slides, code, or hand the page to Code"
@@ -1646,8 +1722,8 @@ export default function DesignScreen({ viewportHint, onMode }: DesignProps = {})
                     <pre className="skill-content">{systemsLib.designMd(system)}</pre>
                   </details>
                   <label className="import-file">
-                    <span>Import DESIGN.md or tokens.css</span>
-                    <input type="file" accept=".md,.css,.txt" onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
+                    <span>Import a design system — DESIGN.md, tokens.css, HTML, a JSON token export, or another app's ZIP</span>
+                    <input type="file" accept=".md,.css,.txt,.zip,.json,.html,.htm" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
                   </label>
                   <h4>Brand from a URL</h4>
                   <input value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://brand-site.com" disabled={!active} aria-label="Brand page address" />
