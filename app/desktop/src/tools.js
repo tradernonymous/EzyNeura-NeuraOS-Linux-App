@@ -640,12 +640,22 @@
     var calls = Array.isArray(state) ? state : [];
     (Array.isArray(deltas) ? deltas : []).forEach(function (d, position) {
       if (!d) return;
-      var index = typeof d.index === 'number' ? d.index : (d.id ? -1 : position);
       var slot = null;
-      if (index >= 0) slot = calls[index] || (calls[index] = { id: '', name: '', arguments: '' });
-      else {
-        slot = { id: '', name: '', arguments: '' };
-        calls.push(slot);
+      if (typeof d.index === 'number') {
+        slot = calls[d.index] || (calls[d.index] = { id: '', name: '', arguments: '' });
+      } else if (d.id) {
+        // No index but an id: relays and proxy setups repeat the id on every
+        // delta. Reuse the slot that already carries it, or one call's
+        // arguments get chopped into N calls with unparseable JSON each.
+        for (var i = calls.length - 1; i >= 0; i--) {
+          if (calls[i] && calls[i].id === String(d.id)) { slot = calls[i]; break; }
+        }
+        if (!slot) {
+          slot = { id: '', name: '', arguments: '' };
+          calls.push(slot);
+        }
+      } else {
+        slot = calls[position] || (calls[position] = { id: '', name: '', arguments: '' });
       }
       var f = d.function || {};
       if (d.id) slot.id = String(d.id);
@@ -690,6 +700,37 @@
     var s = String(text == null ? '' : text);
     if (s.length <= MAX_RESULT_CHARS) return s;
     return s.slice(0, MAX_RESULT_CHARS) + '\n[... ' + (s.length - MAX_RESULT_CHARS) + ' more characters not shown]';
+  }
+
+  /**
+   * shrink(messages, maxChars) -> { messages, clipped }
+   *
+   * A long agent turn re-sends every tool result every round, and a local
+   * model's context is fixed at load: past the budget the server refuses the
+   * whole request. Oldest tool results go first -- each trimmed once to a
+   * head and a note, never deleted, never touching a system or user message.
+   */
+  function shrink(messages, maxChars) {
+    var out = (Array.isArray(messages) ? messages : []).slice();
+    var size = out.reduce(function (n, m) {
+      var c = m && m.content;
+      var text = typeof c === 'string' ? c : (c == null ? '' : JSON.stringify(c));
+      return n + text.length + 8;
+    }, 0);
+    var clipped = 0;
+    for (var i = 0; i < out.length && size > maxChars; i += 1) {
+      var m = out[i];
+      if (!m || m.role !== 'tool' || typeof m.content !== 'string' || m.content.length <= 400) continue;
+      var keep = Math.floor(m.content.length / 4);
+      var saved = m.content.length - keep - 120;
+      if (saved <= 0) continue;
+      out[i] = Object.assign({}, m, {
+        content: m.content.slice(0, keep) + '\n[... older result trimmed to fit the model\u2019s context]',
+      });
+      size -= saved;
+      clipped += 1;
+    }
+    return { messages: out, clipped: clipped };
   }
 
   function toolMessage(call, result) {
@@ -780,6 +821,7 @@
     assistantMessage: assistantMessage,
     toolMessage: toolMessage,
     clip: clip,
+    shrink: shrink,
     summarise: summarise,
     isToolsRefusal: isToolsRefusal,
   };

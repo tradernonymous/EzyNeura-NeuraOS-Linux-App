@@ -31,7 +31,7 @@ type ToolDef = import('./tools.js').ToolDef;
 
 export type Message = { role: string; content: any; tool_calls?: any[]; tool_call_id?: string; name?: string };
 
-export type ToolStatus = 'asking' | 'running' | 'done' | 'denied' | 'error';
+export type ToolStatus = 'asking' | 'running' | 'done' | 'denied' | 'error' | 'stopped';
 
 /**
  * C7: one local trace line per model call and per tool call. The shape is
@@ -51,6 +51,8 @@ export interface ToolEvent {
   asks: string;
   status: ToolStatus;
   result?: string;
+  /** While the call is still streaming in: its arguments so far, for the card. */
+  preview?: string;
   /** C6: the person changed the arguments on the card before allowing. */
   edited?: boolean;
   /** Stamped by the screen, for the elapsed timer. */
@@ -62,7 +64,8 @@ export interface TurnOptions {
   messages: Message[];
   tools: ToolDef[];
   stream: (messages: Message[], tools: ToolDef[] | undefined, onFrame: (frame: StreamFrame) => void, signal?: AbortSignal) => Promise<void>;
-  execute: (call: ToolCall, args: Record<string, any>) => Promise<string>;
+  /** The signal is the turn's Stop: a tool that can cancel, cancels. */
+  execute: (call: ToolCall, args: Record<string, any>, signal?: AbortSignal) => Promise<string>;
   approve: (event: ToolEvent) => Promise<boolean | { args: Record<string, any> }>;
   /**
    * C11: the screen's own gate for whether this call asks at all (the
@@ -76,6 +79,12 @@ export interface TurnOptions {
   onTool: (event: ToolEvent) => void;
   onNote?: (note: string) => void;
   signal?: AbortSignal;
+  /**
+   * The loaded context in characters, when this machine knows it: older tool
+   * results are trimmed before each round rather than the server refusing the
+   * whole request. Absent for engine models, which manage context themselves.
+   */
+  charBudget?: number;
   /**
    * Pictures a tool call produced (screen_capture): they follow the tool
    * message as a user turn with image parts, the one place every vision
@@ -115,16 +124,62 @@ export async function runTurn(options: TurnOptions): Promise<void> {
     }
   };
 
+  // Cards shown as working or asking, by id: a Stop settles them to a
+  // `stopped` state instead of leaving a spinner running forever.
+  const openCards = new Map<string, ToolEvent>();
+  const settleStopped = () => {
+    for (const card of openCards.values()) {
+      options.onTool({ ...card, status: 'stopped', result: 'The turn was stopped.', endedAt: Date.now() });
+    }
+    openCards.clear();
+  };
+
   for (let round = 0; round < tools.MAX_ROUNDS; round += 1) {
+    // The context is fixed at load on a local model: trim old tool results
+    // before asking, rather than after the server refuses the request.
+    if (options.charBudget) {
+      const shrunk = tools.shrink(messages, options.charBudget);
+      if (shrunk.clipped) {
+        shrunk.messages.forEach((m, i) => { messages[i] = m; });
+        options.onNote?.('Older tool results were trimmed to fit the model’s context.');
+      }
+    }
     let text = '';
     let pending: any[] = [];
     const startedAt = Date.now();
+    let lastPreview = 0;
     const onFrame = (frame: StreamFrame) => {
       if (frame.content) {
         text += frame.content;
         options.onText(frame.content);
       }
-      if (frame.toolCalls) pending = tools.collect(pending, frame.toolCalls);
+      if (frame.toolCalls) {
+        pending = tools.collect(pending, frame.toolCalls);
+        // The card shows the command assembling: a preview throttled to four
+        // a second, keyed by the call's real id so the finished event (or
+        // the one that runs) replaces it rather than joining it.
+        const now = Date.now();
+        if (now - lastPreview >= 250) {
+          const live = pending.filter((c) => c && c.id && c.name && c.arguments);
+          const last = live[live.length - 1];
+          if (last) {
+            lastPreview = now;
+            const previewEvent: ToolEvent = {
+              id: last.id,
+              name: last.name,
+              args: {},
+              summary: tools.summarise(last.name, {}),
+              asks: '',
+              status: 'running',
+              preview: String(last.arguments).slice(-600),
+            };
+            // Tracked like any running card: Stop settles it too, and the
+            // real event for this id replaces it a moment later.
+            openCards.set(previewEvent.id, previewEvent);
+            options.onTool({ ...previewEvent });
+          }
+        }
+      }
     };
 
     try {
@@ -141,6 +196,8 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       }
       // The round never produced anything: the trace still says when and why.
       options.onTrace?.({ kind: 'model', chars: text.length, ms: Date.now() - startedAt, error: message.slice(0, 200) });
+      // Stop lands mid-stream as an AbortError: the cards go with it.
+      if (options.signal?.aborted || (err as Error)?.name === 'AbortError') settleStopped();
       throw err;
     }
     options.onTrace?.({ kind: 'model', chars: text.length, ms: Date.now() - startedAt });
@@ -156,8 +213,13 @@ export async function runTurn(options: TurnOptions): Promise<void> {
     }
 
     messages.push(tools.assistantMessage(text, calls));
-    for (const call of calls) {
-      if (options.signal?.aborted) return;
+
+    // One call, from card to conversation: the approval when it asks, the
+    // run, the trace, and the messages the model reads next. Returned rather
+    // than pushed, so a batch can still push them in the order asked.
+    const runOne = async (call: ToolCall): Promise<Message[]> => {
+      if (options.signal?.aborted) return [];
+      const out: Message[] = [];
       let args = tools.parseArgs(call.arguments);
       const event: ToolEvent = {
         id: call.id,
@@ -170,14 +232,16 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       let result: string;
       if (event.asks) {
         event.status = 'asking';
+        openCards.set(event.id, { ...event });
         options.onTool({ ...event });
         const decision = await options.approve({ ...event });
         if (!decision) {
           event.status = 'denied';
           event.result = 'The user declined this action.';
+          openCards.delete(event.id);
           options.onTool({ ...event });
-          messages.push(tools.toolMessage(call, event.result));
-          continue;
+          out.push(tools.toolMessage(call, event.result));
+          return out;
         }
         // C6: what runs is what was typed on the card, not what was asked
         // for — and the model is told, so its next words describe reality.
@@ -189,10 +253,11 @@ export async function runTurn(options: TurnOptions): Promise<void> {
         }
         event.status = 'running';
       }
+      openCards.set(event.id, { ...event });
       options.onTool({ ...event });
       const toolStartedAt = Date.now();
       try {
-        result = await options.execute(call, args);
+        result = await options.execute(call, args, options.signal);
         event.status = 'done';
       } catch (err) {
         result = `Error: ${(err as Error)?.message || String(err)}`;
@@ -200,6 +265,7 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       }
       options.onTrace?.({ kind: 'tool', name: call.name, status: event.status, ms: Date.now() - toolStartedAt });
       event.result = tools.clip(result);
+      openCards.delete(event.id);
       options.onTool({ ...event });
       // C8: a result from the web, a repository or somebody else's file is
       // labelled where the model reads it — data, not instructions.
@@ -207,11 +273,39 @@ export async function runTurn(options: TurnOptions): Promise<void> {
       const note = event.edited
         ? `The person edited this tool call before it ran; these are the arguments that ran: ${JSON.stringify(args)}\n`
         : '';
-      messages.push(tools.toolMessage(call, note + shown));
+      out.push(tools.toolMessage(call, note + shown));
       const images = options.imagesFor?.(call.id) || [];
       if (images.length) {
-        messages.push({ role: 'user', content: withImages(`[The picture from ${call.name}.]`, images) });
+        out.push({ role: 'user', content: withImages(`[The picture from ${call.name}.]`, images) });
       }
+      return out;
+    };
+
+    // A run of calls that ask nothing goes at once: read-only tools do not
+    // wait on each other. An asking call is always alone — the approval path
+    // is a conversation. The conversation is still written in call order.
+    let at = 0;
+    while (at < calls.length) {
+      if (options.signal?.aborted) {
+        settleStopped();
+        return;
+      }
+      const batch: ToolCall[] = [];
+      while (at < calls.length) {
+        const c = calls[at];
+        const ask = options.asks ? options.asks(c.name, tools.parseArgs(c.arguments)) : tools.needsApproval(c.name);
+        if (ask) break;
+        batch.push(c);
+        at += 1;
+      }
+      if (!batch.length) {
+        const pushed = await runOne(calls[at]);
+        at += 1;
+        pushed.forEach((m) => messages.push(m));
+        continue;
+      }
+      const results = await Promise.all(batch.map((c) => runOne(c)));
+      for (const pushed of results) pushed.forEach((m) => messages.push(m));
     }
   }
   if (!options.signal?.aborted) {

@@ -1301,3 +1301,50 @@ no-loop rule and the row pinned in desktop-create-tabs); tsc, build,
 cargo 185, clippy, skills green; Service panel screenshotted under Xvfb:
 open, on-screen, the local row with its note. Not walked on the Mint
 machine yet.
+
+## Code-review round: the hang, the parked workers, Stop, the GPU ledger (2026-10-08)
+
+The review's verified fixes, all in. (HIGH) An Ollama error row threw from
+inside shellPostStream's onChunk handler, escaping before settle() -- the
+turn spun until a restart. ollamaFrame now returns an error MARKER,
+streamOllama accumulates it and throws once after drain(true), and both
+shell stream handlers (shellPostStream, byokStream) wrap their callbacks so
+no throw can ever leave the promise unsettled again. (HIGH) The three wait
+loops that parked a tokio worker -- local_model_start's 750ms, sd_start's
+750ms, local_run's 40ms -- yield with tokio::time::sleep now (tokio named
+in Cargo.toml for its time feature; local_run became async to allow it).
+(MED) Stop reaches the tools: TurnOptions.execute carries the signal,
+executeTool races every call through `guarded`, web_search/web_fetch fetch
+under it with a 30s deadline, run_command gets a real kill via the new
+`local_run_cancel` command (pid registry beside local_run, removed when the
+run returns so a recycled pid is never signalled), and in-flight cards
+settle to a new `stopped` state instead of spinning. (MED) collect() reuses
+the slot of a repeated id when a relay sends deltas without an index -- one
+call's arguments are one call again. (MED) sd-server spawns in its own
+process group and shutdown() goes through the shared local::kill_tree (TERM
+the group, 200ms, KILL, reap) instead of child.kill(). (LOW) the toolImages
+map is capped, web calls time out at 30s, two turns asking for the same
+model share one load (ensureUnsloth's in-flight map), and the sd job poll
+slows while queued and stays quick while drawing.
+
+Upgrades: a shared GPU ledger (gpu_budget.rs) -- llama-server plans its
+layers against what is free and records its claim, sd-server claims the
+model's bytes before it spawns and is REFUSED in words when the card cannot
+hold both; a whole-model-fits fit still means every layer (the old semantics
+kept), and an all-taken card puts the chat model on the CPU with a note.
+Read-only calls in a round run in parallel (asking calls stay sequential,
+messages still pushed in call order). Tool cards show the call assembling
+(throttled preview, same id, Stop settles it). Long turns trim old tool
+results inside the loaded context (tools.shrink + charBudgetFor, chat and
+sub-agent), with withSystem's byte-stable prefix pinned.
+
+Not done: sd_job SSE -- the api summary this repo pins lists only
+GET /jobs/{id} and cancel, so the long-poll claim could not be verified and
+the interval poll stays (with backoff). MCP request cancel: the turn stops
+at once through the race; the stdio request itself still runs to its 120s
+timeout server-side -- a Rust cancel keyed on the request id is the upgrade.
+kill_tree's own 200ms sleep stays sync (one shot, called on a stop path).
+
+372 node tests (desktop-review-fixes runs collect/shrink/withSystem for
+real and pins the rest), 188 cargo tests (gpu_budget's fits rule), tsc,
+build, clippy, skills all green. Not walked on the Mint machine yet.

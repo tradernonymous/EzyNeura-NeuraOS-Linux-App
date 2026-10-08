@@ -275,12 +275,16 @@
           id = String((submitted && submitted.id) || '');
           if (!id) throw new Error('The local server accepted the job without an id.');
           onJob({ id: id, label: 'Queued', since: Date.now() });
+          var lastState = '';
           var poll = function () {
             if (stopped()) return Promise.resolve('');
-            return pause(900).then(function () {
+            // A queued job cannot move any faster than the wait: poll it
+            // slowly, the drawing phase quickly.
+            return pause(lastState === 'queued' ? 2000 : 900).then(function () {
               if (stopped()) return '';
               return Promise.resolve(call('sd_job', { id: id })).then(function (job) {
                 var view = images.localJobView(job);
+                lastState = view.state;
                 onJob({ id: id, label: view.label });
                 if (view.state === 'cancelled') return '';
                 if (view.error) throw new Error(view.error);

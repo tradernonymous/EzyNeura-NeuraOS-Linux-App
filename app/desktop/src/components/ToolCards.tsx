@@ -39,12 +39,13 @@ export function elapsed(ms: number): string {
   return `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`;
 }
 
-const ICON: Record<ToolEvent['status'], 'activity' | 'check' | 'close' | 'alert' | 'shield'> = {
+const ICON: Record<ToolEvent['status'], 'activity' | 'check' | 'close' | 'alert' | 'shield' | 'stop'> = {
   asking: 'shield',
   running: 'activity',
   done: 'check',
   denied: 'close',
   error: 'alert',
+  stopped: 'stop',
 };
 
 const WORD: Record<ToolEvent['status'], string> = {
@@ -53,6 +54,7 @@ const WORD: Record<ToolEvent['status'], string> = {
   done: 'done',
   denied: 'declined',
   error: 'failed',
+  stopped: 'stopped',
 };
 
 export default function ToolCards({ events, onDecide, expandAll }: Props) {
@@ -90,6 +92,11 @@ export default function ToolCards({ events, onDecide, expandAll }: Props) {
             >
               <Icon name={ICON[event.status]} size={13} />
               <span className="tool-card-summary">{event.summary}</span>
+              {/* The call assembling live: arguments as they stream in,
+                  replaced by the real card the moment it runs or finishes. */}
+              {event.preview && event.result == null && (
+                <span className="tool-card-preview mono" title="What the model has written so far">{event.preview.slice(-160)}</span>
+              )}
               <span className="tool-card-status">{WORD[event.status]}</span>
               {event.startedAt && event.status !== 'asking' && (
                 <span className="tool-card-time mono">{elapsed((event.endedAt || Date.now()) - event.startedAt)}</span>

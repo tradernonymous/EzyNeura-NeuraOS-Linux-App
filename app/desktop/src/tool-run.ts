@@ -19,7 +19,7 @@
 // itself said no -- a model can do something useful with a sentence.
 import { api, ApiError } from './api';
 import {
-  call, desktopAct, desktopScreenshot, editLocalFile, hasShell, listLocalDir, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
+  call, desktopAct, desktopScreenshot, editLocalFile, hasShell, listLocalDir, localRunCancel, mcpStdioList, mcpStdioRequest, mcpStdioStart, readLocalFile, runLocal, writeLocalFile,
 } from './bridge';
 import './tools.js';
 
@@ -43,15 +43,15 @@ function lines(rows: unknown[], each: (row: any) => string, empty: string): stri
   return list.length ? list.map(each).join('\n') : empty;
 }
 
-async function web(name: string, a: Args): Promise<string> {
+async function web(name: string, a: Args, signal?: AbortSignal): Promise<string> {
   if (name === 'web_search') {
     if (!a.query) return 'Error: query is required.';
-    const data: any = await api.raw(`/api/llm/websearch?q=${q(a.query)}`);
+    const data: any = await api.raw(`/api/llm/websearch?q=${q(a.query)}`, signal ? { signal } : undefined);
     const results = Array.isArray(data) ? data : data?.results;
     return lines(results, (r) => `${r.title || r.url}\n${r.url}\n${r.snippet || r.description || ''}\n`, `No results for "${a.query}".`);
   }
   if (!a.url) return 'Error: url is required.';
-  const page: any = await api.raw(`/api/llm/fetch?url=${q(a.url)}`);
+  const page: any = await api.raw(`/api/llm/fetch?url=${q(a.url)}`, signal ? { signal } : undefined);
   return String(page?.text || page?.content || page?.markdown || JSON.stringify(page || {}));
 }
 
@@ -118,7 +118,7 @@ async function github(name: string, a: Args): Promise<string> {
   return `Error: ${name} is not a GitHub tool this app has.`;
 }
 
-async function local(name: string, a: Args, root: string): Promise<string> {
+async function local(name: string, a: Args, root: string, signal?: AbortSignal): Promise<string> {
   if (!hasShell()) return 'Error: files and commands on this PC need the installed desktop app.';
   if (!root) return 'Error: no folder is open. Ask the user to open one (Local → Open folder).';
   if (name === 'list_files') {
@@ -145,10 +145,13 @@ async function local(name: string, a: Args, root: string): Promise<string> {
   if (name === 'run_command') {
     if (!a.command) return 'Error: command is required.';
     // The person allowed this exact command on its card, which is what the
-    // shell's own risk gate asks for.
+    // shell's own risk gate asks for. Stop on the turn cancels this run by
+    // its id -- the shell kills the process group, not just our wait on it.
+    const runId = `t${Date.now().toString(36)}`;
+    signal?.addEventListener('abort', () => { localRunCancel(runId).catch(() => {}); }, { once: true });
     const run = await runLocal({
       root,
-      runId: `t${Date.now().toString(36)}`,
+      runId,
       command: String(a.command),
       cwd: a.cwd ? String(a.cwd) : '',
       approveRisky: true,
@@ -320,6 +323,10 @@ async function desktop(name: string, a: Args, callId: string): Promise<string> {
   if (name === 'screen_capture') {
     const shot = await desktopScreenshot();
     toolImages.set(callId, [shot.dataUrl]);
+    // The turn can be aborted before takeToolImages ever asks: the oldest
+    // entry goes rather than a multi-MB data URL living in the map all
+    // session. Session memory only, so dropping the coldest costs nothing.
+    if (toolImages.size > 8) toolImages.delete(toolImages.keys().next().value as string);
     return `Screenshot taken (${shot.width}×${shot.height} pixels, via ${shot.tool}). It is attached as a picture; coordinates for desktop_click are pixels from the top-left of it.`;
   }
   const done = (via: string) => `Done (via ${via}).`;
@@ -358,15 +365,48 @@ async function broker(name: string, a: Args): Promise<string> {
   }
 }
 
+/**
+ * One tool call, answering to Stop and to its own deadline. The race rejects
+ * at once -- a turn never waits out a 120s MCP call it was told to stop -- and
+ * the AbortSignal this hands `run` cancels the fetch (or the run's process
+ * group) underneath.
+ */
+function guarded<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+  timeoutMsg: string,
+): Promise<T> {
+  const ctrl = new AbortController();
+  const stopper = new Promise<never>((_resolve, reject) => {
+    const fail = (message: string) => {
+      ctrl.abort();
+      reject(new ApiError(0, message));
+    };
+    if (signal?.aborted) {
+      fail('This tool was stopped before it finished.');
+      return;
+    }
+    signal?.addEventListener('abort', () => fail('The person stopped this tool.'), { once: true });
+    if (timeoutMs > 0) setTimeout(() => fail(timeoutMsg), timeoutMs);
+  });
+  return Promise.race([run(ctrl.signal), stopper]);
+}
+
 /** Run one allowed call and return what the model should be told. */
-export async function executeTool(call: ToolCall, args: Args, context: ToolContext): Promise<string> {
+export async function executeTool(call: ToolCall, args: Args, context: ToolContext, signal?: AbortSignal): Promise<string> {
   const name = call.name;
-  if (name === 'web_search' || name === 'web_fetch') return web(name, args);
-  if (name === 'spawn_agent') return context.spawnAgent ? context.spawnAgent(args) : 'Error: no sub-agent may be spawned here.';
-  if (name.startsWith('github_')) return github(name, args);
-  if (name.startsWith('mcp__')) return mcp(name, args, call.id);
-  if (tools.BROKER_NAMES.includes(name)) return broker(name, args);
-  if (tools.LOCAL.some((t) => t.function.name === name)) return local(name, args, context.localRoot);
-  if (tools.DESKTOP_NAMES.includes(name)) return desktop(name, args, call.id);
-  return `Error: ${name} is not a tool this app has.`;
+  if (signal?.aborted) return 'Error: this tool was stopped before it started.';
+  const run = (sig: AbortSignal): Promise<string> => {
+    if (name === 'web_search' || name === 'web_fetch') return web(name, args, sig);
+    if (name === 'spawn_agent') return context.spawnAgent ? context.spawnAgent(args) : Promise.resolve('Error: no sub-agent may be spawned here.');
+    if (name.startsWith('github_')) return github(name, args);
+    if (name.startsWith('mcp__')) return mcp(name, args, call.id);
+    if (tools.BROKER_NAMES.includes(name)) return broker(name, args);
+    if (tools.LOCAL.some((t) => t.function.name === name)) return local(name, args, context.localRoot, sig);
+    if (tools.DESKTOP_NAMES.includes(name)) return desktop(name, args, call.id);
+    return Promise.resolve(`Error: ${name} is not a tool this app has.`);
+  };
+  const isWeb = name === 'web_search' || name === 'web_fetch';
+  return guarded(run, signal, isWeb ? 30_000 : 0, 'The web request timed out after 30 seconds.');
 }

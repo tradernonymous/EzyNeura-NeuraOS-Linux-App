@@ -317,6 +317,11 @@ export async function runLocal(args: {
   });
 }
 
+/** Stop a running local command and what it started, by its run id. */
+export async function localRunCancel(runId: string): Promise<void> {
+  await call('local_run_cancel', { runId });
+}
+
 /**
  * Live output from a running local command.
  *
@@ -820,8 +825,16 @@ export async function shellPostStream(
   });
   const stop = await subscribe<ShellChatEvent>('shell-chat', (event) => {
     if (!event || event.id !== id) return;
-    if (typeof event.status === 'number') onStatus?.(event.status);
-    if (typeof event.chunk === 'string') onChunk(event.chunk);
+    // A callback that throws must not escape the handler: the promise would
+    // never settle and the turn would hang until the app restarted (the
+    // Ollama error-row bug). The throw becomes the stream's own error.
+    try {
+      if (typeof event.status === 'number') onStatus?.(event.status);
+      if (typeof event.chunk === 'string') onChunk(event.chunk);
+    } catch (e) {
+      settle(e instanceof Error ? e : new Error(String(e)));
+      return;
+    }
     if (event.error) settle(new Error(event.error));
     else if (event.done) settle();
   });
@@ -869,8 +882,15 @@ export async function byokStream(
   });
   const stop = await subscribe<ShellChatEvent>('shell-chat', (event) => {
     if (!event || event.id !== id) return;
-    if (typeof event.status === 'number') onStatus?.(event.status);
-    if (typeof event.chunk === 'string') onChunk(event.chunk);
+    // Same rule as shellPostStream: a throwing callback becomes the stream's
+    // error, never an exception that escapes and leaves the promise unsettled.
+    try {
+      if (typeof event.status === 'number') onStatus?.(event.status);
+      if (typeof event.chunk === 'string') onChunk(event.chunk);
+    } catch (e) {
+      settle(e instanceof Error ? e : new Error(String(e)));
+      return;
+    }
     if (event.error) settle(new Error(event.error));
     else if (event.done) settle();
   });

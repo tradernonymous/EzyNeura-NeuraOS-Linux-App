@@ -36,6 +36,7 @@ mod crash;
 mod diag;
 mod engine;
 mod gguf;
+mod gpu_budget;
 mod hf_oauth;
 mod local;
 mod git;
@@ -394,6 +395,7 @@ fn main() {
             local::local_write_file,
             local::local_edit_file,
             local::local_run,
+            local::local_run_cancel,
             mcp::mcp_stdio_start,
             mcp::mcp_stdio_request,
             mcp::mcp_stdio_stop,

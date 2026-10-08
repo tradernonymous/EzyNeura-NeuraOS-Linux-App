@@ -137,6 +137,9 @@ function sameFile(a: string, b: string): boolean {
   return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
 }
 
+/** Two turns asking for the same model at once: one load, both wait on it. */
+const loading = new Map<string, Promise<LocalModelStatus>>();
+
 /**
  * Make llama-server serve this file, starting or restarting it if it is not.
  * `force` reloads even when it already is (the drawer's "Reload model").
@@ -147,18 +150,42 @@ export async function ensureUnsloth(entry: SavedModel, force = false, onStage?: 
     const status = await localModelStatus().catch(() => null);
     if (status && status.state === 'ready' && status.file && sameFile(status.file, entry.path)) return status;
   }
-  // The file's header first, so this load's context is the exact one.
-  if (!runSettings.limitsFor(entry.id)?.trainCtx) await detectLimits(entry);
-  onStage?.(`Loading ${entry.name}…`);
-  const cores = Number((globalThis as any).navigator?.hardwareConcurrency) || 0;
-  const status = await localModelStart({
-    repo: entry.name,
-    file: entry.path,
-    ...runSettings.loadArgs(resolvedValues(entry), cores),
-  });
-  // A header that could not be read: learned from the server after this load.
-  if (!runSettings.limitsFor(entry.id)?.trainCtx) detectLimits(entry, status).catch(() => {});
-  return status;
+  const pending = loading.get(entry.id);
+  if (pending) return pending;
+  const work = (async (): Promise<LocalModelStatus> => {
+    // The file's header first, so this load's context is the exact one.
+    if (!runSettings.limitsFor(entry.id)?.trainCtx) await detectLimits(entry);
+    onStage?.(`Loading ${entry.name}…`);
+    const cores = Number((globalThis as any).navigator?.hardwareConcurrency) || 0;
+    const status = await localModelStart({
+      repo: entry.name,
+      file: entry.path,
+      ...runSettings.loadArgs(resolvedValues(entry), cores),
+    });
+    // A header that could not be read: learned from the server after this load.
+    if (!runSettings.limitsFor(entry.id)?.trainCtx) detectLimits(entry, status).catch(() => {});
+    return status;
+  })();
+  loading.set(entry.id, work);
+  try {
+    return await work;
+  } finally {
+    if (loading.get(entry.id) === work) loading.delete(entry.id);
+  }
+}
+
+/**
+ * The turn's message budget in characters, when the context is known on this
+ * machine: the loaded context at ~4 characters a token, keeping a third free
+ * for the reply. Engine-hosted models have no fixed window we can see, so
+ * they get nothing and their server manages its own context.
+ */
+export function charBudgetFor(provider: string, model: string): number | undefined {
+  if (!isSavedProvider(provider)) return undefined;
+  const entry = savedModels.find(provider, model);
+  if (!entry) return undefined;
+  const ctx = runSettings.limitsFor(entry.id)?.trainCtx;
+  return ctx && ctx > 512 ? Math.round(ctx * 4 * 0.66) : undefined;
 }
 
 /**
@@ -298,8 +325,8 @@ async function streamRendered(
   return true;
 }
 
-/** One NDJSON line from Ollama's /api/chat, as a frame (or an error). */
-export function ollamaFrame(line: string): (StreamFrame & { thinking?: string }) | null {
+/** One NDJSON line from Ollama's /api/chat, as a frame (or an error row). */
+export function ollamaFrame(line: string): (StreamFrame & { thinking?: string; error?: string }) | null {
   const text = line.trim();
   if (!text) return null;
   let row: any;
@@ -308,7 +335,10 @@ export function ollamaFrame(line: string): (StreamFrame & { thinking?: string })
   } catch {
     return null;
   }
-  if (row && row.error) throw new ApiError(0, `Ollama: ${typeof row.error === 'string' ? row.error : JSON.stringify(row.error)}`);
+  // An error MARKER, never a throw: this runs inside the shell's onChunk
+  // event handler, and a throw there escaped before the stream could settle —
+  // the turn hung until the app was restarted.
+  if (row && row.error) return { error: typeof row.error === 'string' ? row.error : JSON.stringify(row.error) };
   const content = row?.message?.content;
   // Ollama sends a tool call whole, with its arguments as an object.
   const called = Array.isArray(row?.message?.tool_calls) && row.message.tool_calls.length ? row.message.tool_calls : undefined;
@@ -381,6 +411,9 @@ async function streamOllama(entry: SavedModel, messages: Message[], onFrame: (f:
   let buffer = '';
   let status = 200;
   let failure = '';
+  // An error row, recorded where it came in and thrown only after the drain
+  // completes -- the same order readStream keeps for a bad status.
+  let ollamaErr = '';
   // Reasoning is shown the way every other provider's is: inside <think>.
   let thinking = false;
   const emit = (frame: StreamFrame & { thinking?: string }) => {
@@ -401,13 +434,15 @@ async function streamOllama(entry: SavedModel, messages: Message[], onFrame: (f:
       buffer = buffer.slice(idx + 1);
       if (status >= 400) { failure += line; continue; }
       const frame = ollamaFrame(line);
+      if (frame?.error) { ollamaErr = frame.error; continue; }
       if (frame) emit(frame);
     }
     if (final && buffer.trim()) {
       if (status >= 400) failure += buffer;
       else {
         const frame = ollamaFrame(buffer);
-        if (frame) emit(frame);
+        if (frame?.error) ollamaErr = frame.error;
+        else if (frame) emit(frame);
       }
       buffer = '';
     }
@@ -424,6 +459,7 @@ async function streamOllama(entry: SavedModel, messages: Message[], onFrame: (f:
     try { message = JSON.parse(failure).error || message; } catch { /* as it came */ }
     throw new ApiError(status, `Ollama answered ${status}: ${message}`);
   }
+  if (ollamaErr) throw new ApiError(0, `Ollama: ${ollamaErr}`);
 }
 
 /**
