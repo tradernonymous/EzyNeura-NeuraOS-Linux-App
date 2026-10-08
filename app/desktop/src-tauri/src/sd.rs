@@ -100,14 +100,34 @@ fn slot() -> &'static Mutex<Option<Run>> {
 /// image server left behind is a process the user cannot see and did not
 /// ask for.
 pub fn shutdown() {
+    crate::gpu_budget::give_sd();
     let mut guard = match slot().lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
     if let Some(mut run) = guard.take() {
-        let _ = run.child.kill();
-        let _ = run.child.wait();
+        // TERM the process group, 200ms, KILL, reap -- the same path a timed
+        // out run_command takes (local::kill_tree, W4): sd.cpp gets its
+        // graceful stop, and a helper it forked cannot leak VRAM.
+        crate::local::kill_tree(&mut run.child);
     }
+}
+
+/// The model's weight in MB: a file's own bytes, a set's parts together.
+/// The claim sd-server makes on the card (gpu_budget).
+fn model_mb(model: &Path) -> u64 {
+    let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+    let total = match set_in(model) {
+        Some(parts) if model.is_dir() => {
+            let mut total = size(&parts.diffusion);
+            for path in [&parts.vae, &parts.llm, &parts.llm_vision, &parts.clip_l, &parts.t5xxl].into_iter().flatten() {
+                total += size(path);
+            }
+            total
+        }
+        _ => size(model),
+    };
+    total / (1024 * 1024)
 }
 
 fn sd_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -1354,6 +1374,11 @@ pub async fn sd_start(
     // fight over the port and over the machine's memory.
     shutdown();
 
+    // What the card must hold for this model -- a file's own bytes, a set's
+    // parts together -- claimed BEFORE the spawn, so a card already carrying
+    // a chat model is a sentence here rather than an OOM kill later.
+    crate::gpu_budget::take_sd(model_mb(&model))?;
+
     let mut command = Command::new(&binary);
     // A folder is a set, and a set starts with each part under its own flag.
     let mut argv = match set_in(&model) {
@@ -1382,9 +1407,21 @@ pub async fn sd_start(
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let child = command
-        .spawn()
-        .map_err(|e| format!("Could not start {}: {}", binary.display(), e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Its own process group (pgid == its pid): shutdown() signals the
+        // negative pid, so anything sd-server forks goes with it.
+        command.process_group(0);
+    }
+    let child = match command.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            // The claim above is released with the start that never happened.
+            crate::gpu_budget::give_sd();
+            return Err(format!("Could not start {}: {}", binary.display(), e));
+        }
+    };
     {
         let mut guard = match slot().lock() {
             Ok(g) => g,
@@ -1446,7 +1483,9 @@ pub async fn sd_start(
                 START_TIMEOUT_SECS, tail
             ));
         }
-        std::thread::sleep(Duration::from_millis(750));
+        // A yield, not a parked worker: this wait runs inside an async
+        // command (and local_model_start's twin above does the same).
+        tokio::time::sleep(Duration::from_millis(750)).await;
     }
 }
 

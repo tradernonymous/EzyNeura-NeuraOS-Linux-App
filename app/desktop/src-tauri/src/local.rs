@@ -25,8 +25,10 @@
 // call by its opening words, so "Refused:", "old_text was not found" and the
 // rest are the engine's own phrases, kept verbatim so the local coding agent
 // (P7) reads them the same way.
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
@@ -473,11 +475,59 @@ pub fn local_edit_file(
     }))
 }
 
+/// The pids of commands still running, by run id: what local_run_cancel
+/// signals. An entry is removed when its run returns, whatever happened, so
+/// a recycled pid is never signalled for a run that is already over.
+fn runs() -> &'static Mutex<HashMap<String, u32>> {
+    static RUNS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+    RUNS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remember_run(id: &str, pid: u32) {
+    runs().lock().unwrap_or_else(|p| p.into_inner()).insert(id.to_string(), pid);
+}
+
+fn forget_run(id: &str) -> Option<u32> {
+    runs().lock().unwrap_or_else(|p| p.into_inner()).remove(id)
+}
+
+/// Stop a running command by its run id: its process GROUP gets TERM, the
+/// same signal a timeout sends (kill_tree, W4), and the run's own wait sees
+/// the exit and returns its result. The frontend calls this when the turn
+/// is stopped, so a long build does not outlive the Stop that ended it.
+#[tauri::command(async)]
+pub fn local_run_cancel(run_id: String) -> bool {
+    let Some(pid) = forget_run(&run_id) else { return false };
+    #[cfg(unix)]
+    {
+        let group = format!("-{}", pid);
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", &group])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &pid.to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    true
+}
+
 /// Run a command here, streaming both streams line by line as `local-run`
 /// events, and return the settled result. The command is refused, not run, if
 /// it is destructive and the caller has not marked it approved.
+///
+/// async for its own wait loop: the 40ms poll yields to tokio instead of
+/// holding one of the runtime's few worker threads for the whole run.
 #[tauri::command(async)]
-pub fn local_run(
+pub async fn local_run(
     app: tauri::AppHandle,
     root: String,
     run_id: String,
@@ -545,6 +595,7 @@ pub fn local_run(
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
+    remember_run(&run_id, child.id());
     let out_handle = stdout.map(|s| pump(s, app.clone(), run_id.clone(), "stdout"));
     let err_handle = stderr.map(|s| pump(s, app.clone(), run_id.clone(), "stderr"));
 
@@ -558,15 +609,19 @@ pub fn local_run(
                 break;
             }
             Ok(None) => {}
-            Err(e) => return Err(format!("The command could not be waited for: {}", e)),
+            Err(e) => {
+                forget_run(&run_id);
+                return Err(format!("The command could not be waited for: {}", e));
+            }
         }
         if started.elapsed() >= timeout {
             kill_tree(&mut child);
             timed_out = true;
             break;
         }
-        std::thread::sleep(Duration::from_millis(40));
+        tokio::time::sleep(Duration::from_millis(40)).await;
     }
+    forget_run(&run_id);
 
     let out_text = out_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
     let err_text = err_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
@@ -608,7 +663,7 @@ pub fn local_run(
 /// llama-server still holding a port after the session that wanted it is gone.
 /// The plan for this app called that "automatic cleanup"; on Windows it has one
 /// honest implementation, and it is to kill the tree by its root pid.
-fn kill_tree(child: &mut std::process::Child) {
+pub(crate) fn kill_tree(child: &mut std::process::Child) {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;

@@ -41,7 +41,7 @@ import '../approval.js';
 import '../composer.js';
 import '../agents.js';
 import '../recipes.js';
-import { isSavedProvider, streamSaved } from '../run-model';
+import { charBudgetFor, isSavedProvider, streamSaved } from '../run-model';
 import '../saved-models.js';
 import '../byok.js';
 import '../chats.js';
@@ -906,10 +906,11 @@ export default function ChatScreen() {
       messages: agentsLib.messagesFor(agent, task, agent.includeMessageHistory ? turnsFor(run.history) : []),
       tools: offered,
       stream: streamer(target.provider, target.model),
-      execute: (call, args) => executeTool(call, args, {
+      execute: (call, args, signal) => executeTool(call, args, {
         localRoot: root,
         spawnAgent: canSpawn ? (a) => spawnFrom(agent, a, { ...run, depth: run.depth + 1, onText: undefined }) : undefined,
-      }),
+      }, signal),
+      charBudget: charBudgetFor(target.provider, target.model),
       approve: (event) => ask({ ...event, id: prefix + event.id }),
       imagesFor: takeToolImages,
       onText: (piece) => { last += piece; run.onText?.(piece); },
@@ -1586,10 +1587,13 @@ _${done.notes.join(' · ')}_` : said,
             .concat(active.mode !== 'plan' ? spawnDefFor(null) : [])
           : [],
         stream: streamOnce,
-        execute: (call, args) => executeTool(call, args, {
+        execute: (call, args, signal) => executeTool(call, args, {
           localRoot: root,
           spawnAgent: (a) => spawnFrom(null, a, { sid, signal: controller.signal, history, depth: 1 }),
-        }),
+        }, signal),
+        // A local model's context is fixed at load: old tool results get
+        // trimmed before the round rather than after the server refuses it.
+        charBudget: charBudgetFor(active.provider, active.model),
         approve: askApproval(controller.signal),
         imagesFor: takeToolImages,
         onText: append,

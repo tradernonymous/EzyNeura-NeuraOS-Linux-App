@@ -66,6 +66,7 @@ fn slot() -> &'static Mutex<Option<Run>> {
 
 /// Kill whatever is running. Called by `local_model_stop` and on app exit.
 pub fn shutdown() {
+    crate::gpu_budget::give_llama();
     let mut guard = match slot().lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
@@ -512,19 +513,50 @@ pub async fn local_model_start(
     let mut ctx = ctx;
     let mut gpu_layers = gpu_layers;
     let mut fit_note = String::new();
+    // What this load will claim on the card, in MB: its weights' share by
+    // layers, its KV cache, a little over. A CPU start claims nothing.
+    const BYTES_MB: u64 = 1024 * 1024;
+    let mut claim_mb: u64 = 0;
     if let ModelSource::File(path) = &source {
         if ctx.is_none() {
             ctx = Some(8192);
         }
         if gpu_layers.map(|n| n < 0).unwrap_or(false) {
-            if let (Some(vram_mb), Ok(info)) = (vram_mb(), crate::gguf::read_header(path)) {
+            // Plan against what is FREE: the image server's reservation comes
+            // off the card before the layers are chosen (gpu_budget).
+            if let (Some(vram_mb), Ok(info)) = (crate::gpu_budget::available_mb(), crate::gguf::read_header(path)) {
                 let layers = info.block_count.unwrap_or(0);
-                let fit = fit_gpu_layers(weights_bytes(path), layers, kv_bytes_per_token(&info), ctx.unwrap_or(8192), vram_mb);
-                if let Some(n) = fit {
-                    gpu_layers = Some(n as i32);
-                    fit_note = format!("{} of {} layers on the GPU ({} MB VRAM), the rest in RAM. ", n, layers, vram_mb);
+                let kv = kv_bytes_per_token(&info);
+                let ctx_wanted = ctx.unwrap_or(8192);
+                let held = crate::gpu_budget::held_mb();
+                if vram_mb == 0 && held > 0 {
+                    // The card is entirely the image server's: the chat model
+                    // runs on the CPU, and the status says so.
+                    gpu_layers = Some(0);
+                    fit_note = format!("The image server holds the whole card ({} MB): running on the CPU. ", held);
+                } else {
+                    match fit_gpu_layers(weights_bytes(path), layers, kv, ctx_wanted, vram_mb) {
+                        Some(n) => {
+                            gpu_layers = Some(n as i32);
+                            let held_note = if held > 0 { format!(" (after the {} MB the image server holds)", held) } else { String::new() };
+                            fit_note = format!("{} of {} layers on the GPU ({} MB VRAM{}), the rest in RAM. ", n, layers, vram_mb, held_note);
+                            if layers > 0 && n > 0 {
+                                claim_mb = (weights_bytes(path) * n.min(layers) / layers + kv * u64::from(ctx_wanted) + 512 * BYTES_MB) / BYTES_MB;
+                            }
+                        }
+                        // None means the WHOLE model fits this free card:
+                        // -1 (every layer) stays as the caller passed it, and
+                        // the claim is the whole model.
+                        None => {
+                            claim_mb = (weights_bytes(path) + kv * u64::from(ctx_wanted) + 512 * BYTES_MB) / BYTES_MB;
+                        }
+                    }
                 }
             }
+        } else if matches!(gpu_layers, Some(n) if n > 0) {
+            // Layers given outright (no header read): the weights as an upper
+            // bound, rather than claim nothing and let the image server start.
+            claim_mb = (weights_bytes(path) + 512 * BYTES_MB) / BYTES_MB;
         }
     }
 
@@ -570,6 +602,10 @@ pub async fn local_model_start(
             write_state(run);
         }
     }
+    // The claim is on the ledger from here: sd-server's own start checks it
+    // (after the spawn, so a failed start never leaves a claim behind — the
+    // health-wait failures below all end in shutdown(), which releases it).
+    crate::gpu_budget::take_llama(claim_mb);
 
     // Wait for /health. A 4B model on a cold cache takes a while to load, but
     // "a while" is not forever: a deadline, and then the log's own words.
@@ -610,7 +646,10 @@ pub async fn local_model_start(
                 spec, tail
             ));
         }
-        std::thread::sleep(Duration::from_millis(750));
+        // A yield, not a parked worker: this wait runs inside an async
+        // command, and thread::sleep here held one of tokio's few threads for
+        // every 750ms of a model load.
+        tokio::time::sleep(Duration::from_millis(750)).await;
     }
 }
 

@@ -4481,6 +4481,10 @@ button.linkish {
 .tool-card.is-denied {
   border-color: var(--warn);
 }
+.tool-card.is-stopped {
+  border-style: dashed;
+  opacity: 0.8;
+}
 .tool-card-head {
   display: flex;
   align-items: center;
@@ -4499,6 +4503,16 @@ button.linkish {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-1);
+}
+.tool-card-preview {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-3);
 }
 .tool-card-status {
   color: var(--text-3);

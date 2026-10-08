@@ -40,6 +40,10 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # same one-file build as everything else.
 portable-pty = { version = "0.9.0", default-features = false }
 tauri-plugin-autostart = "2"
+# The wait loops inside async commands (models.rs, sd.rs, local.rs): sleep
+# without parking a tokio worker. Already in the tree through Tauri; this
+# names it directly for its time feature only.
+tokio = { version = "1", features = ["time"] }
 
 # The OS credential store (secrets.rs) for BYOK keys, the HF token and the
 # chat-store key, so none of them ever sits in localStorage as plain text.

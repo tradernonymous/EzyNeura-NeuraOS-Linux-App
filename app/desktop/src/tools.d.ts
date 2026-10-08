@@ -91,5 +91,7 @@ export declare function parseArgs(text: string | Record<string, any>): Record<st
 export declare function assistantMessage(text: string, calls: ToolCall[]): { role: 'assistant'; content: string; tool_calls: any[] };
 export declare function toolMessage(call: ToolCall, result: string): { role: 'tool'; tool_call_id: string; name: string; content: string };
 export declare function clip(text: string): string;
+/** Oldest tool results trimmed until the messages fit `maxChars`; `{ messages, clipped }`. */
+export declare function shrink(messages: any[], maxChars: number): { messages: any[]; clipped: number };
 export declare function summarise(name: string, args: Record<string, any>): string;
 export declare function isToolsRefusal(message: string): boolean;
