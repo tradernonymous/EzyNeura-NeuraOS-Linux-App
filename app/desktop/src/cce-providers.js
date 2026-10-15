@@ -26,6 +26,16 @@
     { id: 'openai', label: 'OpenAI', kind: 'cloud', envVar: 'OPENAI_API_KEY' },
     { id: 'gemini', label: 'Gemini', kind: 'cloud', envVar: 'GEMINI_API_KEY' },
     { id: 'cloudflare', label: 'Cloudflare', kind: 'cloud', envVar: 'CLOUDFLARE_API_TOKEN' },
+    { id: 'alibaba', label: 'Alibaba (Qwen)', kind: 'cloud', envVar: 'ALIBABA_API_KEY' },
+    { id: 'huggingface', label: 'Hugging Face', kind: 'cloud', envVar: 'HF_TOKEN' },
+    { id: 'deepseek', label: 'DeepSeek', kind: 'cloud', envVar: 'DEEPSEEK_API_KEY' },
+    { id: 'together', label: 'Together AI', kind: 'cloud', envVar: 'TOGETHER_API_KEY' },
+    { id: 'fireworks', label: 'Fireworks AI', kind: 'cloud', envVar: 'FIREWORKS_API_KEY' },
+    { id: 'xai', label: 'xAI (Grok)', kind: 'cloud', envVar: 'XAI_API_KEY' },
+    { id: 'perplexity', label: 'Perplexity', kind: 'cloud', envVar: 'PERPLEXITY_API_KEY' },
+    { id: 'cohere', label: 'Cohere', kind: 'cloud', envVar: 'COHERE_API_KEY' },
+    { id: 'moonshot', label: 'Moonshot (Kimi)', kind: 'cloud', envVar: 'MOONSHOT_API_KEY' },
+    { id: 'zhipu', label: 'Zhipu (GLM)', kind: 'cloud', envVar: 'ZHIPU_API_KEY' },
     { id: 'freebuff', label: 'FreeBuff proxy', kind: 'gateway', envVar: 'FREEBUFF_API_KEY' },
   ];
 

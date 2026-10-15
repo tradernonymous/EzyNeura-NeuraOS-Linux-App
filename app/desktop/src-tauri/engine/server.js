@@ -1839,6 +1839,61 @@ const LLM_PROVIDERS = {
     needsKey: false,
     needsBaseUrl: true,
   },
+  // ---- CCE standalone pack: common OpenAI-compatible clouds ----------------
+  // All speak POST {baseUrl}/chat/completions + GET {baseUrl}/models on the
+  // same key, so the engine's generic relay needs no per-provider code.
+  // Anthropic-direct is deliberately absent: api.anthropic.com speaks
+  // /v1/messages, not the OpenAI chat shape — reach Claude via OpenRouter.
+  alibaba: {
+    label: 'Alibaba (Qwen)',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    envVar: 'ALIBABA_API_KEY',
+  },
+  huggingface: {
+    label: 'Hugging Face',
+    baseUrl: 'https://router.huggingface.co/v1',
+    envVar: 'HF_TOKEN',
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    envVar: 'DEEPSEEK_API_KEY',
+  },
+  together: {
+    label: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    envVar: 'TOGETHER_API_KEY',
+  },
+  fireworks: {
+    label: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    envVar: 'FIREWORKS_API_KEY',
+  },
+  xai: {
+    label: 'xAI (Grok)',
+    baseUrl: 'https://api.x.ai/v1',
+    envVar: 'XAI_API_KEY',
+  },
+  perplexity: {
+    label: 'Perplexity',
+    baseUrl: 'https://api.perplexity.ai',
+    envVar: 'PERPLEXITY_API_KEY',
+  },
+  cohere: {
+    label: 'Cohere',
+    baseUrl: 'https://api.cohere.ai/compatibility/v1',
+    envVar: 'COHERE_API_KEY',
+  },
+  moonshot: {
+    label: 'Moonshot (Kimi)',
+    baseUrl: 'https://api.moonshot.ai/v1',
+    envVar: 'MOONSHOT_API_KEY',
+  },
+  zhipu: {
+    label: 'Zhipu (GLM)',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    envVar: 'ZHIPU_API_KEY',
+  },
 };
 
 // Companion variable names derive from the key variable: NARA_API_KEY pairs
