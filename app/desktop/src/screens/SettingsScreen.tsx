@@ -6,6 +6,7 @@ import DoctorCard from '../components/DoctorCard';
 import LocalModelsCard from '../components/LocalModelsCard';
 import DictationCard from '../components/DictationCard';
 import ConnectorsCard from '../components/ConnectorsCard';
+import CceProvidersCard from '../components/CceProvidersCard';
 import CredentialsCard from '../components/CredentialsCard';
 import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
@@ -160,6 +161,7 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
 
           <section className="settings-section">
             <h2>Providers</h2>
+            <CceProvidersCard onChanged={load} />
             <div className="settings-card">
               {providers.length === 0 && <div className="empty">No providers reported by the engine.</div>}
               {/* Ready providers first, always shown -- these are the ones a free

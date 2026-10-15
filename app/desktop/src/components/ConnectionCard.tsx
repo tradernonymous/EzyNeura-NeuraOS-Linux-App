@@ -89,11 +89,11 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
         // An explicit address (Cloud or otherwise) wins over a remembered
         // "start it on this machine" choice from a previous session.
         setPreferLocalEngine(false);
-        setMessage(`Connected to FreeAI4U ${data.version || ''} @ ${String(data.commit || '').slice(0, 7)}. Saved.`);
+        setMessage(`Connected to NeuraOS engine ${data.version || ''} @ ${String(data.commit || '').slice(0, 7)}. Saved.`);
         onServerChanged?.();
         await probe();
       } else if (res.ok) {
-        setMessage('That server answered, but it is not a FreeAI4U engine.');
+        setMessage('That server answered, but it is not a NeuraOS engine.');
       } else {
         setMessage(connection.classify({ status: res.status, origin: clean }).message);
       }
@@ -257,8 +257,8 @@ export default function ConnectionCard({ onConnected, onServerChanged }: Props) 
       )}
       {message && <p className="settings-hint connection-message">{message}</p>}
       <p className="settings-hint">
-        Chat, builds and images run on the engine. https only, except http://localhost for a
-        self-hosted engine.
+        Chat, coding and images run on the bundled NeuraOS engine on this machine.
+        No cloud account needed: keyless providers + local models + Puter work offline-first.
       </p>
     </div>
   );

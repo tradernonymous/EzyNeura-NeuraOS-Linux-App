@@ -196,11 +196,8 @@ test('LoRAs: kept per machine, sent by name with a clamped strength, never as pr
   assert.match(read('desktop', 'src-tauri', 'src', 'main.rs'), /sd::sd_import_loras,/);
 });
 
-// 2026-09-29: free services only, and none whose pictures came back
-// low-quality. The engine is upstream and untouched; the rows are dropped on
-// the way to the picker. This PC, once set up, is the default: the best
-// pictures this app can get for free, and the only free route that edits.
-test('the picker hides NVIDIA, OpenAI, Gemini and Pollinations, whatever the engine reports', () => {
+// Standalone: paid-only rows stay hidden; pollinations stays (free keyless image).
+test('the picker hides NVIDIA, OpenAI and Gemini, whatever the engine reports', () => {
   const rows = images.providerChoices({ providers: [
     { id: 'pollinations', label: 'Pollinations (Free)', ready: true },
     { id: 'cloudflare', label: 'Cloudflare Workers AI', ready: true },
@@ -209,7 +206,7 @@ test('the picker hides NVIDIA, OpenAI, Gemini and Pollinations, whatever the eng
     { id: 'gemini', label: 'Gemini', ready: true },
     { id: 'openrouter', label: 'OpenRouter', ready: false },
   ] });
-  assert.deepEqual(rows.filter((r) => r.kind === 'server').map((r) => r.id), ['cloudflare', 'openrouter']);
+  assert.deepEqual(rows.filter((r) => r.kind === 'server').map((r) => r.id), ['pollinations', 'cloudflare', 'openrouter']);
   assert.ok(rows.some((r) => r.kind === 'browser'), 'Puter still rides along');
 });
 

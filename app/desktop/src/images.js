@@ -46,11 +46,9 @@
   // sd-server (stable-diffusion.cpp). No account, no network -- and no
   // pretending: the row is ready only when the binary AND a model are chosen.
   var LOCAL_ID = 'local';
-  // Services the picker never offers, whatever the engine reports (a decision
-  // for this app, 2026-09-29: free services only, and none whose pictures
-  // came back low-quality). The engine is upstream and untouched; the rows
-  // are dropped here, on the way to the screen.
-  var HIDDEN_SERVICES = ['nvidia', 'openai', 'gemini', 'pollinations'];
+  // Services the picker never offers, whatever the engine reports.
+  // Standalone: pollinations stays (free keyless image); paid-only rows stay hidden.
+  var HIDDEN_SERVICES = ['nvidia', 'openai', 'gemini'];
   // sd.cpp draws in multiples of 64, so a preset that is not one is snapped
   // here rather than refused by the server after the user pressed Draw.
   var LOCAL_STEP_PX = 64;

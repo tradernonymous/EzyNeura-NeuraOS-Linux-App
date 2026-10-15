@@ -70,8 +70,25 @@ fn is_broker_key(key: &str) -> bool {
     prefixed(key, SSH_PREFIX) || prefixed(key, API_PREFIX)
 }
 
+/// CCE standalone providers: `provider.<id>` entries in the OS keyring,
+/// injected as the engine's `*_API_KEY` env on start. Same precedence as
+/// github_half: keyring first, inherited env second, blank never wins.
+pub const PROVIDER_PREFIX: &str = "provider.";
+
+fn is_provider_key(key: &str) -> bool {
+    match key.strip_prefix(PROVIDER_PREFIX) {
+        Some(id) => {
+            !id.is_empty()
+                && id.len() <= 64
+                && !id.contains("..")
+                && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        }
+        None => false,
+    }
+}
+
 fn entry(key: &str) -> Result<Entry, String> {
-    if !KEYS.contains(&key) && !is_byok_key(key) && !is_broker_key(key) {
+    if !KEYS.contains(&key) && !is_byok_key(key) && !is_broker_key(key) && !is_provider_key(key) {
         return Err(format!("{} is not a secret this app stores", key));
     }
     Entry::new(SERVICE, key).map_err(|e| format!("credential store: {}", e))

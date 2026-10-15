@@ -303,7 +303,10 @@ export default function CodeScreen({ localRoot }: { localRoot: string }) {
           if (isSavedProvider(provider)) {
             streamSaved(provider, model, messages, onFrame).then(() => resolve(content)).catch(reject);
           } else if (provider === 'local') {
-            streamLocalChat('http://127.0.0.1:8080', model, messages, onFrame)
+            // Standalone: local row carries its own baseUrl (local-models providerRow),
+            // never a hardcoded port — CodeScreen has no local status of its own.
+            const localBase = (typeof localStorage !== 'undefined' && localStorage.getItem('neuraos.local.baseUrl')) || 'http://127.0.0.1:8080';
+            streamLocalChat(localBase, model, messages, onFrame)
               .then(() => resolve(content)).catch(reject);
           } else {
             streamChat(provider, { model, messages, stream: true }, onFrame)

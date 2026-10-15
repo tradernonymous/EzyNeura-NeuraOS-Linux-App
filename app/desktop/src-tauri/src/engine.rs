@@ -359,6 +359,35 @@ pub fn github_oauth_config() -> serde_json::Value {
     })
 }
 
+/// CCE standalone: provider keys from the OS keyring (`provider.<id>`) as the
+/// engine env pairs server.js reads. Keyring first, inherited env second.
+fn provider_env() -> Vec<(String, String)> {
+    const MAP: &[(&str, &str)] = &[
+        ("provider.nara", "NARA_API_KEY"),
+        ("provider.openrouter", "OPENROUTER_API_KEY"),
+        ("provider.nvidia", "NVIDIA_API_KEY"),
+        ("provider.mistral", "MISTRAL_API_KEY"),
+        ("provider.groq", "GROQ_API_KEY"),
+        ("provider.openai", "OPENAI_API_KEY"),
+        ("provider.gemini", "GEMINI_API_KEY"),
+        ("provider.cloudflare", "CLOUDFLARE_API_TOKEN"),
+        ("provider.kilocode", "KILO_API_KEY"),
+        ("provider.ovhcloud", "OVHCLOUD_API_KEY"),
+        ("provider.freebuff", "FREEBUFF_API_KEY"),
+        ("provider.cloudflare-account", "CLOUDFLARE_ACCOUNT_ID"),
+        ("provider.freebuff-base", "FREEBUFF_BASE_URL"),
+    ];
+    MAP.iter()
+        .filter_map(|(key, var)| {
+            let stored = crate::secrets::read(key).ok().flatten();
+            let present = |v: Option<String>| v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            let value = present(stored)
+                .or_else(|| present(std::env::var(var).ok()));
+            value.map(|v| (var.to_string(), v))
+        })
+        .collect()
+}
+
 /// Start the bundled engine, or report the one already running. Blocks
 /// briefly (an async command, like `mcp_stdio_start`) while it comes up,
 /// so the caller does not have to poll separately.
@@ -411,6 +440,7 @@ pub fn engine_start(app: tauri::AppHandle) -> Result<serde_json::Value, String> 
         // never runs a command or touches a git repo on this machine
         // unless the person turns Build's workspace on later themselves
         // (docs/MASTER_PLAN.md section 5).
+        .envs(provider_env())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
