@@ -9,7 +9,7 @@ set -euo pipefail
 PORT="${1:-8787}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENGINE="$ROOT/app/desktop/src-tauri/engine/server.js"
-[ -f "$ENGINE" ] || { echo "no engine at $ENGINE (run scripts/sync-upstream.sh)" >&2; exit 1; }
+[ -f "$ENGINE" ] || { echo "no engine at $ENGINE" >&2; exit 1; }
 command -v node >/dev/null || { echo "node is not installed (24+ needed)" >&2; exit 1; }
 major="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$major" -ge 24 ] || echo "warning: node $major found, the engine wants 24+" >&2

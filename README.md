@@ -13,7 +13,7 @@
 <p align="center">
   <b>The NeuraOS you know from the phone and the Windows app, native on Linux Mint.</b><br>
   Chat, code, create and run agents with free models, your own keys, or models on your own GPU — nothing has to leave the PC.<br>
-  Same engine as the web app (<a href="https://github.com/tradernonymous/freeopenai">tradernonymous/freeopenai</a>), built for Cinnamon.
+  Standalone desktop build with its own bundled engine — no cloud account needed.
 </p>
 
 ---

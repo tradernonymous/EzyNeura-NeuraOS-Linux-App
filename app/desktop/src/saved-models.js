@@ -3,7 +3,7 @@
 // Two kinds, because two different programs run them:
 //   * 'ollama'  -- Ollama server (http://127.0.0.1:11434)
 //   * 'unsloth' -- GGUF file run by llama-server with `-m <path>`.
-// CCE cloud providers live in cce-provider-config.json + engine /api/llm/providers,
+// CCE cloud providers live in cce-providers.js + engine /api/llm/providers,
 // not here -- this file is local-only.
 //
 // UMD like the repo's other shared modules: node gets module.exports, the
