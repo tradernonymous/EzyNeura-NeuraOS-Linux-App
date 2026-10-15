@@ -55,7 +55,7 @@
   // A Settings override of the compiled-in client id. Not a secret.
   var CLIENT_ID_KEY = 'freeai4u.hf_client_id';
   // How to register the OAuth app (docs/desktop.md).
-  var DOCS_URL = 'https://github.com/tradernonymous/freeopenai/blob/main/docs/desktop.md#one-click-hugging-face-sign-in';
+  var DOCS_URL = 'https://github.com/printezy247/claude-code-enhanced/blob/main/docs/desktop.md#one-click-hugging-face-sign-in';
   // A personal access token needs no OAuth app: this page opens with the one
   // permission the router checks already ticked.
   var TOKEN_PAGE = 'https://huggingface.co/settings/tokens/new?tokenType=fineGrained'

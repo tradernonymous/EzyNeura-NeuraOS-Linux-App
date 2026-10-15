@@ -1,9 +1,10 @@
 // Pure login/session logic, kept separate from server.js so it can run under
 // node:test without spinning up an HTTP server. No DOM/Node-http APIs here
 // beyond `crypto`, which is available in both the server and the test runner.
+// Standalone NeuraOS auth (CCE-inspired). No upstream freeopenai link.
 const crypto = require('crypto');
 
-const SESSION_COOKIE_NAME = 'fo_auth';
+const SESSION_COOKIE_NAME = 'neuraos_auth';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Reads up to 3 username/password pairs from AUTH_USER_1/AUTH_PASS_1 .. _3.

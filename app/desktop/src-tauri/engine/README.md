@@ -2,7 +2,7 @@
 
 `server.js` and its local dependency closure (`auth.js`, `chatlib.js`,
 `github.js`, `agent-sessions.js`, `fcm-push.js`, `tool-call-text.js`,
-`package.json`), copied unmodified from `tradernonymous/freeopenai` at
+`package.json`), part of the standalone NeuraOS bundle (CCE-inspired). It has
 the commit pinned in `../../../../UPSTREAM`. `scripts/sync-upstream.sh`
 re-copies this directory too.
 

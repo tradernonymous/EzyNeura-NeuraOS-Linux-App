@@ -32,6 +32,7 @@ const { createBuildSessions, handleBuildRoute, resolveInside, protectedPath, sea
 // is unconditional because the module itself has no side effects.
 const { parseServiceAccount, sendPush } = require('./fcm-push.js');
 
+// Standalone NeuraOS engine (CCE-inspired). No upstream freeopenai link.
 const port = process.env.PORT || 3000;
 const rootDir = __dirname;
 // '/api/health' is public on purpose: it reports what the running deploy
@@ -44,8 +45,8 @@ const PUBLIC_PATHS = new Set(['/login.html', '/api/login', '/api/health', '/mani
 const LOGIN_RATE_LIMIT = 10;
 const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
 const loginAttempts = new Map();
-const GITHUB_COOKIE = 'fo_gh';
-const GITHUB_STATE_COOKIE = 'fo_gh_state';
+const GITHUB_COOKIE = 'neuraos_gh';
+const GITHUB_STATE_COOKIE = 'neuraos_gh_state';
 // Marks an "add another account" trip, so the callback can tell the user when
 // GitHub silently handed back the account they already had.
 const GITHUB_ADD_COOKIE = 'fo_gh_add';
@@ -599,7 +600,7 @@ async function githubApiFetch(token, url, options = {}) {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'freeopenai-app',
+      'User-Agent': 'neuraos-cce-app',
       ...(options.headers || {}),
     },
   });
@@ -2081,7 +2082,7 @@ async function fetchText(url, acceptHtml = true) {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'NeuraOS/1.0 (+https://github.com/tradernonymous/freeopenai)',
+        'User-Agent': 'NeuraOS/1.0 (+https://github.com/printezy247/claude-code-enhanced)',
         Accept: acceptHtml ? 'text/html,*/*' : 'application/json',
       },
     });
@@ -3187,7 +3188,7 @@ function resolveImageSize(store, requested, label) {
 // that was refused.
 function imageEditMultipart(args) {
   const { image, mask, prompt, model, extra } = args;
-  const boundary = '----freeopenai' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const boundary = '----neuraos-cce-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const parts = [];
   const filePart = (name, filename, file) => {
     parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\nContent-Type: ${file.contentType}\r\n\r\n`));
@@ -4189,7 +4190,7 @@ let skillsRateLimited = false;
 // budget to 5000, and GITHUB_TOKEN is a one-line setting next to the OAuth app
 // the GitHub tools already need.
 function githubApiHeaders() {
-  const headers = { 'User-Agent': 'freeopenai-app', Accept: 'application/vnd.github+json' };
+  const headers = { 'User-Agent': 'neuraos-cce-app', Accept: 'application/vnd.github+json' };
   const token = String(process.env.GITHUB_TOKEN || '').trim();
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -5487,7 +5488,7 @@ async function readPublicPage(raw) {
       const res = await fetch(current.href, {
         redirect: 'manual',
         signal: controller.signal,
-        headers: { 'User-Agent': 'NeuraOS/1.0 (+https://github.com/tradernonymous/freeopenai)', Accept: 'text/html,*/*' },
+        headers: { 'User-Agent': 'NeuraOS/1.0 (+https://github.com/printezy247/claude-code-enhanced)', Accept: 'text/html,*/*' },
       });
       const location = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && location) {

@@ -2831,7 +2831,7 @@ function imageModelsFor(kind) {
 // Puter draws at 'low' when nothing asks for better, and nothing did: every
 // picture this app has produced was rendered at the bottom quality tier while
 // paying the same credits. 'high' is the tier the models are documented to look
-// like; the server route asks its upstream for the same thing.
+// like; the server route asks its CCE provider manager for the same thing.
 const IMAGE_QUALITY = 'high';
 
 // --- The size a picture was asked for ---
@@ -3538,7 +3538,7 @@ function nextFailoverProvider(order, tried = [], blocked = new Set()) {
 
 // Whether a failure is worth moving providers for.
 //
-// A spent allowance, a refused account, a rate limit, an upstream outage or a
+// A spent allowance, a refused account, a rate limit, a CCE service outage or a
 // dead socket is a property of *that* provider, and another one has its own
 // account and its own capacity. A model that refused the request is a different
 // matter: the model walker has already tried its siblings, so moving provider

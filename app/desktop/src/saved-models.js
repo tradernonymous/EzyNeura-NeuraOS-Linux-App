@@ -28,8 +28,7 @@
   var OLLAMA_BASE = 'http://127.0.0.1:11434';
 
   var PROVIDERS = {
-    ollama: { id: 'ollama-local', label: 'Ollama Local', note: 'runs in Ollama on this PC' },
-    unsloth: { id: 'unsloth-local', label: 'Unsloth Local', note: 'GGUF on this PC · llama-server' },
+    cce: { id: 'cce', label: 'Claude Code Enhanced', note: 'standalone · 230+ providers · models.dev catalog' },
   };
 
   function storage(given) {

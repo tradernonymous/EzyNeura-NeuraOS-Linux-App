@@ -25,8 +25,8 @@ test('the Linux port reads the manifest through releases/latest', () => {
     'https://github.com/tradernonymous/EzyNeura-NeuraOS-Linux-App/releases/latest/download/neura-os-desktop_2.12.0_amd64.deb',
   );
   // Upstream's shape is unchanged: the moving tag, by default.
-  assert.equal(update.versionUrl(), 'https://github.com/tradernonymous/freeopenai/releases/download/desktop-latest/desktop-version.json');
-  assert.equal(update.desktopUrl(), 'https://github.com/tradernonymous/freeopenai/releases/tag/desktop-latest');
+  assert.equal(update.versionUrl(), 'https://github.com/printezy247/claude-code-enhanced/releases/download/desktop-latest/desktop-version.json');
+  assert.equal(update.desktopUrl(), 'https://github.com/printezy247/claude-code-enhanced/releases/tag/desktop-latest');
 });
 
 const RELEASE = update.readVersionPayload({

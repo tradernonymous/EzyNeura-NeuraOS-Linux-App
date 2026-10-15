@@ -24,7 +24,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.FreeAI4UUpdate = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  var DEFAULT_REPO = 'tradernonymous/freeopenai';
+  var DEFAULT_REPO = 'printezy247/claude-code-enhanced';
   // Upstream publishes to a moving tag; the Linux port publishes versioned
   // releases and reads GitHub's own "latest" redirect instead (tag LATEST).
   var DEFAULT_TAG = 'desktop-latest';

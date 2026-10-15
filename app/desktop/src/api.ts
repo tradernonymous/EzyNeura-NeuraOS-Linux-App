@@ -14,7 +14,7 @@ import './connection.js';
 const connection: typeof import('./connection.js') = (globalThis as any).FreeAI4UConnection;
 
 const SERVER_KEY = 'freeai4u.server';
-export const DEFAULT_SERVER = 'https://freeopenai-production.up.railway.app';
+export const DEFAULT_SERVER = 'https://cce-local.neuraos';
 
 export function normalizeServer(raw: string): string | null {
   let url: URL;

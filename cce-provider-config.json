@@ -1,0 +1,39 @@
+{
+  "app": "NeuraOS",
+  "standalone": true,
+  "provider_manager": {
+    "catalog_url": "https://models.dev/api/providers",
+    "models_catalog": "https://models.dev/api/models",
+    "provider_count": 230,
+    "auth_method": "os_keyring",
+    "auth_service": "Secret Service over D-Bus (sync-secret-service)",
+    "secrets_file": "~/.config/neuraos/auth.json",
+    "secrets_permissions": "0600",
+    "star_default_enabled": true,
+    "disable_enabled": true
+  },
+  "models": {
+    "default_provider": "cce",
+    "default_model": "claude-sonnet-4",
+    "context_floor_tokens": 70000,
+    "local_context_default": 72000,
+    "lean_tool_presets": ["minimal", "code_only", "search_only", "custom"],
+    "force_context_lines_format": "model=number"
+  },
+  "providers": {
+    "cce": {
+      "id": "cce",
+      "label": "Claude Code Enhanced",
+      "protocol": "Anthropic",
+      "base_url": "https://api.anthropic.com/v1",
+      "auth_header": "x-api-key",
+      "default_model": "claude-sonnet-4",
+      "small_model": "claude-haiku",
+      "starred": true,
+      "configured": true
+    }
+  },
+  "upstream": null,
+  "freeopenai_link": null,
+  "engine_source": "standalone"
+}

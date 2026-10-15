@@ -5,18 +5,18 @@ is the rules that are easy to break without knowing them.
 
 ## What this is
 
-A native NeuraOS desktop app for Linux Mint, built by importing the Tauri 2 +
-React desktop app from `tradernonymous/freeopenai` (the upstream project) and
-porting its Windows-only pieces to Linux. `UPSTREAM` pins the exact upstream
-commit this was synced from; `scripts/sync-upstream.sh` re-syncs it.
+A native NeuraOS desktop app for Linux Mint — standalone (CCE-inspired).
+No upstream `freeopenai` link; `UPSTREAM` is disabled (`STANDALONE`).
+Provider + model settings follow the Claude Code Enhanced (CCE) design
+(230+ providers via models.dev, OS keyring auth, star/default/disable).
 
 | Where | What |
 | :-- | :-- |
-| `app/desktop/` | The imported Tauri 2 + React shell, with the Linux delta applied in place (mostly `#[cfg(target_os = "linux")]` blocks and `app/desktop/src-tauri/src/linux.rs`) |
-| `app/desktop/src-tauri/engine/`, `src-tauri/src/engine.rs` | The bundled NeuraOS engine (`server.js` and its local dependency closure, zero npm runtime deps) and the Rust glue that finds a Node ≥24 and runs it locally (L3, "Local mode") — see `engine/README.md` |
-| `app/shared/`, `app/design/`, `app/assets/branding/` | Imported unchanged from upstream: the keymap, design tokens, and the emblem |
+| `app/desktop/` | The Tauri 2 + React desktop shell, standalone Linux version |
+| `app/desktop/src-tauri/engine/` | The bundled standalone engine (CCE-inspired) — see `engine/README.md` |
+| `app/shared/`, `app/design/`, `app/assets/branding/` | Design tokens, keymap, branding (standalone, no upstream sync) |
 | `docs/MASTER_PLAN.md` | The full plan: the porting audit (section 2), design, architecture, phases L0–L9, packaging, and what the user does themselves |
-| `scripts/sync-upstream.sh` | Re-copies `desktop/`, `shared/`, `design/`, `assets/branding/` from upstream at a pinned or given commit |
+| `scripts/sync-upstream.sh` | Disabled (`STANDALONE`) — no upstream sync |
 
 ## Commands
 
