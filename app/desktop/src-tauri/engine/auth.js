@@ -1,7 +1,7 @@
 // Pure login/session logic, kept separate from server.js so it can run under
 // node:test without spinning up an HTTP server. No DOM/Node-http APIs here
 // beyond `crypto`, which is available in both the server and the test runner.
-// Standalone NeuraOS auth (CCE-inspired). No upstream freeopenai link.
+// Standalone NeuraOS auth (CCE-inspired).
 const crypto = require('crypto');
 
 const SESSION_COOKIE_NAME = 'neuraos_auth';

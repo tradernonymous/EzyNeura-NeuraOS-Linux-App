@@ -32,7 +32,7 @@ const { createBuildSessions, handleBuildRoute, resolveInside, protectedPath, sea
 // is unconditional because the module itself has no side effects.
 const { parseServiceAccount, sendPush } = require('./fcm-push.js');
 
-// Standalone NeuraOS engine (CCE-inspired). No upstream freeopenai link.
+// Standalone NeuraOS engine (CCE-inspired).
 const port = process.env.PORT || 3000;
 const rootDir = __dirname;
 // '/api/health' is public on purpose: it reports what the running deploy
@@ -49,10 +49,10 @@ const GITHUB_COOKIE = 'neuraos_gh';
 const GITHUB_STATE_COOKIE = 'neuraos_gh_state';
 // Marks an "add another account" trip, so the callback can tell the user when
 // GitHub silently handed back the account they already had.
-const GITHUB_ADD_COOKIE = 'fo_gh_add';
+const GITHUB_ADD_COOKIE = 'neuraos_gh_add';
 // Set by /api/github/authorize?client=desktop: the sign-in is for the desktop
 // app, so the account cookie must be one its cross-site fetches can carry.
-const GITHUB_CLIENT_COOKIE = 'fo_gh_client';
+const GITHUB_CLIENT_COOKIE = 'neuraos_gh_client';
 const GITHUB_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GITHUB_SCOPE = 'public_repo';
 // Android has no browser cookie jar the app's own network layer can read (by
@@ -65,7 +65,7 @@ const GITHUB_SCOPE = 'public_repo';
 // user at mint time so a leaked code is useless to anyone else who happens to
 // also be signed in on this deployment within the TTL:
 //   1. githubHandoff  -- app proves who it is over its OWN connection
-//                         (POST, normal fo_auth cookie) and gets a code back.
+//                         (POST, normal neuraos_auth cookie) and gets a code back.
 //   2. githubAndroidState -- authorize resolves that code once, then carries
 //                         the identity forward keyed by the OAuth `state` it
 //                         already generates, so the callback (same Custom
@@ -622,7 +622,7 @@ function githubAuthorize(req, res) {
   }
   const query = new URL(req.url, 'http://x').searchParams;
   // The Android app has no browser cookie jar of its own, so a Custom Tab
-  // hitting this route never carries the app's fo_auth session -- it is let
+  // hitting this route never carries the app's neuraos_auth session -- it is let
   // through the auth gate for this one path (see the dispatcher), and proves
   // who it is with a handoff code instead: minted a moment earlier by
   // /api/github/handoff over the app's OWN authenticated connection, so the
@@ -655,7 +655,7 @@ function githubAuthorize(req, res) {
     // Carries the resolved identity (and, for "add another account", what is
     // already connected) forward, keyed by the same `state` the callback
     // already verifies against its cookie -- so the callback (hit by the
-    // same Custom Tab, still no fo_auth cookie of its own) can recover both
+    // same Custom Tab, still no neuraos_auth cookie of its own) can recover both
     // without a session ever crossing into a cookie or a URL.
     githubAndroidState.set(state, { appUser: androidUser, existingAccounts: androidExistingAccounts, expiresAt: Date.now() + GITHUB_PICKUP_TTL_MS });
   }
@@ -693,10 +693,10 @@ async function githubCallback(req, res) {
     return;
   }
 
-  // Android has no fo_auth cookie here either (same reason as the authorize
+  // Android has no neuraos_auth cookie here either (same reason as the authorize
   // hop): its identity, and what it already has connected, rode forward
   // keyed by this same `state` instead (captured back at /api/github/handoff,
-  // the one point in this whole trip where the app's own fo_gh cookie was
+  // the one point in this whole trip where the app's own neuraos_gh cookie was
   // actually present).
   const isAndroid = cookies[GITHUB_CLIENT_COOKIE] === 'android';
   let androidAppUser;
@@ -783,13 +783,13 @@ async function githubCallback(req, res) {
 
 // POST /api/github/handoff -- gated by the normal auth check, so this is the
 // app proving who it is over its OWN connection (the one that actually
-// carries fo_auth) before opening a Custom Tab that cannot. Returns a code
+// carries neuraos_auth) before opening a Custom Tab that cannot. Returns a code
 // that stands in for that identity at /api/github/authorize, so the session
 // token itself never has to cross into a URL.
 function githubHandoffRoute(req, res) {
   sweepExpired(githubHandoff);
   const code = crypto.randomBytes(24).toString('hex');
-  // This call carries the app's real fo_auth AND fo_gh cookies (it is the
+  // This call carries the app's real neuraos_auth AND neuraos_gh cookies (it is the
   // app's own connection, unlike everything downstream of it) -- the one
   // moment "add another account" can see what is already connected, so it
   // is captured here and carried forward through the state that follows.
@@ -803,7 +803,7 @@ function githubHandoffRoute(req, res) {
 
 // GET /api/github/pickup?code= -- redeems the one-time code githubCallback
 // minted for an Android connect. Gated by the normal auth check (the app's
-// own fo_auth cookie, which this call -- unlike the Custom Tab round trip --
+// own neuraos_auth cookie, which this call -- unlike the Custom Tab round trip --
 // actually carries) and, on top of that, the redeeming identity must match
 // the one the code was minted for: a code intercepted in transit is useless
 // to anyone who is not also that signed-in user. Single-use: the code is

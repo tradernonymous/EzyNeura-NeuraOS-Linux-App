@@ -1,19 +1,10 @@
-// My models: the local models a person chose to keep in the pickers.
+// My models: the local models a person chose to keep in the pickers (CCE standalone).
 //
 // Two kinds, because two different programs run them:
-//
-//   * 'ollama'  -- a model Ollama has, reached through Ollama's own server
-//     (http://127.0.0.1:11434). Ollama runs everything it lists, including its
-//     own engine formats llama-server cannot load, so nothing here can turn
-//     out "unsupported". Identified by its Ollama name (`deepseek-r1:latest`).
-//   * 'unsloth' -- a GGUF file in a folder the person pointed at (Unsloth
-//     Studio's, the Hugging Face cache, anywhere). Run by llama-server with
-//     `-m <path>`; identified by its path.
-//
-// Adding a model copies nothing: it remembers a name or a path. The pickers in
-// Chat, Design and Code then show two providers, "Ollama Local" and "Unsloth
-// Local", holding exactly the models that were added -- and no provider at all
-// for a kind with nothing in it.
+//   * 'ollama'  -- Ollama server (http://127.0.0.1:11434)
+//   * 'unsloth' -- GGUF file run by llama-server with `-m <path>`.
+// CCE cloud providers live in cce-provider-config.json + engine /api/llm/providers,
+// not here -- this file is local-only.
 //
 // UMD like the repo's other shared modules: node gets module.exports, the
 // bundled app gets the global (published unconditionally -- see chats.js).
@@ -28,7 +19,8 @@
   var OLLAMA_BASE = 'http://127.0.0.1:11434';
 
   var PROVIDERS = {
-    cce: { id: 'cce', label: 'Claude Code Enhanced', note: 'standalone · 230+ providers · models.dev catalog' },
+    ollama: { id: 'ollama-local', label: 'Ollama Local', note: 'runs in Ollama on this PC' },
+    unsloth: { id: 'unsloth-local', label: 'Unsloth Local', note: 'GGUF on this PC · llama-server' },
   };
 
   function storage(given) {

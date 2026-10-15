@@ -9,7 +9,7 @@
   /** The groups, in nav order, and the section titles (h2 text) each holds. */
   var GROUPS = [
     { id: 'general', label: 'General', hint: 'Look, start-up, keys', sections: ['Appearance', 'Startup and desktop', 'Shortcuts'] },
-    { id: 'ai', label: 'AI & Models', hint: 'CCE provider manager, models, memory', sections: ['Provider Manager', 'Models Catalog', 'Default Model', 'Limits', 'Memory'] },
+    { id: 'ai', label: 'AI & Models', hint: 'Engine, services, models, memory', sections: ['Engine', 'Providers', 'Local models', 'Limits the engine enforces', 'Memory the model saved'] },
     { id: 'tools', label: 'Tools', hint: 'Connectors, credentials, voice, desktop', sections: ['Connectors', 'Credentials', 'Dictation', 'Desktop control'] },
     { id: 'system', label: 'System', hint: 'Doctor, Diagnostics, the engine shell', sections: ['Doctor', 'Diagnostics', 'Advanced'] },
   ];
