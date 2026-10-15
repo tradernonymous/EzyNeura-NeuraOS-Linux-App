@@ -1848,6 +1848,19 @@ const LLM_PROVIDERS = {
     label: 'Alibaba (Qwen)',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     envVar: 'ALIBABA_API_KEY',
+    image: {
+      // DashScope's image API is task-based (submit, poll, read the URL), not
+      // OpenAI-images shaped — see the 'dashscope-task' branch in drawImage.
+      // Pictures are served from a different root than chat, and the China
+      // region is a different root again: ALIBABA_IMAGES_BASE_URL overrides it.
+      shape: 'dashscope-task',
+      baseUrl: 'https://dashscope-intl.aliyuncs.com',
+      baseUrlEnv: 'ALIBABA_IMAGES_BASE_URL',
+      modelEnv: 'ALIBABA_IMAGE_MODEL',
+      defaultModel: 'qwen-image',
+      edit: 'none',
+      sizes: [],
+    },
   },
   huggingface: {
     label: 'Hugging Face',
@@ -3260,6 +3273,14 @@ function imageEditMultipart(args) {
   return { boundary, body: Buffer.concat(parts) };
 }
 
+// '1024x1024' -> '1024*1024': DashScope sizes use '*', and anything
+// unreadable becomes its 1:1 default rather than a refused request.
+function dashscopeSize(size) {
+  const parts = sizeParts(size);
+  if (!parts) return '1024*1024';
+  return parts.w + '*' + parts.h;
+}
+
 // One request, in whichever shape the chosen provider speaks, normalized to the
 // OpenAI images payload the browser already reads.
 //
@@ -3395,6 +3416,53 @@ async function drawImage(args) {
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
         },
       )];
+    }
+    if (store.shape === 'dashscope-task') {
+      // DashScope is submit-then-poll: one POST opens the task, GETs on
+      // /tasks/<id> watch it until SUCCEEDED, and the answer is a URL good
+      // for about a day. Returned as a synthetic OpenAI-images payload so the
+      // normalizer below needs no shape-specific code. Edits never reach here
+      // (edit: 'none' — the picker says so before anything is sent).
+      return [async () => {
+        const taskUrl = base + '/api/v1/services/aigc/text2image/image-synthesis';
+        const submit = await fetch(taskUrl, {
+          method: 'POST',
+          signal,
+          headers: { ...auth, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' },
+          body: JSON.stringify({
+            model: useModel,
+            input: { prompt },
+            parameters: { size: dashscopeSize(declaredSize || sizeForService.preferenceSize), n: 1 },
+          }),
+        });
+        const submitted = await submit.json().catch(() => null);
+        const taskId = submitted && submitted.output && submitted.output.task_id;
+        if (!submit.ok || !taskId) {
+          const reason = (submitted && (submitted.message || submitted.code)) || ('DashScope refused the task (' + submit.status + ')');
+          return new Response(JSON.stringify({ error: String(reason) }), { status: submit.status, headers: { 'Content-Type': 'application/json' } });
+        }
+        const deadline = Date.now() + 120000;
+        for (;;) {
+          await new Promise((r) => setTimeout(r, 2000));
+          let poll;
+          try {
+            poll = await fetch(taskUrl.replace('text2image/image-synthesis', 'tasks/' + encodeURIComponent(taskId)), { signal, headers: { ...auth } });
+          } catch (e) {
+            if (signal && signal.aborted) throw e;
+            continue;
+          }
+          const state = await poll.json().catch(() => null);
+          const status = state && state.output && state.output.task_status;
+          if (status === 'SUCCEEDED') {
+            const url = state.output.results && state.output.results[0] && state.output.results[0].url;
+            return new Response(JSON.stringify({ data: [{ url }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (status === 'FAILED' || status === 'CANCELED' || status === 'UNKNOWN' || Date.now() > deadline) {
+            const reason = (state && state.output && state.output.message) || ('task ' + (status || 'timed out'));
+            return new Response(JSON.stringify({ error: 'DashScope: ' + reason }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+          }
+        }
+      }];
     }
     if (kind === 'edits' && store.edit === 'multipart') return [multipartAttempt];
     // Two paths where a service describes its own endpoint two ways.
