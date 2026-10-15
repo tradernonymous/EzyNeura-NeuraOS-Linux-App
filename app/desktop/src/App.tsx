@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { api, setServer } from './api';
+import { api, setServer, serverSaved } from './api';
 import Sidebar, { destinationOf, navForKey, navKeys, tabsOf, usePendingApprovals, NAVIGATE_EVENT, type NavId, type ViewId } from './Sidebar';
 import TopNav from './components/TopNav';
 import ProjectPicker from './components/ProjectPicker';
@@ -388,7 +388,10 @@ export default function App() {
     // through to checkAuth() with whatever address was last saved, same as
     // any other unreachable-engine case.
     const boot = async () => {
-      if (hasShell() && preferLocalEngine()) {
+      // Standalone: fresh install (no saved server) boots the bundled engine
+      // automatically — no manual "Run engine" click needed. An explicit
+      // cloud address still wins (ConnectionCard clears preferLocal on save).
+      if (hasShell() && (preferLocalEngine() || !serverSaved())) {
         try {
           const status = await engineStart();
           if (status.url) setServer(status.url);
