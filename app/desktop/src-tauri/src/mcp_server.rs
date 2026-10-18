@@ -44,8 +44,8 @@ pub struct LocalModelState {
 pub const STATE_FILE: &str = "local-model.json";
 /// Settings → Desktop control writes this file (desktop.rs `desktop_mcp_set`)
 /// when the person also lets agents over MCP see and act on the desktop.
-/// Its absence is the default: the two desktop tools answer with how to
-/// turn them on. Claude Code then still asks before every MCP tool call.
+/// Its absence is the default. The lean build dropped the MCP desktop tools;
+/// the marker stays so Settings can still show and flip the opt-in.
 pub const DESKTOP_MCP_MARKER: &str = "desktop-control-mcp";
 
 fn state_path() -> Option<PathBuf> {
@@ -54,15 +54,6 @@ fn state_path() -> Option<PathBuf> {
 
 pub fn desktop_mcp_marker() -> PathBuf {
     crate::linux::paths::app_data_dir().join(DESKTOP_MCP_MARKER)
-}
-
-/// Pure: the check between an MCP client's desktop request and the desktop.
-pub fn desktop_allowed(marker_present: bool) -> Result<(), String> {
-    if marker_present {
-        Ok(())
-    } else {
-        Err("desktop control over MCP is off: in NeuraOS, Settings → Desktop control → \"Also let agents connected over MCP see the screen and act on the desktop\"".to_string())
-    }
 }
 
 fn read_state() -> Option<LocalModelState> {
@@ -330,8 +321,8 @@ fn open_in_app(args: &serde_json::Value) -> Result<String, String> {
 }
 
 // screenshot()/desktop() MCP tools removed in the lean build (broker + desktop
-// control tools dropped). desktop_allowed/desktop_mcp_marker stay for the
-// chat-side opt-in gate.
+// control tools dropped). desktop_mcp_marker stays so Settings can still
+// read and write the opt-in file.
 
 async fn call(name: &str, args: &serde_json::Value) -> serde_json::Value {
 
@@ -470,11 +461,9 @@ mod tests {
     }
 
     #[test]
-    fn the_desktop_marker_gate_still_answers_the_same_way() {
-        assert!(desktop_allowed(true).is_ok());
-        let off = desktop_allowed(false).unwrap_err();
-        assert!(off.contains("Settings → Desktop control"), "{}", off);
+    fn the_desktop_marker_path_is_still_what_settings_flips() {
         assert_eq!(desktop_mcp_marker().file_name().unwrap(), DESKTOP_MCP_MARKER);
+        assert!(desktop_mcp_marker().ends_with(DESKTOP_MCP_MARKER));
     }
 
     #[test]

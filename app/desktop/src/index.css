@@ -7255,6 +7255,8 @@ input, textarea, select { border-radius: 8px; }
 
 
 /* ---- LINUX PERFORMANCE OVERRIDES (LEAN BUILD) ----------------------------- */
+/* Higher-specificity selectors (no important-flag) beat the glass rules above:
+   :root[data-platform] is one class + one attr vs the bare class. */
 /* Disable heavy glass effects on Linux to reduce WebKitGTK lag */
 @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
   :root[data-platform="linux"] .sidebar,
@@ -7268,8 +7270,8 @@ input, textarea, select { border-radius: 8px; }
   :root[data-platform="linux"] .toast,
   :root[data-platform="linux"] .update-banner,
   :root[data-platform="linux"] .server-banner {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
@@ -7277,31 +7279,31 @@ input, textarea, select { border-radius: 8px; }
 :root[data-platform="linux"] .titlebar,
 :root[data-platform="linux"] .status-bar,
 :root[data-platform="linux"] .right-panel {
-  background: color-mix(in srgb, var(--bg-0) 92%, transparent) !important;
+  background: color-mix(in srgb, var(--bg-0) 92%, transparent);
 }
 
 :root[data-platform="linux"] .palette,
 :root[data-platform="linux"] .mode-panel,
 :root[data-platform="linux"] .model-panel,
 :root[data-platform="linux"] .toast {
-  background: var(--bg-0) !important;
-  box-shadow: var(--shadow-2) !important;
+  background: var(--bg-0);
+  box-shadow: var(--shadow-2);
 }
 
 /* Disable ambient glow layer on Linux */
 :root[data-platform="linux"] .app::before {
-  display: none !important;
+  display: none;
 }
 
 /* Disable parallax translate on Linux (already gated by motion, but be explicit) */
 :root[data-platform="linux"]:not([data-motion='reduced']) .app::before {
-  translate: none !important;
+  translate: none;
 }
 
 /* Reduce orb pulse animation overhead on Linux - simpler */
 @media (prefers-reduced-motion: no-preference) {
   :root[data-platform="linux"]:not([data-motion='reduced']) .orb[data-state="thinking"] .orb-core {
-    animation: orb-pulse-simple 2s ease-in-out infinite !important;
+    animation: orb-pulse-simple 2s ease-in-out infinite;
   }
 }
 
