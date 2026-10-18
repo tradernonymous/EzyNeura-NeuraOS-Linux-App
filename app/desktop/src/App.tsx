@@ -15,7 +15,7 @@ import LocalScreen from './screens/LocalScreen';
 import CodeScreen from './screens/CodeScreen';
 // The schedulers run on every start, so they are eager; the screens they
 // belong to are not (schedulers.ts fetches them only when something is due).
-import { useRecipeScheduler, useEvalScheduler } from './schedulers';
+import { useRecipeScheduler } from './schedulers';
 import LocalTree from './components/LocalTree';
 import LocalTerminal from './components/LocalTerminal';
 import './shell.js';
@@ -63,10 +63,10 @@ const shellLib: typeof import('./shell.js') = (globalThis as any).FreeAI4UShell;
 const CreateScreen = lazy(() => import('./screens/CreateScreen'));
 const BuildScreen = lazy(() => import('./screens/BuildScreen'));
 const ActivityScreen = lazy(() => import('./screens/ActivityScreen'));
-const AcpScreen = lazy(() => import('./screens/AcpScreen'));
 const LibraryScreen = lazy(() => import('./screens/LibraryScreen'));
 const FilesScreen = lazy(() => import('./screens/FilesScreen'));
-const EvalsScreen = lazy(() => import('./screens/EvalsScreen'));
+// LEAN: Evals trimmed
+// const EvalsScreen = lazy(() => import('./screens/EvalsScreen'));
 const AgentsScreen = lazy(() => import('./screens/AgentsScreen'));
 const RecipesScreen = lazy(() => import('./screens/RecipesScreen'));
 const ParallelScreen = lazy(() => import('./screens/ParallelScreen'));
@@ -161,7 +161,6 @@ export default function App() {
   const [skillEntries, setSkillEntries] = useState<PaletteEntry[]>([]);
   // Scheduled recipes run while the app is open, whatever screen is showing.
   useRecipeScheduler();
-  useEvalScheduler();
   // The ambient layer's <=6px drift toward the pointer; off under reduced motion.
   useParallax();
   // U01: one anonymous launch count per start, recorded only when the person
@@ -835,12 +834,11 @@ export default function App() {
                     />
                   )}
                   {view === 'files' && <FilesScreen />}
-                  {view === 'evals' && <EvalsScreen />}
+                  {/* LEAN: Evals trimmed */ false}
                   {view === 'activity' && <ActivityScreen onOpen={navigate} />}
                   {view === 'agents' && <AgentsScreen />}
                   {view === 'recipes' && <RecipesScreen />}
                   {view === 'parallel' && <ParallelScreen localRoot={localRoot} />}
-                  {view === 'acp' && <AcpScreen localRoot={localRoot} />}
                   {view === 'settings' && (
                     <SettingsScreen
                       onConnectionChanged={checkAuth}

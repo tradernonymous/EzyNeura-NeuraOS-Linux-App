@@ -260,7 +260,7 @@ test('reduced motion disables every animation and transition, and the parallax',
 
 // ---- startup speed -----------------------------------------------------------
 
-const LAZY = ['CreateScreen', 'EvalsScreen', 'AgentsScreen', 'RecipesScreen', 'ParallelScreen', 'BuildScreen', 'FilesScreen', 'LibraryScreen'];
+const LAZY = ['CreateScreen', 'AgentsScreen', 'RecipesScreen', 'ParallelScreen', 'BuildScreen', 'FilesScreen', 'LibraryScreen'];
 
 test('the heavy screens are React.lazy, Chat is not', () => {
   for (const screen of LAZY) {
@@ -276,15 +276,13 @@ test('the heavy screens are React.lazy, Chat is not', () => {
 });
 
 test('the schedulers are imported eagerly and never pull a lazy screen in statically', () => {
-  assert.match(APP, /^import \{ useRecipeScheduler, useEvalScheduler \} from '\.\/schedulers';/m);
+  assert.match(APP, /^import \{ useRecipeScheduler \} from '\.\/schedulers';/m);
   assert.match(SCHEDULERS, /export function useRecipeScheduler\(\)/);
-  assert.match(SCHEDULERS, /export function useEvalScheduler\(\)/);
   assert.ok(!/^import[^;]*from '\.\/screens\//m.test(SCHEDULERS), 'no static screen import');
   assert.match(SCHEDULERS, /import\('\.\/screens\/RecipesScreen'\)/);
-  assert.match(SCHEDULERS, /import\('\.\/screens\/EvalsScreen'\)/);
-  // The hooks moved; the screens no longer define them.
+  // Lean build: evals scheduler is gone; recipes still use the lazy-screen pattern.
+  assert.ok(!/useEvalScheduler/.test(SCHEDULERS), 'evals scheduler removed');
   assert.ok(!/function useRecipeScheduler/.test(read('desktop', 'src', 'screens', 'RecipesScreen.tsx')));
-  assert.ok(!/function useEvalScheduler/.test(read('desktop', 'src', 'screens', 'EvalsScreen.tsx')));
 });
 
 test('mermaid stays behind a dynamic import', () => {

@@ -105,26 +105,8 @@ pub fn tools() -> Vec<serde_json::Value> {
             }),
             &["prompt"],
         ),
-        tool(
-            "neuraos_screenshot",
-            "A screenshot of this PC's desktop, as an image plus its width and height (the coordinate space neuraos_desktop clicks in). Off until the person turns on desktop control for MCP in NeuraOS Settings.",
-            serde_json::json!({}),
-            &[],
-        ),
-        tool(
-            "neuraos_desktop",
-            "Act on this PC's desktop: kind is click (x, y, button 1-3), type (text), key (a chord like ctrl+s), move (x, y) or scroll (steps, negative is up). Coordinates are those of neuraos_screenshot. Off until the person turns it on in NeuraOS Settings.",
-            serde_json::json!({
-                "kind": { "type": "string", "enum": ["click", "type", "key", "move", "scroll"] },
-                "x": { "type": "number" },
-                "y": { "type": "number" },
-                "button": { "type": "integer", "description": "1 left (default), 2 middle, 3 right" },
-                "text": { "type": "string", "description": "For type" },
-                "key": { "type": "string", "description": "For key: ctrl+s, alt+F4, Return" },
-                "steps": { "type": "integer", "description": "For scroll: -30..30, negative scrolls up" }
-            }),
-            &["kind"],
-        ),
+
+
         tool(
             "neuraos_open",
             "Open a folder (in NeuraOS Code) or a file (a .gguf goes to the model inspector) in the NeuraOS app, starting it if needed.",
@@ -136,17 +118,6 @@ pub fn tools() -> Vec<serde_json::Value> {
 
 fn text_result(text: impl Into<String>, is_error: bool) -> serde_json::Value {
     serde_json::json!({ "content": [{ "type": "text", "text": text.into() }], "isError": is_error })
-}
-
-/// A picture the model can look at, with a text line beside it.
-fn image_result(png_b64: String, text: impl Into<String>) -> serde_json::Value {
-    serde_json::json!({
-        "content": [
-            { "type": "image", "data": png_b64, "mimeType": "image/png" },
-            { "type": "text", "text": text.into() }
-        ],
-        "isError": false
-    })
 }
 
 fn client() -> Result<reqwest::Client, String> {
@@ -358,39 +329,12 @@ fn open_in_app(args: &serde_json::Value) -> Result<String, String> {
     Ok(format!("Opened {} in NeuraOS.", path.display()))
 }
 
-/// One frame of the desktop for an MCP client (P6.2 of docs/PC_UPGRADE_PLAN.md).
-fn screenshot() -> Result<serde_json::Value, String> {
-    desktop_allowed(desktop_mcp_marker().is_file())?;
-    let dir = crate::linux::paths::app_data_dir().join("mcp-shots");
-    let (path, tool) = crate::desktop::take_screenshot_into(&dir)?;
-    let bytes = std::fs::read(&path).map_err(|e| format!("cannot read the screenshot: {}", e))?;
-    let _ = std::fs::remove_file(&path);
-    if bytes.len() > 12 * 1024 * 1024 {
-        return Err("the screenshot is larger than 12 MB".to_string());
-    }
-    let (width, height) = crate::desktop::png_size(&bytes).unwrap_or((0, 0));
-    use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(image_result(b64, format!("{}x{} via {}", width, height, tool)))
-}
-
-/// One desktop action for an MCP client, through the same checks the Chat
-/// tools use (desktop.rs `plan`).
-fn desktop(args: &serde_json::Value) -> Result<String, String> {
-    desktop_allowed(desktop_mcp_marker().is_file())?;
-    let action: crate::desktop::Action = serde_json::from_value(args.clone()).map_err(|e| format!("bad arguments: {}", e))?;
-    let summary = format!("{:?}", crate::desktop::plan(action.clone())?);
-    let done = crate::desktop::desktop_act(action)?;
-    Ok(format!("{} via {}", summary, done.get("via").and_then(|v| v.as_str()).unwrap_or("?")))
-}
+// screenshot()/desktop() MCP tools removed in the lean build (broker + desktop
+// control tools dropped). desktop_allowed/desktop_mcp_marker stay for the
+// chat-side opt-in gate.
 
 async fn call(name: &str, args: &serde_json::Value) -> serde_json::Value {
-    if name == "neuraos_screenshot" {
-        return match screenshot() {
-            Ok(result) => result,
-            Err(e) => text_result(e, true),
-        };
-    }
+
     let text = match name {
         "neuraos_status" => Ok(status().await.to_string()),
         "neuraos_models" => {
@@ -400,7 +344,6 @@ async fn call(name: &str, args: &serde_json::Value) -> serde_json::Value {
         "neuraos_chat" => chat(args).await,
         "neuraos_image" => image(args).await,
         "neuraos_open" => open_in_app(args),
-        "neuraos_desktop" => desktop(args),
         other => Err(format!("NeuraOS has no tool named {}", other)),
     };
     match text {
@@ -499,7 +442,7 @@ mod tests {
         assert_eq!(reply["result"]["serverInfo"]["name"], "NeuraOS");
         let list = run(serde_json::json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names, ["neuraos_status", "neuraos_models", "neuraos_chat", "neuraos_image", "neuraos_screenshot", "neuraos_desktop", "neuraos_open"]);
+        assert_eq!(names, ["neuraos_status", "neuraos_models", "neuraos_chat", "neuraos_image", "neuraos_open"]);
         for tool in list["result"]["tools"].as_array().unwrap() {
             assert_eq!(tool["inputSchema"]["type"], "object", "{} has an object schema", tool["name"]);
         }
@@ -527,20 +470,11 @@ mod tests {
     }
 
     #[test]
-    fn the_desktop_tools_are_off_until_the_marker_exists() {
+    fn the_desktop_marker_gate_still_answers_the_same_way() {
         assert!(desktop_allowed(true).is_ok());
         let off = desktop_allowed(false).unwrap_err();
         assert!(off.contains("Settings → Desktop control"), "{}", off);
         assert_eq!(desktop_mcp_marker().file_name().unwrap(), DESKTOP_MCP_MARKER);
-        // Through the protocol, with the marker absent in this test
-        // environment, both tools answer the same way, as a tool result.
-        if !desktop_mcp_marker().is_file() {
-            for (name, args) in [("neuraos_screenshot", serde_json::json!({})), ("neuraos_desktop", serde_json::json!({ "kind": "click", "x": 1, "y": 2 }))] {
-                let reply = run(serde_json::json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } })).unwrap();
-                assert_eq!(reply["result"]["isError"], true, "{}", name);
-                assert!(reply["result"]["content"][0]["text"].as_str().unwrap().contains("desktop control over MCP is off"));
-            }
-        }
     }
 
     #[test]

@@ -1,31 +1,23 @@
 {
-  "totalBytes": 19892033,
-  "largestAssetBytes": 6806525,
-  "entryBytes": 1387595,
+  "totalBytes": 5992539,
+  "largestAssetBytes": 1379193,
+  "entryBytes": 1501604,
   "assetGrowth": {
     "ratio": 0.25,
     "bytes": 524288
   },
   "assets": {
-    "ts.worker.js": 6023589,
-    "editor.main.js": 3331050,
-    "index.js": 1077344,
-    "css.worker.js": 1012028,
-    "mermaid.core.js": 696303,
-    "cynefin.js": 690855,
-    "html.worker.js": 674613,
-    "cytoscape.esm.js": 443834,
-    "json.worker.js": 364889,
+    "vendor.js": 1220524,
+    "index.js": 1160389,
+    "cynefin.js": 690865,
     "katex.js": 261329,
-    "editor.worker.js": 232471,
     "inter.woff2": 218512,
-    "architectureDiagram.js": 152020,
-    "index.css": 149958,
-    "editor.css": 133000,
-    "DesignScreen.js": 121130,
-    "sequenceDiagram.js": 117452,
-    "swimlanes.js": 117117,
-    "chunk.js": 107129
+    "index.css": 167730,
+    "architectureDiagram.js": 151949,
+    "DesignScreen.js": 134170,
+    "sequenceDiagram.js": 117420,
+    "swimlanes.js": 117091,
+    "chunk.js": 107155
   },
   "note": "Ceiling for app/desktop/dist, the frontend embedded in the binary: the measurement plus 13% headroom, so ordinary churn passes and the difference is what a PR eats into. Re-record with \"node scripts/check-bundle-size.mjs --write\" and say in the PR which dependency earned the bytes. assets/ holds per-chunk sizes keyed by the chunk name with Vite's hash groups stripped; a chunk may grow by the larger of assetGrowth.ratio or assetGrowth.bytes before the gate asks for a deliberate re-record."
 }

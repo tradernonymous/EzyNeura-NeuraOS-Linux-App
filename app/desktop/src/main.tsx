@@ -67,6 +67,8 @@ window.addEventListener('unhandledrejection', (event) => {
 // the first frame is already in the person's colours and never animates when
 // they asked for less motion. A storage fault must not stop the app starting.
 try { paintAppearance(); } catch { /* the stylesheet defaults still apply */ }
+// Set platform for CSS performance overrides
+try { document.documentElement.setAttribute("data-platform", /linux/i.test(navigator.platform||navigator.userAgent)?"linux":"other"); } catch(e){}
 
 // NEURA-050: the window material is painted solid first and only upgraded once
 // the shell has confirmed Mica. Asking costs one IPC round trip, so it cannot

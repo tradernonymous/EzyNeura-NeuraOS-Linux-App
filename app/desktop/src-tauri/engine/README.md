@@ -2,9 +2,9 @@
 
 `server.js` and its local dependency closure (`auth.js`, `chatlib.js`,
 `github.js`, `agent-sessions.js`, `fcm-push.js`, `tool-call-text.js`,
-`package.json`), part of the standalone NeuraOS bundle (CCE-inspired). It has
-the commit pinned in `../../../../UPSTREAM`. `scripts/sync-upstream.sh`
-re-copies this directory too.
+`package.json`), part of the standalone NeuraOS bundle (CCE-inspired).
+There is no upstream pin and no sync script: this engine is standalone and
+editable in this repo (see `AGENTS.md`).
 
 **Not included:** the static web app (`index.html`, `chatlib.js` served
 as an asset, `style.css`, everything under `docs/readme`, etc.). The

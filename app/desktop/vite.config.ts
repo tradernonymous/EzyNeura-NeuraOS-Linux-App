@@ -17,18 +17,15 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        // The biggest chunks are the editor (monaco) and the diagram/mermaid
-        // stack. Keeping them separate from the app code avoids shipping the
-        // full editor to everyone who only opens the chat screen.
+        // Monaco is gone (lean build): the Local screen uses a plain textarea.
+        // Keep the diagram/mermaid stack split so chat-only boots stay small.
+        // katex is mermaid's transitive dep for math diagrams this app never
+        // renders -- no manual chunk, so Vite tree-shakes it out of dist.
         manualChunks: {
-          'vendor-editor': ['monaco-editor'],
           'vendor-diagram': ['mermaid', 'cytoscape', 'd3', 'dagre-d3-es'],
-          'vendor-katex': ['katex'],
         },
       },
     },
-    // The editor chunk is expected to exceed 500 kB -- it is the full
-    // monaco-editor, and users who never open the Local screen never load it.
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 500,
   },
 });

@@ -1,72 +1,13 @@
-/// <reference types="vite/client" />
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import { writeLocalFile } from '../bridge';
 
-// Monaco for one local file (phase 12e), opened from the Local screen's Edit.
-//
-// Loading: this component is itself lazy (LocalScreen uses React.lazy), and
-// Monaco plus its workers are dynamic imports inside loadMonaco() -- nothing of
-// Monaco is in the main chunk, and nothing loads until a file is opened for
-// editing. The workers are Vite `?worker` imports, bundled as files of this app:
-// the CSP allows no remote scripts, so no CDN loader is used.
-//
-// Saving: Ctrl+S (or Save) writes through writeLocalFile, so the shell's
-// confinement rules apply exactly as they do to the agent -- a path outside the
-// open folder is refused there, not here. The person is typing and pressing
-// Save themselves, which is the approval; nothing here writes on its own.
-
-type Monaco = typeof import('monaco-editor');
-type Editor = import('monaco-editor').editor.IStandaloneCodeEditor;
-
-let loading: Promise<Monaco> | null = null;
-
-function loadMonaco(): Promise<Monaco> {
-  if (!loading) {
-    loading = Promise.all([
-      import('monaco-editor/esm/vs/editor/editor.api'),
-      import('monaco-editor/esm/vs/editor/editor.worker?worker'),
-      import('monaco-editor/esm/vs/language/json/json.worker?worker'),
-      import('monaco-editor/esm/vs/language/css/css.worker?worker'),
-      import('monaco-editor/esm/vs/language/html/html.worker?worker'),
-      import('monaco-editor/esm/vs/language/typescript/ts.worker?worker'),
-    ]).then(([monaco, EditorWorker, JsonWorker, CssWorker, HtmlWorker, TsWorker]) => {
-      (globalThis as any).MonacoEnvironment = {
-        getWorker(_id: string, label: string) {
-          if (label === 'json') return new JsonWorker.default();
-          if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker.default();
-          if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker.default();
-          if (label === 'typescript' || label === 'javascript') return new TsWorker.default();
-          return new EditorWorker.default();
-        },
-      };
-      return monaco;
-    });
-    // A failed load (a missing chunk) may be retried by opening the editor again.
-    loading.catch(() => { loading = null; });
-  }
-  return loading;
-}
-
-/** Monaco's language id for a path: by file name (Dockerfile), then by extension; plaintext otherwise. */
-function languageFor(monaco: Monaco, path: string): string {
-  const name = (path.split(/[/\\]/).pop() || '').toLowerCase();
-  const dot = name.lastIndexOf('.');
-  const ext = dot >= 0 ? name.slice(dot) : '';
-  const langs = monaco.languages.getLanguages();
-  const byName = langs.find((l) => (l.filenames || []).some((f) => f.toLowerCase() === name));
-  if (byName) return byName.id;
-  const byExt = ext ? langs.find((l) => (l.extensions || []).some((e) => e.toLowerCase() === ext)) : undefined;
-  return byExt ? byExt.id : 'plaintext';
-}
-
-function themeName(): string {
-  return document.documentElement.dataset.theme === 'light' ? 'vs' : 'vs-dark';
-}
-
-function message(e: unknown): string {
-  return ((e as Error)?.message || String(e)).split('\n')[0];
-}
+// A plain textarea editor for one local file, opened from the Local screen's
+// Edit. Monaco (10 MB of dist, 112 MB of node_modules, five workers) was
+// removed in the lean build: this screen peeks at and tweaks config and small
+// files, it does not need an IDE. Same props, same Ctrl-S contract, same
+// shell confinement -- writeLocalFile still refuses a path outside the open
+// folder. Saving is the person's own Save; nothing here writes on its own.
 
 interface CodeEditorProps {
   root: string;
@@ -79,14 +20,22 @@ interface CodeEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+function message(e: unknown): string {
+  return ((e as Error)?.message || String(e)).split('\n')[0];
+}
+
+function languageLabel(path: string): string {
+  const name = (path.split(/[/\\]/).pop() || '').toLowerCase();
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1) : 'text';
+}
+
 export default function CodeEditor({ root, path, text, onSaved, onClose, onDirtyChange }: CodeEditorProps) {
-  const host = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<Editor | null>(null);
-  const savedVersion = useRef(0);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const savedRef = useRef(text);
+  const [status, setStatus] = useState<'ready' | 'saving' | 'error'>('ready');
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
-  const [language, setLanguage] = useState('');
   const saveRef = useRef<() => void>(() => undefined);
   const savedCb = useRef(onSaved);
   savedCb.current = onSaved;
@@ -98,61 +47,23 @@ export default function CodeEditor({ root, path, text, onSaved, onClose, onDirty
   }, [dirty]);
 
   useEffect(() => {
-    let disposed = false;
-    let editor: Editor | null = null;
-    setStatus('loading');
-    setError('');
-    setDirty(false);
-    loadMonaco()
-      .then((monaco) => {
-        if (disposed || !host.current) return;
-        const lang = languageFor(monaco, path);
-        setLanguage(lang);
-        const created = monaco.editor.create(host.current, {
-          value: text,
-          language: lang,
-          theme: themeName(),
-          automaticLayout: true,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          fontSize: 13,
-        });
-        editor = created;
-        editorRef.current = created;
-        savedVersion.current = created.getModel()?.getAlternativeVersionId() ?? 0;
-        created.onDidChangeModelContent(() => {
-          setDirty((created.getModel()?.getAlternativeVersionId() ?? 0) !== savedVersion.current);
-        });
-        created.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current());
-        created.focus();
-        setStatus('ready');
-      })
-      .catch((e: unknown) => {
-        if (disposed) return;
-        setStatus('error');
-        setError(`The editor could not load: ${message(e)}`);
-      });
-    return () => {
-      disposed = true;
-      const model = editor?.getModel();
-      editor?.dispose();
-      model?.dispose();
-      editorRef.current = null;
-    };
-    // `text` is read once on open: after that the editor holds the buffer.
-  }, [root, path]);
+    areaRef.current?.focus();
+  }, []);
 
   saveRef.current = () => {
-    const model = editorRef.current?.getModel();
-    if (!model || status === 'saving') return;
-    const value = model.getValue();
-    const version = model.getAlternativeVersionId();
+    const area = areaRef.current;
+    if (!area || status === 'saving') return;
+    const value = area.value;
+    if (value === savedRef.current) {
+      setDirty(false);
+      return;
+    }
     setStatus('saving');
     setError('');
     writeLocalFile(root, path, value)
       .then(() => {
-        savedVersion.current = version;
-        setDirty(model.getAlternativeVersionId() !== version);
+        savedRef.current = value;
+        setDirty(area.value !== value);
         setStatus('ready');
         savedCb.current(value);
       })
@@ -169,8 +80,8 @@ export default function CodeEditor({ root, path, text, onSaved, onClose, onDirty
           {path}
         </span>
         <span className="viewer-meta">
-          {language && `${language} · `}
-          {status === 'loading' ? 'loading editor…' : status === 'saving' ? 'saving…' : dirty ? '● unsaved changes' : 'saved'}
+          {languageLabel(path)} ·{' '}
+          {status === 'saving' ? 'saving…' : dirty ? '● unsaved changes' : 'saved'}
         </span>
         <button className="primary" onClick={() => saveRef.current()} disabled={status !== 'ready' || !dirty} title="Save (Ctrl+S)">
           <Icon name="check" size={13} /> Save
@@ -180,7 +91,35 @@ export default function CodeEditor({ root, path, text, onSaved, onClose, onDirty
         </button>
       </div>
       {error && <div className="empty files-error">{error}</div>}
-      <div ref={host} className="code-editor-host" style={{ flex: 1, minHeight: 240 }} />
+      <textarea
+        ref={areaRef}
+        className="code-editor-host"
+        spellCheck={false}
+        defaultValue={text}
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            saveRef.current();
+          }
+        }}
+        onChange={(e) => {
+          setDirty(e.target.value !== savedRef.current);
+          if (status === 'error') setStatus('ready');
+        }}
+        style={{
+          flex: 1,
+          minHeight: 240,
+          width: '100%',
+          resize: 'none',
+          border: 'none',
+          outline: 'none',
+          padding: '12px 14px',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          fontSize: 13,
+          lineHeight: 1.5,
+          tabSize: 2,
+        }}
+      />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// LEAN BUILD: credential broker removed
 // Running one tool call.
 //
 // Where each tool lives:
