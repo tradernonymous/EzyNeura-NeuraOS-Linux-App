@@ -7,7 +7,7 @@ import LocalModelsCard from '../components/LocalModelsCard';
 import DictationCard from '../components/DictationCard';
 import ConnectorsCard from '../components/ConnectorsCard';
 import CceProvidersCard from '../components/CceProvidersCard';
-import CredentialsCard from '../components/CredentialsCard';
+// LEAN: CredentialsCard trimmed
 import ShortcutsCard from '../components/ShortcutsCard';
 import AppearanceCard from '../components/AppearanceCard';
 import StartupCard from '../components/StartupCard';
@@ -223,7 +223,6 @@ export default function SettingsScreen({ onConnectionChanged, diagnosticsState, 
           <ConnectorsCard />
 
           {/* C10: the credential broker's saved hosts and addresses. */}
-          <CredentialsCard />
 
           <section className="settings-section">
             <h2>Appearance</h2>

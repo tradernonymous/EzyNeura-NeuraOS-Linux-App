@@ -220,7 +220,6 @@ export default function ActivityScreen({ onOpen }: Props) {
             <button type="button" role="tab" aria-selected={layout === 'list'} className={`sidebar-filter ${layout === 'list' ? 'active' : ''}`} onClick={() => pickLayout('list')}>List</button>
             <button type="button" role="tab" aria-selected={layout === 'board'} className={`sidebar-filter ${layout === 'board' ? 'active' : ''}`} onClick={() => pickLayout('board')}>Board</button>
           </div>
-          <button type="button" className="raised" onClick={() => onOpen('evals')}>Evals</button>
           <button type="button" className="raised" onClick={() => onOpen('build')}>Builds</button>
         </div>
       </header>

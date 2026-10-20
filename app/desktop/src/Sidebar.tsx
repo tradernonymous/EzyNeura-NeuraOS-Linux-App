@@ -51,14 +51,16 @@ export const SUB_VIEWS: Array<{ id: ViewId; label: string; parent: NavId; hint: 
   { id: 'local', label: 'Local folder', parent: 'code', hint: 'Tree, viewer and terminal' },
   { id: 'files', label: 'Files', parent: 'code', hint: 'Extract and generate documents' },
   { id: 'parallel', label: 'Worktrees', parent: 'code', hint: 'Several agents at once, each in its own git worktree' },
-  { id: 'acp', label: 'External agents', parent: 'code', hint: 'Claude Code, Gemini CLI, Codex over ACP' },
+  // LEAN: ACP trimmed
+  // { id: 'acp', label: 'External agents', parent: 'code', hint: 'Claude Code, Gemini CLI, Codex over ACP' },
   { id: 'design', label: 'Design', parent: 'create', hint: 'Pages, decks and posts' },
   { id: 'images', label: 'Image', parent: 'create', hint: 'Draw and change pictures' },
   { id: 'library', label: 'Library', parent: 'agents', hint: 'Skills and memory' },
   { id: 'agents', label: 'Agents', parent: 'agents', hint: 'Sub-agents chat can run or delegate to' },
   { id: 'recipes', label: 'Recipes', parent: 'agents', hint: 'Saved prompts, servers and schedules' },
   { id: 'activity', label: 'Runs', parent: 'agents', hint: 'What ran, and what is waiting on you' },
-  { id: 'evals', label: 'Evals', parent: 'agents', hint: 'Score several models on the same tasks' },
+  // LEAN: Evals trimmed
+  // { id: 'evals', label: 'Evals', parent: 'agents', hint: 'Score several models on the same tasks' },
   { id: 'settings', label: 'Settings', parent: 'settings', hint: 'Engine, providers, appearance' },
 ];
 
@@ -129,7 +131,7 @@ export function navForKey(key: string): NavId | null {
 
 export type NavId = 'chat' | 'code' | 'create' | 'agents' | 'settings';
 /** A view: a destination's own tab, or one of the tabs inside one. */
-export type ViewId = 'chat' | 'code' | 'settings' | 'activity' | 'design' | 'library' | 'build' | 'local' | 'files' | 'images' | 'evals' | 'agents' | 'recipes' | 'parallel' | 'acp';
+export type ViewId = 'chat' | 'code' | 'settings' | 'activity' | 'design' | 'library' | 'build' | 'local' | 'files' | 'images' | 'agents' | 'recipes' | 'parallel';
 
 export interface PanelKeyMap {
   folder: boolean;

@@ -184,6 +184,11 @@ function motionReduced(): boolean {
 export function useParallax(maxPx = 6): void {
   useEffect(() => {
     const root = document.documentElement;
+    // Disable parallax on Linux for performance (lean build)
+    try {
+      if (root.getAttribute('data-platform') === 'linux') return;
+      if (/linux/i.test(navigator.platform || navigator.userAgent || '')) return;
+    } catch {}
     let frame = 0;
     let lastX = 0;
     let lastY = 0;
@@ -201,7 +206,6 @@ export function useParallax(maxPx = 6): void {
       if (motionReduced()) { write(0, 0); return; }
       const w = globalThis.innerWidth || 1;
       const h = globalThis.innerHeight || 1;
-      // Opposite to the pointer, like a far layer, quantised to half pixels.
       const x = Math.round(((0.5 - px / w) * 2 * maxPx) * 2) / 2;
       const y = Math.round(((0.5 - py / h) * 2 * maxPx) * 2) / 2;
       write(x, y);

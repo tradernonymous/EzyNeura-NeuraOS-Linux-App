@@ -39,7 +39,6 @@
     { id: 'go-design', group: 'Go to', title: 'Design', hint: 'Brand + anti-slop review', palette: 'design' },
     { id: 'go-library', group: 'Go to', title: 'Library', hint: 'Skills and saved chats', palette: 'library' },
     { id: 'go-files', group: 'Go to', title: 'Files', hint: 'Extract and generate documents', palette: 'files' },
-    { id: 'go-evals', group: 'Go to', title: 'Evals', hint: 'Score several models on the same tasks', palette: 'evals' },
     { id: 'go-parallel', group: 'Go to', title: 'Parallel agents', hint: 'Several coding agents at once, each in its own git worktree', palette: 'parallel' },
     { id: 'go-agents', group: 'Go to', title: 'Agents', hint: 'Sub-agents chat can run or delegate to', palette: 'agents' },
     { id: 'go-recipes', group: 'Go to', title: 'Recipes', hint: 'Saved prompts, their servers and schedules', palette: 'recipes' },

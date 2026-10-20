@@ -73,8 +73,8 @@ export default function CredentialsCard() {
     setBusy(`${row.kind}:${row.name}`);
     try {
       const out = row.kind === 'ssh'
-        ? await call<string>('credential_op', { op: 'ssh_run', args: { target: row.name, command: 'echo ok', timeout_ms: 15_000 } })
-        : await call<string>('credential_op', { op: 'http_auth', args: { name: row.name, path: '/' } });
+        ? 'Credential broker removed in lean build'
+        : 'Credential broker removed in lean build';
       pushToast('ok', `${row.name}: ${out.split('\n')[0]}`);
     } catch (e) {
       pushToast('error', `${row.name}: ${String((e as Error).message || e).split('\n')[0]}`);

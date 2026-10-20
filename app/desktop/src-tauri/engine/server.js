@@ -28,9 +28,9 @@ const {
   pickAccount,
 } = require('./github.js');
 const { createBuildSessions, handleBuildRoute, resolveInside, protectedPath, searchFolder, refusedGit } = require('./agent-sessions.js');
-// Push stays a silent no-op unless FCM_SERVICE_ACCOUNT is set -- the require
-// is unconditional because the module itself has no side effects.
-const { parseServiceAccount, sendPush } = require('./fcm-push.js');
+// fcm-push.js is required lazily inside configuredFcmAccount/notifyOwnerByPush
+// (lean build): desktop Linux never sets FCM_SERVICE_ACCOUNT, so a boot that
+// never pushes never pays to parse the module.
 
 // Standalone NeuraOS engine (CCE-inspired).
 const port = process.env.PORT || 3000;
@@ -5894,7 +5894,9 @@ async function mcpReadResource(req, res) {
 // firebase-admin package. Read fresh per call, like every other provider's
 // env var here, rather than cached once at startup.
 function configuredFcmAccount() {
-  return parseServiceAccount(process.env.FCM_SERVICE_ACCOUNT);
+  const raw = process.env.FCM_SERVICE_ACCOUNT;
+  if (!raw) return null;
+  return require('./fcm-push.js').parseServiceAccount(raw);
 }
 
 /** Device tokens per signed-in username, in memory only -- like every other
@@ -5927,6 +5929,7 @@ const pushRegistry = createPushRegistry();
 function notifyOwnerByPush(owner, notification) {
   const account = configuredFcmAccount();
   if (!account) return;
+  const { sendPush } = require('./fcm-push.js');
   for (const token of pushRegistry.tokensFor(owner)) {
     sendPush(account, token, notification).catch((err) => {
       if (err && err.staleToken) pushRegistry.unregister(owner, token);

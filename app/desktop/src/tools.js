@@ -83,29 +83,13 @@
   // screenshot shows whatever is on screen, and a click or a key lands in
   // whichever app is in front.
   var NUM = { type: 'number' };
-  var DESKTOP = [
-    fn('screen_capture', 'Take a screenshot of the whole screen. The picture is attached to the conversation so you can look at it; the reply tells you its size in pixels, which is the coordinate space for desktop_click.', {}, []),
-    fn('desktop_click', 'Click at screen coordinates (pixels from the top-left, as in the last screen_capture).',
-      { x: NUM, y: NUM, button: { type: 'number', description: '1 left (default), 2 middle, 3 right' } }, ['x', 'y']),
-    fn('desktop_type', 'Type text into the app that has keyboard focus.', { text: STR }, ['text']),
-    fn('desktop_key', 'Press a key chord in the app that has keyboard focus, such as ctrl+s, alt+F4 or Return.', { key: STR }, ['key']),
-    fn('desktop_scroll', 'Scroll the mouse wheel where the pointer is: positive steps scroll down, negative up.', { steps: NUM }, ['steps']),
-  ];
+  var DESKTOP = [];
+  // LEAN: Desktop control tools trimmed
   var DESKTOP_NAMES = DESKTOP.map(function (t) { return t.function.name; });
 
-  // C10: the credential broker (broker.rs in the shell). Both tools name a
-  // SAVED profile — Settings -> Credentials holds the hosts and addresses —
-  // and the shell reads the secret and returns only the command's output or
-  // the request's answer, so no key or login is ever in this conversation.
-  // Offered only with a shell: without one there is no broker to call.
-  var BROKER = [
-    fn('ssh_run', 'Run a command on a saved host over SSH (saved under Settings → Credentials). The shell holds the login — the key never reaches this conversation — and the answer is only the command\u2019s output. Asks the user first.',
-      { target: { type: 'string', description: 'The saved host\u2019s name' }, command: STR }, ['target', 'command']),
-    fn('http_auth', 'Make an HTTP request with a stored credential attached, to the address saved with it (Settings → Credentials). The secret stays in the shell; the answer is only the response. Asks the user first.',
-      { name: { type: 'string', description: 'The saved address\u2019s name' }, path: { type: 'string', description: 'Path on the saved address, starting with /' }, method: { type: 'string', description: 'GET (default), POST, PUT, PATCH, DELETE or HEAD' }, body: STR },
-      ['name', 'path']),
-  ];
-  var BROKER_NAMES = BROKER.map(function (t) { return t.function.name; });
+  // C10 credential broker: removed in the lean build (broker.rs is gone).
+  var BROKER = [];
+  var BROKER_NAMES = [];
 
   // Delegation to a sub-agent (agents.js). Not in the catalogue: Chat offers it
   // with the list of agents in its description. The agent's own tools still
@@ -551,8 +535,7 @@
     var out = WEB.slice();
     if (ctx.github) out = out.concat(GITHUB);
     if (ctx.localRoot && ctx.shell) out = out.concat(LOCAL);
-    if (ctx.desktop && ctx.shell) out = out.concat(DESKTOP);
-    if (ctx.shell) out = out.concat(BROKER);
+    // LEAN: Desktop control and credential broker trimmed
     return out.concat(mcpDefs(given));
   }
 
